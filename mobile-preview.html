@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeleMed Pro - Vista Móvil</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            gap: 40px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .phone-frame {
+            width: 375px;
+            height: 812px;
+            background: #000;
+            border-radius: 40px;
+            padding: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 30px;
+            background: #000;
+            border-radius: 0 0 20px 20px;
+            z-index: 10;
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            background: #f9fafb;
+            border-radius: 30px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .screen-content {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .app-title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #0EA5E9;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .app-subtitle {
+            font-size: 18px;
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .login-form {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .form-input {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+
+        .login-button {
+            width: 100%;
+            background: #0EA5E9;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .login-button:hover {
+            background: #0284c7;
+        }
+
+        /* Dashboard Screen */
+        .dashboard-screen,
+        .appointments-screen,
+        .videocall-screen {
+            display: none;
+        }
+
+        .dashboard-screen.active,
+        .appointments-screen.active,
+        .videocall-screen.active {
+            display: block;
+        }
+
+        .header {
+            background: white;
+            padding: 24px;
+            margin: -20px -20px 16px -20px;
+        }
+
+        .greeting {
+            font-size: 24px;
+            font-weight: bold;
+            color: #111827;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .card {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 12px;
+        }
+
+        .credential {
+            padding: 16px;
+            background: #f0f9ff;
+            border-radius: 8px;
+            border-left: 4px solid #0EA5E9;
+        }
+
+        .credential-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #111827;
+        }
+
+        .credential-dni {
+            font-size: 14px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #0EA5E9;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .action-button {
+            flex: 1;
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+            border: none;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .action-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .action-text {
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .apt-card {
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .apt-doctor {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .apt-specialty {
+            font-size: 14px;
+            color: #6b7280;
+            margin-top: 2px;
+        }
+
+        .apt-datetime {
+            font-size: 14px;
+            color: #374151;
+            margin-top: 4px;
+        }
+
+        .apt-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 8px;
+            color: white;
+        }
+
+        .video-call-btn {
+            width: 100%;
+            background: #0EA5E9;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.3s;
+        }
+
+        .video-call-btn:hover {
+            background: #0284c7;
+        }
+
+        /* Video Call Screen */
+        .videocall-screen {
+            background: #000;
+            margin: -20px;
+            height: calc(100% + 40px);
+            position: relative;
+        }
+
+        .vc-header {
+            padding: 50px 20px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .vc-doctor-info h3 {
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .vc-doctor-info p {
+            color: #9ca3af;
+            font-size: 14px;
+            margin-top: 2px;
+        }
+
+        .vc-status {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .vc-main-video {
+            position: absolute;
+            top: 120px;
+            left: 20px;
+            right: 20px;
+            bottom: 180px;
+            background: #1f2937;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .vc-video-icon {
+            font-size: 80px;
+            margin-bottom: 16px;
+        }
+
+        .vc-video-text {
+            color: #9ca3af;
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .vc-self-video {
+            position: absolute;
+            top: 140px;
+            right: 40px;
+            width: 120px;
+            height: 160px;
+            background: #374151;
+            border: 2px solid #0EA5E9;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .vc-self-icon {
+            font-size: 40px;
+            margin-bottom: 4px;
+        }
+
+        .vc-self-text {
+            color: #9ca3af;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .vc-controls {
+            position: absolute;
+            bottom: 50px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            padding: 0 20px;
+        }
+
+        .vc-control-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 35px;
+            background: #374151;
+            border: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .vc-control-btn:hover {
+            background: #4b5563;
+        }
+
+        .vc-control-btn.active {
+            background: #ef4444;
+        }
+
+        .vc-control-btn.end-call {
+            background: #dc2626;
+        }
+
+        .vc-control-btn.end-call:hover {
+            background: #b91c1c;
+        }
+
+        .vc-control-icon {
+            font-size: 28px;
+            margin-bottom: 4px;
+        }
+
+        .vc-control-label {
+            color: white;
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        /* Info Panel */
+        .info-panel {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .info-title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #111827;
+            margin-bottom: 16px;
+        }
+
+        .info-subtitle {
+            font-size: 18px;
+            color: #6b7280;
+            margin-bottom: 32px;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            font-size: 16px;
+            color: #374151;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+        }
+
+        .screen-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            background: white;
+            padding: 8px;
+            border-radius: 12px;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            background: #f3f4f6;
+            color: #6b7280;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .tab-button.active {
+            background: #0EA5E9;
+            color: white;
+        }
+
+        .expo-info {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 24px;
+        }
+
+        .expo-title {
+            font-weight: 600;
+            color: #92400e;
+            margin-bottom: 8px;
+        }
+
+        .expo-text {
+            font-size: 14px;
+            color: #78350f;
+            line-height: 1.6;
+        }
+
+        .new-badge {
+            background: #10b981;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 4px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="info-panel">
+            <h1 class="info-title">📱 TeleMed Pro Mobile</h1>
+            <p class="info-subtitle">Aplicación Móvil para Pacientes</p>
+
+            <ul class="feature-list">
+                <li class="feature-item">
+                    <span class="feature-icon">🔐</span>
+                    <span>Acceso seguro con DNI</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-icon">📹</span>
+                    <span><strong>Videollamadas médicas</strong> <span class="new-badge">NUEVO</span></span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-icon">📅</span>
+                    <span>Gestión de turnos médicos</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-icon">📋</span>
+                    <span>Historia clínica digital</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-icon">💊</span>
+                    <span>Recetas electrónicas</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-icon">🏥</span>
+                    <span>Credencial digital</span>
+                </li>
+            </ul>
+
+            <div class="expo-info">
+                <div class="expo-title">📲 Cómo Probar en tu Teléfono</div>
+                <div class="expo-text">
+                    1. Instala <strong>Expo Go</strong> desde Play Store o App Store<br>
+                    2. En la terminal, ejecuta: <code>npx expo start --tunnel</code><br>
+                    3. Escanea el código QR que aparece<br>
+                    4. ¡Listo! La app se cargará en tu teléfono
+                </div>
+            </div>
+        </div>
+
+        <div class="phone-frame">
+            <div class="phone-notch"></div>
+            <div class="phone-screen">
+                <div class="screen-tabs">
+                    <button class="tab-button active" onclick="showScreen('login')">Login</button>
+                    <button class="tab-button" onclick="showScreen('dashboard')">Dashboard</button>
+                    <button class="tab-button" onclick="showScreen('appointments')">Turnos</button>
+                    <button class="tab-button" onclick="showScreen('videocall')">Video <span
+                            class="new-badge">NEW</span></button>
+                </div>
+
+                <div class="screen-content">
+                    <!-- Login Screen -->
+                    <div class="login-screen" id="login-screen">
+                        <div class="app-title">TeleMed Pro</div>
+                        <div class="app-subtitle">Acceso Pacientes</div>
+
+                        <div class="login-form">
+                            <label class="form-label">DNI</label>
+                            <input type="text" class="form-input" placeholder="Ingrese su DNI" value="12345678">
+
+                            <label class="form-label">Contraseña</label>
+                            <input type="password" class="form-input" placeholder="Contraseña" value="••••••••">
+
+                            <button class="login-button" onclick="showScreen('dashboard')">Ingresar</button>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard Screen -->
+                    <div class="dashboard-screen" id="dashboard-screen">
+                        <div class="header">
+                            <div class="greeting">Hola, Roberto</div>
+                            <div class="subtitle">Bienvenido a tu portal de salud</div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-title">Credencial Digital</div>
+                            <div class="credential">
+                                <div class="credential-name">Roberto Gómez</div>
+                                <div class="credential-dni">DNI: 12345678</div>
+                                <span class="badge">AFILIADO</span>
+                            </div>
+                        </div>
+
+                        <div class="quick-actions">
+                            <button class="action-button" onclick="showScreen('appointments')">
+                                <div class="action-icon">📅</div>
+                                <div class="action-text">Mis Turnos</div>
+                            </button>
+                            <button class="action-button">
+                                <div class="action-icon">📋</div>
+                                <div class="action-text">Historia</div>
+                            </button>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-title">Próximos Turnos</div>
+                            <div class="apt-card">
+                                <div class="apt-doctor">Dra. María González</div>
+                                <div class="apt-specialty">Cardiología</div>
+                                <div class="apt-datetime">15/01/2026 - 10:00 hs</div>
+                            </div>
+                            <div class="apt-card">
+                                <div class="apt-doctor">Dr. Carlos Pérez</div>
+                                <div class="apt-specialty">Medicina General</div>
+                                <div class="apt-datetime">20/01/2026 - 15:30 hs</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Appointments Screen -->
+                    <div class="appointments-screen" id="appointments-screen">
+                        <div class="header">
+                            <div class="greeting">Mis Turnos</div>
+                            <div class="subtitle">Consultas programadas</div>
+                        </div>
+
+                        <div class="card">
+                            <div class="apt-doctor">Dra. María González</div>
+                            <div class="apt-specialty">Cardiología - Videoconsulta</div>
+                            <div class="apt-datetime">15/01/2026 - 10:00 hs</div>
+                            <span class="apt-badge" style="background: #10b981;">Confirmado</span>
+                            <button class="video-call-btn" onclick="showScreen('videocall')">
+                                <span>📹</span>
+                                <span>Iniciar Videollamada</span>
+                            </button>
+                        </div>
+
+                        <div class="card">
+                            <div class="apt-doctor">Dr. Carlos Pérez</div>
+                            <div class="apt-specialty">Medicina General - Presencial</div>
+                            <div class="apt-datetime">20/01/2026 - 15:30 hs</div>
+                            <span class="apt-badge" style="background: #10b981;">Confirmado</span>
+                        </div>
+
+                        <div class="card">
+                            <div class="apt-doctor">Dr. Juan Martínez</div>
+                            <div class="apt-specialty">Dermatología</div>
+                            <div class="apt-datetime">10/12/2025 - 14:00 hs</div>
+                            <span class="apt-badge" style="background: #6b7280;">Completado</span>
+                        </div>
+                    </div>
+
+                    <!-- Video Call Screen -->
+                    <div class="videocall-screen" id="videocall-screen">
+                        <div class="vc-header">
+                            <div class="vc-doctor-info">
+                                <h3>Dra. María González</h3>
+                                <p>Cardiología</p>
+                            </div>
+                            <div class="vc-status" id="call-duration">00:00</div>
+                        </div>
+
+                        <div class="vc-main-video">
+                            <div class="vc-video-icon">👨‍⚕️</div>
+                            <div class="vc-video-text">Dra. María González</div>
+                        </div>
+
+                        <div class="vc-self-video">
+                            <div class="vc-self-icon">👤</div>
+                            <div class="vc-self-text">Tú</div>
+                        </div>
+
+                        <div class="vc-controls">
+                            <button class="vc-control-btn" id="mute-btn" onclick="toggleMute()">
+                                <div class="vc-control-icon" id="mute-icon">🎤</div>
+                                <div class="vc-control-label" id="mute-label">Silenciar</div>
+                            </button>
+
+                            <button class="vc-control-btn end-call" onclick="endCall()">
+                                <div class="vc-control-icon" style="transform: rotate(135deg);">📞</div>
+                                <div class="vc-control-label">Finalizar</div>
+                            </button>
+
+                            <button class="vc-control-btn" id="camera-btn" onclick="toggleCamera()">
+                                <div class="vc-control-icon" id="camera-icon">📹</div>
+                                <div class="vc-control-label" id="camera-label">Cámara</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isMuted = false;
+        let isCameraOn = true;
+        let callDuration = 0;
+        let callInterval = null;
+
+        function showScreen(screenName) {
+            // Update tabs
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update screens
+            const screens = ['login', 'dashboard', 'appointments', 'videocall'];
+            screens.forEach(screen => {
+                const element = document.getElementById(`${screen}-screen`);
+                if (element) {
+                    if (screen === screenName) {
+                        element.classList.add('active');
+                        element.style.display = screen === 'login' ? 'flex' : 'block';
+
+                        // Start call timer if videocall
+                        if (screen === 'videocall') {
+                            startCallTimer();
+                        }
+                    } else {
+                        element.classList.remove('active');
+                        element.style.display = 'none';
+                    }
+                }
+            });
+
+            // Stop call timer if leaving videocall
+            if (screenName !== 'videocall' && callInterval) {
+                stopCallTimer();
+            }
+        }
+
+        function startCallTimer() {
+            callDuration = 0;
+            updateCallDuration();
+            callInterval = setInterval(() => {
+                callDuration++;
+                updateCallDuration();
+            }, 1000);
+        }
+
+        function stopCallTimer() {
+            if (callInterval) {
+                clearInterval(callInterval);
+                callInterval = null;
+            }
+        }
+
+        function updateCallDuration() {
+            const mins = Math.floor(callDuration / 60);
+            const secs = callDuration % 60;
+            const formatted = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            document.getElementById('call-duration').textContent = formatted;
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            const btn = document.getElementById('mute-btn');
+            const icon = document.getElementById('mute-icon');
+            const label = document.getElementById('mute-label');
+
+            if (isMuted) {
+                btn.classList.add('active');
+                icon.textContent = '🔇';
+                label.textContent = 'Activar';
+            } else {
+                btn.classList.remove('active');
+                icon.textContent = '🎤';
+                label.textContent = 'Silenciar';
+            }
+        }
+
+        function toggleCamera() {
+            isCameraOn = !isCameraOn;
+            const btn = document.getElementById('camera-btn');
+            const icon = document.getElementById('camera-icon');
+            const label = document.getElementById('camera-label');
+
+            if (!isCameraOn) {
+                btn.classList.add('active');
+                icon.textContent = '🚫';
+                label.textContent = 'Activar';
+            } else {
+                btn.classList.remove('active');
+                icon.textContent = '📹';
+                label.textContent = 'Cámara';
+            }
+        }
+
+        function endCall() {
+            stopCallTimer();
+            showScreen('appointments');
+        }
+    </script>
+</body>
+
+</html>

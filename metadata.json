@@ -1,0 +1,8 @@
+{
+  "name": "TeleMed Pro",
+  "description": "Una plataforma integral de telemedicina moderna, segura y fácil de usar para pacientes, médicos y administradores. Incluye gestión de historia clínica, recetas electrónicas y videoconsultas.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
