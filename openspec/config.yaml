@@ -1,0 +1,23 @@
+schema: spec-driven
+
+context: |
+  Tech stack: React 19, TypeScript, Vite, Supabase, LiveKit
+  Architecture: Clean Architecture (Repositories, Services), Pages/Components
+  Testing: Vitest, React Testing Library
+  Style: standard, lucide-react icons
+
+strict_tdd: true
+
+rules:
+  proposal:
+    - Identify affected repositories or services
+  specs:
+    - Use Given/When/Then format for scenarios
+  design:
+    - Document architectural boundaries (UI -> Repository -> Supabase)
+  tasks:
+    - Separate logic testing from UI testing tasks
+  apply:
+    - Write tests FIRST (TDD)
+  verify:
+    - Ensure all unit tests pass

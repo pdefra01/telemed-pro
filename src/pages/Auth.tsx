@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { dniSchema, phoneSchema } from '../utils/validation';
 import { z } from 'zod';
-import { supabase } from '../services/supabase';
+import { authRepository } from '../repositories/AuthRepository';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -72,83 +72,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         }
       }
 
-      // 3. Pegarle a Supabase
+      // 3. Llamar a la Capa de Repositorio (Clean Architecture)
+      let userResult: User;
       if (isRegistering) {
-        // --- REGISTRO ---
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email: authEmail,
-          password: password,
-        });
-
-        if (signUpError) {
-           if (signUpError.message.includes('User already registered')) {
-               throw new Error('Ese documento/correo ya está registrado. Por favor, iniciá sesión.');
-           }
-           throw signUpError;
-        }
-        if (!data.user) throw new Error("Error desconocido al crear el usuario.");
-
-        // Crear el perfil en nuestra tabla pública
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            role: role,
-            full_name: fullName,
-          });
-        
-        if (profileError) throw profileError;
-
-        // Auto-login post registro
-        onLogin({
-           id: data.user.id,
-           name: fullName,
-           email: authEmail,
-           role: role as Role,
-        });
-
+        userResult = await authRepository.registerPatient(authEmail, password, fullName, role);
       } else {
-        // --- LOGIN ---
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: password,
-        });
-
-        if (signInError) {
-           if (signInError.message.includes('Invalid login credentials')) {
-               throw new Error('Credenciales incorrectas. Verificá tu documento y contraseña.');
-           }
-           throw signInError;
-        }
-        if (!data.user) throw new Error("Error al iniciar sesión.");
-
-        // Traer datos extras del perfil
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profileError) {
-            console.error("No se encontró el perfil para el usuario:", data.user.id);
-            // Si por algún motivo no tiene perfil, lo armamos provisorio
-            onLogin({
-                id: data.user.id,
-                name: "Usuario del Sistema",
-                email: authEmail,
-                role: role as Role,
-            });
-            return;
-        }
-
-        onLogin({
-           id: data.user.id,
-           name: profileData.full_name,
-           email: authEmail,
-           role: profileData.role as Role,
-           avatarUrl: profileData.avatar_url
-        });
+        userResult = await authRepository.login(authEmail, password, role);
       }
+
+      onLogin(userResult);
 
     } catch (err: any) {
       if (err instanceof z.ZodError) {

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, Patient } from '../../types';
-import { MOCK_APPOINTMENTS, MOCK_RECORDS, MOCK_DOCTORS } from '../../constants';
+import { User, Patient, Appointment } from '../../types';
+import { MOCK_RECORDS, MOCK_DOCTORS } from '../../constants';
 import { Calendar, Video, FileText, Plus, Clock, ChevronRight, Upload, Phone, User as UserIcon, X, Check, Search } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
+import { appointmentRepository } from '../../repositories/AppointmentRepository';
 
 interface Props {
     user: Patient;
@@ -12,9 +13,24 @@ interface Props {
 
 const PatientDashboard: React.FC<Props> = ({ user }) => {
     const { toast } = useToast();
-    // TEMPORAL: Para el demo del MVP, forzamos a mostrar el primer turno disponible
-    // ignorando el UUID real de Supabase contra el ID de mentira (p1) del MOCK.
-    const nextAppointment = MOCK_APPOINTMENTS.find(a => a.status !== 'cancelled');
+    const [nextAppointment, setNextAppointment] = useState<Appointment | null>(null);
+    const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+
+    useEffect(() => {
+        const fetchAppointments = async () => {
+            try {
+                const appts = await appointmentRepository.getPatientAppointments(user.id);
+                if (appts.length > 0) {
+                    setNextAppointment(appts[0]);
+                }
+            } catch (error) {
+                console.error("Error cargando turnos:", error);
+            } finally {
+                setIsLoadingAppointments(false);
+            }
+        };
+        fetchAppointments();
+    }, [user.id]);
 
     // Modals State
     const [showUploadModal, setShowUploadModal] = useState(false);
@@ -84,7 +100,12 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             </button>
                         </div>
 
-                        {nextAppointment ? (
+                        {isLoadingAppointments ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-teal-600">
+                                <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+                                <span className="text-sm font-medium">Buscando turnos en la base de datos...</span>
+                            </div>
+                        ) : nextAppointment ? (
                             <div className="flex flex-col sm:flex-row items-center bg-teal-50 rounded-xl p-4 border border-teal-100">
                                 <div className="flex-shrink-0 mb-4 sm:mb-0 sm:mr-4">
                                     <div className="w-14 h-14 bg-teal-200 rounded-full flex items-center justify-center text-teal-700 font-bold text-xl">
@@ -99,9 +120,9 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     {nextAppointment.status === 'confirmed' ? (
                                         <Link
                                             to={`/room/${nextAppointment.id}`}
-                                            className="bg-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-teal-700 transition inline-block text-center"
+                                            className="bg-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-teal-700 transition inline-block text-center shadow-lg shadow-teal-500/30 animate-pulse"
                                         >
-                                            Ingresar
+                                            Ingresar a la Sala
                                         </Link>
                                     ) : (
                                         <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">Pendiente</span>
@@ -109,8 +130,22 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-center py-8 text-gray-400">
-                                No tienes turnos programados.
+                            <div className="text-center py-8">
+                                <p className="text-gray-500 mb-4">No tienes turnos programados.</p>
+                                <button 
+                                    onClick={async () => {
+                                        try {
+                                            toast('Generando turno demo...', 'info');
+                                            await appointmentRepository.createDemoAppointment(user.id);
+                                            window.location.reload();
+                                        } catch (error: any) {
+                                            toast(error.message || 'Error al generar el turno', 'error');
+                                        }
+                                    }}
+                                    className="bg-teal-100 text-teal-700 px-4 py-2 rounded font-bold hover:bg-teal-200 transition"
+                                >
+                                    Generar Turno de Prueba
+                                </button>
                             </div>
                         )}
                     </div>

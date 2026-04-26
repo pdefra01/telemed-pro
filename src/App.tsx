@@ -17,7 +17,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 
 import { ToastProvider } from './context/ToastContext';
 
-import { supabase } from './services/supabase';
+import { authRepository } from './repositories/AuthRepository';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -31,7 +31,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await authRepository.logout();
     setUser(null);
     localStorage.removeItem('telemed_user');
   };
@@ -98,7 +98,7 @@ const App: React.FC = () => {
               path="/room/:appointmentId"
               element={
                 <ProtectedRoute user={user}>
-                  <VideoRoom />
+                  <VideoRoom user={user!} />
                 </ProtectedRoute>
               }
             />

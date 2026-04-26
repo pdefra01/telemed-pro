@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Doctor } from '../../types';
-import { MOCK_APPOINTMENTS, MOCK_RECORDS } from '../../constants';
-import { Video, Calendar, Clock, Star, AlertCircle, FileText, CheckCircle, TrendingUp, Users, Activity, AlertTriangle, X } from 'lucide-react';
+import { Doctor, Appointment } from '../../types';
+import { MOCK_RECORDS } from '../../constants';
+import { Video, Calendar, Clock, Star, AlertCircle, FileText, CheckCircle, TrendingUp, Users, Activity, AlertTriangle, X, Search } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { appointmentRepository } from '../../repositories/AppointmentRepository';
 
 interface Props {
     user: Doctor;
@@ -13,8 +14,26 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [activeTab, setActiveTab] = useState<'queue' | 'history'>('queue');
     const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
-    // Filter appointments for this doctor
-    const appointments = MOCK_APPOINTMENTS.filter(a => a.doctorId === user.id);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const [queueAppointments, setQueueAppointments] = useState<Appointment[]>([]);
+    const [historyAppointments, setHistoryAppointments] = useState<Appointment[]>([]);
+
+    useEffect(() => {
+        const fetchAppointments = async () => {
+            try {
+                const appts = await appointmentRepository.getDoctorAppointments(user.id);
+                setQueueAppointments(appts.filter(a => a.status === 'pending' || a.status === 'confirmed'));
+                setHistoryAppointments(appts.filter(a => a.status === 'completed'));
+            } catch (error) {
+                console.error("Error cargando turnos:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchAppointments();
+    }, [user.id]);
+
     const metrics = user.metrics;
 
     const patientRecords = selectedPatientId ? MOCK_RECORDS.filter(r => r.patientId === selectedPatientId) : [];
@@ -124,46 +143,63 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 <div className="p-6">
                     {activeTab === 'queue' ? (
                         <div className="space-y-4">
-                            {appointments.filter(a => a.status !== 'cancelled').map(apt => (
-                                <div key={apt.id} className="flex flex-col md:flex-row items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-teal-200 transition group">
-                                    <div className="flex items-center space-x-4 mb-4 md:mb-0 w-full md:w-auto">
-                                        <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center font-bold text-lg">
-                                            {apt.patientName.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800">{apt.patientName}</h4>
-                                            <div className="flex items-center text-sm text-gray-500 space-x-3">
-                                                <span className="flex items-center"><Clock size={14} className="mr-1" /> {apt.time}</span>
-                                                <span className="flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold uppercase">Video</span>
+                            {isLoading ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-teal-600">
+                                    <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+                                    <span className="text-sm font-medium">Buscando pacientes en espera...</span>
+                                </div>
+                            ) : (
+                                <>
+                                    {queueAppointments.map(apt => (
+                                        <div key={apt.id} className="flex flex-col md:flex-row items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-teal-200 transition group">
+                                            <div className="flex items-center space-x-4 mb-4 md:mb-0 w-full md:w-auto">
+                                                <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center font-bold text-lg">
+                                                    {apt.patientName.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-bold text-gray-800">{apt.patientName}</h4>
+                                                    <div className="flex items-center text-sm text-gray-500 space-x-3">
+                                                        <span className="flex items-center"><Clock size={14} className="mr-1" /> {apt.time}</span>
+                                                        <span className="flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold uppercase">Video</span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
 
-                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => setSelectedPatientId(apt.patientId)}
-                                            className="w-full sm:w-auto text-sm"
-                                            icon={<FileText size={16} />}
-                                        >
-                                            Ver Historia
-                                        </Button>
-                                        <Link
-                                            to={`/room/${apt.id}`}
-                                            className="w-full sm:w-auto px-6 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition flex items-center justify-center shadow-lg shadow-teal-500/20 transform group-hover:scale-105 duration-200"
-                                        >
-                                            <Video size={16} className="mr-2" /> Atender
-                                        </Link>
+                                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setSelectedPatientId(apt.patientId)}
+                                    className="w-full sm:w-auto text-sm"
+                                    icon={<FileText size={16} />}
+                                >
+                                    Ver Historia
+                                </Button>
+                                {apt.status === 'confirmed' && (
+                                    <Link
+                                        to={`/room/${apt.id}`}
+                                        className="w-full sm:w-auto px-6 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition flex items-center justify-center shadow-lg shadow-teal-500/20 transform group-hover:scale-105 duration-200"
+                                    >
+                                        <Video size={16} className="mr-2" /> Atender
+                                    </Link>
+                                )}
+                                {apt.status === 'pending' && (
+                                    <div className="flex items-center text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded font-medium">
+                                        <AlertCircle size={14} className="mr-1" /> Esperando Confirmación
                                     </div>
-                                </div>
-                            ))}
-                            {appointments.length === 0 && (
-                                <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                                    <div className="bg-gray-100 p-4 rounded-full mb-3">
-                                        <Users size={32} />
-                                    </div>
-                                    <p>No hay pacientes en sala de espera.</p>
-                                </div>
+                                )}
+                            </div>
+
+                                        </div>
+                                    ))}
+                                    {queueAppointments.length === 0 && (
+                                        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                                            <div className="bg-gray-100 p-4 rounded-full mb-3">
+                                                <Users size={32} />
+                                            </div>
+                                            <p>No hay pacientes en sala de espera.</p>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     ) : (
