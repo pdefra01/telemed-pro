@@ -5,7 +5,7 @@ import { supabase } from '../../services/supabase';
 // Mock de Supabase
 vi.mock('../../services/supabase', () => ({
   supabase: {
-    from: vi.fn(() => supabase), // Recursivo para encadenar select, eq, neq, insert, update
+    from: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
@@ -14,6 +14,7 @@ vi.mock('../../services/supabase', () => ({
     order: vi.fn().mockReturnThis(),
     single: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
   },
 }));
 
@@ -97,6 +98,30 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
       // Status 'completed' constraint already updated in previous step.
       expect(supabaseMock.update).toHaveBeenCalledWith({ status: 'completed' }); 
       expect(supabaseMock.eq).toHaveBeenCalledWith('id', 'app1');
+    });
+  });
+  // Escenario 5: Creación de un nuevo turno (Scheduler)
+  describe('createAppointment', () => {
+    it('should insert a new appointment into Supabase', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.single.mockResolvedValue({ data: { id: 'new-app-id' }, error: null });
+
+      const appointmentData = {
+        patient_id: 'p1',
+        doctor_id: 'd1',
+        scheduled_at: '2026-05-01T10:00:00Z',
+        specialty: 'Cardiología',
+        status: 'pending' as const
+      };
+
+      const result = await appointmentRepository.createAppointment(appointmentData);
+
+      expect(supabaseMock.from).toHaveBeenCalledWith('appointments');
+      expect(supabaseMock.insert).toHaveBeenCalledWith(expect.objectContaining({
+        patient_id: 'p1',
+        doctor_id: 'd1'
+      }));
+      expect(result.id).toBe('new-app-id');
     });
   });
 });

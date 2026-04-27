@@ -137,8 +137,13 @@ export const MOCK_PRESCRIPTIONS: Prescription[] = [
     id: 'pr1',
     patientId: 'p1',
     doctorName: 'Dr. Alejandro Silva',
-    medication: 'Amoxicilina 500mg',
-    instructions: 'Tomar 1 comprimido cada 8 horas por 7 días.',
+    medications: [
+      {
+        name: 'Amoxicilina 500mg',
+        instructions: 'Tomar 1 comprimido cada 8 horas por 7 días.',
+        quantity: 1
+      }
+    ],
     date: '2023-11-15',
     expirationDate: '2023-12-15',
     status: 'dispensed',
@@ -148,8 +153,13 @@ export const MOCK_PRESCRIPTIONS: Prescription[] = [
     id: 'pr2',
     patientId: 'p1',
     doctorName: 'Dr. Alejandro Silva',
-    medication: 'Ibuprofeno 400mg',
-    instructions: 'Tomar en caso de dolor o fiebre.',
+    medications: [
+      {
+        name: 'Ibuprofeno 400mg',
+        instructions: 'Tomar en caso de dolor o fiebre.',
+        quantity: 1
+      }
+    ],
     date: '2024-05-20',
     expirationDate: '2024-06-20',
     status: 'active',

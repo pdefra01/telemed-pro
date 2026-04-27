@@ -12,6 +12,8 @@ As a Doctor, I need to be able to efficiently manage my appointments, add medica
 
 The current prototype provides a basic Doctor Dashboard and a functional VideoRoom. This specification aims to add the missing logic to complete the "consultation cycle" from the doctor's perspective. The implementation must follow Test-Driven Development (TDD) principles.
 
+**Critical Scaling Requirement:** The platform must support simultaneous attention for many patients across different doctors. The infrastructure and UI must be robust enough to handle concurrent video sessions, real-time messaging, and high-concurrency state updates without performance degradation.
+
 ## Data Model Updates
 
 The `appointments` table must be updated to support doctor notes.
@@ -33,9 +35,12 @@ ADD COLUMN IF NOT EXISTS notes TEXT;
 6.  **Completion Action:** Clicking "Finalizar Consulta" must:
     *   Set the appointment status to `'completed'`.
     *   Ensure any final notes are saved.
+    *   Generate a persistent notification for the patient in the `notifications` table (Title: "Consulta Finalizada", Message: "Tu médico ha finalizado la consulta...").
     *   (Optionally) Redirect the doctor back to the dashboard or a summary page.
     *   Prevent the appointment from being rejoined or further edited by either party.
 7.  **Service/Repository Implementation:** Business logic must be implemented in services/repositories (e.g., `AppointmentRepository.ts`) and tested using Vitest (TDD). UI should focus on state management and integration.
+8.  **Multitasking Dashboard (Doctor):** The doctor must have a "Live Queue" visible during calls to monitor other incoming or waiting patients without leaving the current session.
+9.  **System Health Monitoring:** The UI must display real-time network/latency indicators for both the doctor and the patient to ensure a robust experience.
 
 ## Scenarios (TDD Guidance)
 
@@ -61,8 +66,9 @@ These scenarios define the test cases that must pass *before* logic changes are 
 *   **When** the doctor clicks "Finalizar Consulta" for `app1`.
 *   **Then**:
     1.  The `appointments` record with ID `app1` must be updated with `status: 'completed'`.
-    2.  Any recent notes must be persisted.
-    3.  A subsequent request to join the room for `app1` should fail or be blocked.
+    2.  A new record MUST be created in the `notifications` table for the patient.
+    3.  Any recent notes must be persisted.
+    4.  A subsequent request to join the room for `app1` should fail or be blocked.
 
 ## Implementation Tasks
 

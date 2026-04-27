@@ -31,6 +31,7 @@ export class AppointmentRepository {
       time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       status: row.status,
       type: 'video', // Por defecto en este MVP
+      consultationMetadata: row.consultation_metadata || {},
     }));
   }
 
@@ -39,7 +40,7 @@ export class AppointmentRepository {
    */
   async getDoctorAppointments(
     doctorId: string,
-    filters?: { status?: ('pending' | 'confirmed' | 'completed' | 'cancelled')[] }
+    filters?: { status?: ('pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled')[] }
   ): Promise<Appointment[]> {
     let query = supabase
       .from('appointments')
@@ -73,7 +74,39 @@ export class AppointmentRepository {
       time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       status: row.status,
       type: 'video',
+      consultationMetadata: row.consultation_metadata || {},
     }));
+  }
+
+  /**
+   * Crea un nuevo turno en la base de datos
+   */
+  async createAppointment(data: {
+    patient_id: string;
+    doctor_id: string;
+    scheduled_at: string;
+    specialty: string;
+    status: 'pending' | 'confirmed';
+  }): Promise<any> {
+    const { data: insertedData, error } = await supabase
+      .from('appointments')
+      .insert({
+        patient_id: data.patient_id,
+        doctor_id: data.doctor_id,
+        scheduled_at: data.scheduled_at,
+        specialty: data.specialty,
+        status: data.status,
+        livekit_room_name: `room-${data.patient_id.substring(0, 5)}-${Date.now().toString().slice(-5)}`
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creando turno:", error);
+      throw error;
+    }
+
+    return insertedData;
   }
 
   /**
@@ -130,18 +163,78 @@ export class AppointmentRepository {
   }
 
   /**
+   * Marca un turno como iniciado (en progreso)
+   */
+  async startConsultation(appointmentId: string): Promise<void> {
+    const { error } = await supabase
+      .from('appointments')
+      .update({ 
+        status: 'in_progress',
+        consultation_metadata: {
+          startedAt: new Date().toISOString()
+        }
+      })
+      .eq('id', appointmentId);
+
+    if (error) {
+      console.error(`Error iniciando turno ${appointmentId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Marca un turno como completado
    */
   async completeAppointment(appointmentId: string): Promise<void> {
     const { error } = await supabase
       .from('appointments')
-      .update({ status: 'completed' })
+      .update({ 
+        status: 'completed',
+        consultation_metadata: {
+          endedAt: new Date().toISOString()
+        }
+      })
       .eq('id', appointmentId);
 
     if (error) {
       console.error(`Error completando turno ${appointmentId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Obtiene un turno por su ID
+   */
+  async getAppointmentById(appointmentId: string): Promise<Appointment | null> {
+    const { data, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        patient:profiles!patient_id(full_name),
+        doctor:profiles!doctor_id(full_name)
+      `)
+      .eq('id', appointmentId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null; // No results
+      console.error(`Error obteniendo turno ${appointmentId}:`, error);
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      patientId: data.patient_id,
+      patientName: data.patient?.full_name || "Paciente",
+      doctorId: data.doctor_id,
+      doctorName: data.doctor?.full_name || "Doctor",
+      date: new Date(data.scheduled_at).toISOString().split('T')[0],
+      time: new Date(data.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      status: data.status,
+      type: 'video', // Por defecto en este MVP
+      notes: data.notes || '', // Agregado para soportar leer notas pre-existentes
+      consultationMetadata: data.consultation_metadata || {},
+    } as any; 
   }
 }
 

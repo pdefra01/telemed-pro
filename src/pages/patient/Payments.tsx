@@ -34,108 +34,151 @@ const Payments: React.FC = () => {
         document.body.appendChild(element);
         element.click();
         document.body.removeChild(element);
-    };
-
-    return (
-        <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-gray-800">Mi Plan y Pagos</h1>
-
-            {/* Plan Status Card */}
-            <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                    <ShieldCheck size={120} />
-                </div>
-                <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-center">
-                    <div className="mb-6 md:mb-0">
-                        <p className="text-slate-400 text-sm uppercase tracking-wider mb-1">Plan Actual</p>
-                        <h2 className="text-3xl font-bold mb-2">{MOCK_PATIENT.planName}</h2>
-                        <p className="flex items-center text-green-400 text-sm font-medium">
-                            <CheckCircle size={16} className="mr-1" /> Cobertura Activa
-                        </p>
+    };    return (
+        <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20">
+                            <CreditCard size={24} />
+                        </div>
+                        <h1 className="text-4xl font-black text-white tracking-tight">Plan y Facturación</h1>
                     </div>
-                    <div className="text-right">
-                        <p className="text-slate-400 text-sm mb-1">Grupo Familiar</p>
-                        <p className="text-xl font-bold">{MOCK_PATIENT.familyMembers?.length ? MOCK_PATIENT.familyMembers.length + 1 : 1} Integrantes</p>
+                    <p className="text-slate-400 font-medium max-w-xl text-lg leading-relaxed">
+                        Gestioná tu suscripción y accedé a tus comprobantes fiscales con validez legal.
+                    </p>
+                </div>
+            </div>
+
+            {/* Plan Status Card - Premium View */}
+            <div className="group relative bg-slate-900 rounded-[3rem] p-10 border border-white/10 shadow-2xl overflow-hidden transition-all duration-700 hover:shadow-emerald-500/10">
+                <div className="absolute top-0 right-0 p-12 text-emerald-500/5 group-hover:scale-125 group-hover:text-emerald-500/10 transition-all duration-1000">
+                    <ShieldCheck size={280} />
+                </div>
+                
+                <div className="relative z-10 flex flex-col lg:flex-row gap-12 items-start lg:items-center">
+                    <div className="flex-1 space-y-6">
+                        <div className="space-y-1">
+                            <p className="text-emerald-500 font-black text-xs uppercase tracking-[0.3em]">Estado de Cobertura</p>
+                            <h2 className="text-5xl font-black text-white tracking-tighter">{MOCK_PATIENT.planName}</h2>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-4">
+                            <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-2xl flex items-center gap-2">
+                                <CheckCircle size={16} className="text-emerald-500" />
+                                <span className="text-emerald-400 text-xs font-black uppercase tracking-widest">Activo</span>
+                            </div>
+                            <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2">
+                                <ShieldCheck size={16} className="text-slate-400" />
+                                <span className="text-slate-300 text-xs font-black uppercase tracking-widest">Cobertura Nacional</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full lg:w-px h-px lg:h-24 bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+
+                    <div className="grid grid-cols-2 gap-12">
+                        <div className="space-y-1">
+                            <p className="text-slate-500 font-black text-[10px] uppercase tracking-[0.2em]">Grupo Familiar</p>
+                            <p className="text-2xl font-black text-white">{MOCK_PATIENT.familyMembers?.length ? MOCK_PATIENT.familyMembers.length + 1 : 1} <span className="text-slate-500 text-sm font-bold uppercase tracking-widest ml-2">Integrantes</span></p>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-slate-500 font-black text-[10px] uppercase tracking-[0.2em]">Próximo Vencimiento</p>
+                            <p className="text-2xl font-black text-white">05 <span className="text-slate-500 text-sm font-bold uppercase tracking-widest ml-2">May 2026</span></p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Pending Payment Alert */}
-            {pendingPayment ? (
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between shadow-sm animate-pulse-slow">
-                    <div className="flex items-center mb-4 md:mb-0">
-                        <div className="p-3 bg-orange-100 text-orange-600 rounded-full mr-4">
-                            <AlertTriangle size={24} />
+            {/* Billing Action Section */}
+            <div className="grid grid-cols-1 gap-10">
+                {pendingPayment ? (
+                    <div className="group relative bg-orange-500/10 backdrop-blur-xl border border-orange-500/20 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl transition-all duration-500 hover:bg-orange-500/[0.15]">
+                        <div className="flex items-center gap-6">
+                            <div className="p-5 bg-orange-500 text-white rounded-[1.5rem] shadow-xl shadow-orange-500/20 animate-pulse">
+                                <AlertTriangle size={28} />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-white tracking-tight">Pago Pendiente Detectado</h3>
+                                <p className="text-orange-300 font-bold text-sm mt-1 uppercase tracking-widest">Período correspondiente a {pendingPayment.period}</p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 className="font-bold text-orange-800 text-lg">Factura Pendiente</h3>
-                            <p className="text-orange-700">Período: {pendingPayment.period}</p>
+                        <div className="flex items-center gap-8 w-full md:w-auto">
+                            <div className="text-right">
+                                <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-1">Monto a Abonar</p>
+                                <span className="text-4xl font-black text-white tracking-tighter">${pendingPayment.amount.toLocaleString()}</span>
+                            </div>
+                            <Button
+                                onClick={handlePay}
+                                isLoading={isProcessing}
+                                className="h-16 px-10 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl shadow-2xl shadow-orange-600/30 font-black text-sm uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95"
+                            >
+                                Regularizar Ahora
+                            </Button>
                         </div>
                     </div>
-                    <div className="flex items-center space-x-4 w-full md:w-auto">
-                        <span className="text-2xl font-bold text-gray-800">${pendingPayment.amount.toLocaleString()}</span>
-                        <Button
-                            onClick={handlePay}
-                            isLoading={isProcessing}
-                            className="flex-1 md:flex-none bg-orange-600 hover:bg-orange-700 text-white min-w-[140px] shadow-lg shadow-orange-500/20 justification-center"
-                        >
-                            Pagar Ahora
-                        </Button>
+                ) : (
+                    <div className="bg-emerald-500/5 backdrop-blur-xl border border-emerald-500/20 rounded-[2.5rem] p-8 flex items-center justify-center gap-4 shadow-xl">
+                        <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500">
+                            <CheckCircle size={20} />
+                        </div>
+                        <p className="text-emerald-400 font-black text-lg tracking-tight uppercase tracking-[0.1em]">Tus pagos están al día. ¡Gracias por confiar en nosotros!</p>
                     </div>
-                </div>
-            ) : (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-6 flex items-center justify-center text-green-800 font-medium">
-                    <CheckCircle className="mr-2" /> Tus pagos están al día.
-                </div>
-            )}
+                )}
 
-            {/* Payment History */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-6 border-b border-gray-100">
-                    <h3 className="font-bold text-gray-800">Historial de Pagos</h3>
-                </div>
-                <table className="w-full">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="text-left py-3 px-6 text-xs font-semibold text-gray-500 uppercase">Período</th>
-                            <th className="text-left py-3 px-6 text-xs font-semibold text-gray-500 uppercase">Fecha Pago</th>
-                            <th className="text-left py-3 px-6 text-xs font-semibold text-gray-500 uppercase">Monto</th>
-                            <th className="text-left py-3 px-6 text-xs font-semibold text-gray-500 uppercase">Estado</th>
-                            <th className="text-right py-3 px-6 text-xs font-semibold text-gray-500 uppercase">Comprobante</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
+                {/* Transaction History - Modern List View */}
+                <div className="space-y-8">
+                    <div className="flex items-center justify-between px-2">
+                        <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-3">
+                            Historial de Transacciones
+                            <span className="bg-white/5 text-slate-500 text-[10px] px-3 py-1 rounded-full border border-white/5">{payments.length} Registros</span>
+                        </h3>
+                    </div>
+
+                    <div className="space-y-4">
                         {payments.map(payment => (
-                            <tr key={payment.id} className="hover:bg-gray-50 transition">
-                                <td className="py-4 px-6 font-medium text-gray-800">{payment.period}</td>
-                                <td className="py-4 px-6 text-gray-500 text-sm">{payment.date || '-'}</td>
-                                <td className="py-4 px-6 font-medium text-gray-800">${payment.amount.toLocaleString()}</td>
-                                <td className="py-4 px-6">
-                                    {payment.status === 'paid' ? (
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            Pagado
-                                        </span>
-                                    ) : (
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                            Pendiente
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="py-4 px-6 text-right">
+                            <div key={payment.id} className="group bg-white/5 backdrop-blur-xl p-6 rounded-3xl border border-white/10 flex flex-col md:flex-row items-center justify-between gap-6 transition-all duration-500 hover:bg-white/[0.08] hover:translate-x-1">
+                                <div className="flex items-center gap-6 flex-1">
+                                    <div className={`p-4 rounded-2xl border ${
+                                        payment.status === 'paid' 
+                                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                                        : 'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                                    }`}>
+                                        <CreditCard size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-white font-black text-lg tracking-tight">{payment.period}</p>
+                                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
+                                            {payment.date ? `Pagado el ${new Date(payment.date).toLocaleDateString()}` : 'Pendiente de Procesamiento'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-10">
+                                    <div className="text-right">
+                                        <p className="text-white font-black text-xl">${payment.amount.toLocaleString()}</p>
+                                        <div className="flex items-center justify-end gap-2 mt-1">
+                                            <div className={`w-1.5 h-1.5 rounded-full ${payment.status === 'paid' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-orange-500 animate-pulse'}`}></div>
+                                            <p className={`text-[10px] font-black uppercase tracking-widest ${payment.status === 'paid' ? 'text-emerald-500' : 'text-orange-500'}`}>
+                                                {payment.status === 'paid' ? 'Completado' : 'Pendiente'}
+                                            </p>
+                                        </div>
+                                    </div>
+
                                     {payment.status === 'paid' && (
-                                        <button
-                                            type="button"
+                                        <Button
+                                            variant="ghost"
                                             onClick={() => handleDownload(payment.period)}
-                                            className="text-teal-600 hover:text-teal-800 p-1"
-                                        >
-                                            <Download size={18} />
-                                        </button>
+                                            className="w-12 h-12 p-0 bg-white/5 hover:bg-emerald-500 hover:text-white rounded-xl border border-white/5 transition-all group-hover:scale-110"
+                                            icon={<Download size={18} />}
+                                        />
                                     )}
-                                </td>
-                            </tr>
+                                </div>
+                            </div>
                         ))}
-                    </tbody>
-                </table>
+                    </div>
+                </div>
             </div>
         </div>
     );

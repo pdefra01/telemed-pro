@@ -1,16 +1,55 @@
-import React, { useState } from 'react';
-import { MOCK_RECORDS, MOCK_PRESCRIPTIONS, MOCK_DOCUMENTS } from '../../constants';
-import { FileText, Pill, File, Download, Search, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+    FileText, Pill, File, Download, Search, CheckCircle, 
+    AlertCircle, Loader2, Calendar, User, ExternalLink, 
+    FileArchive, ChevronRight, Hash, Clock, FlaskConical, Activity
+} from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
+import { Patient, MedicalRecord, Prescription } from '../../types';
+import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
+import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
+import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
 
-const MedicalHistory: React.FC = () => {
+interface Props {
+    user: Patient;
+}
+
+const MedicalHistory: React.FC<Props> = ({ user }) => {
     const { toast } = useToast();
     const [activeTab, setActiveTab] = useState<'records' | 'prescriptions' | 'documents'>('records');
     const [searchTerm, setSearchTerm] = useState('');
+    
+    const [records, setRecords] = useState<MedicalRecord[]>([]);
+    const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+    const [documents, setDocuments] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [recs, prescs, docs] = await Promise.all([
+                    medicalRecordRepository.getRecordsByPatientId(user.id),
+                    prescriptionRepository.getPrescriptionsByPatientId(user.id),
+                    medicalDocumentRepository.getDocumentsByPatientId(user.id)
+                ]);
+                setRecords(recs);
+                setPrescriptions(prescs);
+                setDocuments(docs);
+            } catch (error) {
+                console.error("Error cargando historia clínica:", error);
+                toast('Error al cargar tu historia clínica', 'error');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [user.id]);
 
     const handleDownload = (filename: string, content: string) => {
-        toast(`Descargando ${filename}...`, 'info');
+        toast(`Preparando descarga de ${filename}...`, 'info');
         setTimeout(() => {
             const element = document.createElement("a");
             const file = new Blob([content], { type: 'text/plain' });
@@ -20,163 +59,335 @@ const MedicalHistory: React.FC = () => {
             element.click();
             document.body.removeChild(element);
             toast('Descarga completada', 'success');
-        }, 1000);
+        }, 800);
     };
 
+    const filteredRecords = records.filter(r => 
+        r.diagnosis.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.doctorName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const filteredPrescriptions = prescriptions.filter(p => 
+        p.medications.some(m => m.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        p.doctorName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const filteredDocuments = documents.filter(d => 
+        d.title.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800">Historia Clínica Digital</h1>
-                    <p className="text-gray-500">Accede a tus diagnósticos, recetas y estudios de forma segura.</p>
+        <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20">
+                            <FileArchive size={24} />
+                        </div>
+                        <h1 className="text-4xl font-black text-white tracking-tight">Expediente Médico</h1>
+                    </div>
+                    <p className="text-slate-400 font-medium max-w-xl text-lg leading-relaxed">
+                        Tu historial de salud completo, protegido bajo estándares de seguridad médica internacional.
+                    </p>
                 </div>
-                <div className="relative">
+                <div className="relative group w-full md:w-[450px]">
+                    <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors group-focus-within:text-emerald-500 text-slate-500">
+                        <Search size={22} />
+                    </div>
                     <input
                         type="text"
-                        placeholder="Buscar..."
-                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none w-full md:w-64"
+                        placeholder="Buscar diagnósticos, médicos o estudios..."
+                        className="w-full pl-14 pr-6 py-4 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] shadow-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500/50 outline-none transition-all placeholder:text-slate-600 font-bold text-white text-lg"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
-                    <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-wrap">
+            {/* Navigation Tabs */}
+            <div className="flex p-2 bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white/10 max-w-2xl">
                 <button
                     onClick={() => setActiveTab('records')}
-                    className={`flex-1 py-4 px-6 text-sm font-bold flex items-center justify-center space-x-2 transition ${activeTab === 'records' ? 'bg-teal-50 text-teal-700 border-b-2 border-teal-600' : 'text-gray-500 hover:bg-gray-50'}`}
+                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
+                        activeTab === 'records' 
+                        ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 translate-y-[-2px]' 
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                    }`}
                 >
-                    <FileText size={18} /> <span>Consultas y Diagnósticos</span>
+                    <FileText size={18} /> <span>Consultas</span>
                 </button>
                 <button
                     onClick={() => setActiveTab('prescriptions')}
-                    className={`flex-1 py-4 px-6 text-sm font-bold flex items-center justify-center space-x-2 transition ${activeTab === 'prescriptions' ? 'bg-teal-50 text-teal-700 border-b-2 border-teal-600' : 'text-gray-500 hover:bg-gray-50'}`}
+                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
+                        activeTab === 'prescriptions' 
+                        ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 translate-y-[-2px]' 
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                    }`}
                 >
-                    <Pill size={18} /> <span>Recetas Electrónicas</span>
+                    <Pill size={18} /> <span>Recetas</span>
                 </button>
                 <button
                     onClick={() => setActiveTab('documents')}
-                    className={`flex-1 py-4 px-6 text-sm font-bold flex items-center justify-center space-x-2 transition ${activeTab === 'documents' ? 'bg-teal-50 text-teal-700 border-b-2 border-teal-600' : 'text-gray-500 hover:bg-gray-50'}`}
+                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
+                        activeTab === 'documents' 
+                        ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 translate-y-[-2px]' 
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                    }`}
                 >
-                    <File size={18} /> <span>Estudios Adjuntos</span>
+                    <FileArchive size={18} /> <span>Estudios</span>
                 </button>
             </div>
 
-            {/* Content */}
-            <div className="min-h-[400px]">
-                {activeTab === 'records' && (
-                    <div className="space-y-4">
-                        {MOCK_RECORDS.filter(r => r.diagnosis.toLowerCase().includes(searchTerm.toLowerCase())).map(record => (
-                            <div key={record.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-gray-800">{record.diagnosis}</h3>
-                                        <p className="text-teal-600 text-sm font-medium">{record.doctorName}</p>
-                                    </div>
-                                    <span className="bg-gray-100 text-gray-600 text-xs px-3 py-1 rounded-full">{record.date}</span>
-                                </div>
-                                <div className="bg-gray-50 p-4 rounded-lg text-gray-700 text-sm mt-3 border border-gray-100">
-                                    {record.notes}
-                                </div>
-                                <div className="mt-4 flex space-x-2">
-                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{record.type === 'consultation' ? 'Consulta Ambulatoria' : 'Control'}</span>
-                                </div>
-                            </div>
-                        ))}
+            {/* Content Area */}
+            <div className="min-h-[500px]">
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-40 space-y-8">
+                        <div className="relative">
+                            <div className="w-24 h-24 border-4 border-white/5 rounded-full"></div>
+                            <div className="w-24 h-24 border-4 border-t-emerald-500 rounded-full animate-spin absolute top-0 left-0 shadow-[0_0_15px_rgba(16,185,129,0.3)]"></div>
+                        </div>
+                        <div className="text-center">
+                           <p className="text-emerald-500 font-black tracking-[0.3em] uppercase text-sm animate-pulse">Sincronizando Expediente</p>
+                           <p className="text-slate-500 text-xs mt-2 font-bold uppercase tracking-widest">Encriptación Militar Activa</p>
+                        </div>
                     </div>
-                )}
+                ) : (
+                    <div className="grid grid-cols-1 gap-8 animate-in slide-in-from-bottom-6 duration-700">
+                        {activeTab === 'records' && (
+                            <>
+                                {filteredRecords.length > 0 ? (
+                                    filteredRecords.map(record => (
+                                        <div key={record.id} className="group bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl hover:bg-white/[0.08] transition-all duration-500 relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-600/50"></div>
+                                            
+                                            <div className="flex flex-col md:flex-row justify-between md:items-center gap-6 mb-8">
+                                                <div className="flex items-start gap-5">
+                                                    <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20 group-hover:scale-110 group-hover:bg-emerald-500/20 transition-all duration-500">
+                                                        <FileText size={28} />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-2xl font-black text-white group-hover:text-emerald-400 transition-colors tracking-tight">{record.diagnosis}</h3>
+                                                        <div className="flex items-center gap-3 mt-2">
+                                                            <div className="w-7 h-7 bg-slate-800 rounded-lg flex items-center justify-center text-[10px] font-black text-slate-400 uppercase">
+                                                                {record.doctorName.charAt(0)}
+                                                            </div>
+                                                            <p className="text-slate-400 font-bold text-sm">{record.doctorName}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center bg-white/5 px-5 py-3 rounded-2xl border border-white/5 shadow-inner">
+                                                    <Calendar size={18} className="text-emerald-500 mr-3" />
+                                                    <span className="text-slate-200 text-sm font-black uppercase tracking-widest">
+                                                        {new Date(record.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="bg-black/20 p-6 rounded-[1.5rem] border border-white/5 mb-8">
+                                                <p className="text-slate-300 leading-relaxed text-sm font-medium">
+                                                    {record.notes}
+                                                </p>
+                                            </div>
 
-                {activeTab === 'prescriptions' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {MOCK_PRESCRIPTIONS.filter(p => p.medication.toLowerCase().includes(searchTerm.toLowerCase())).map(presc => (
-                            <div key={presc.id} className={`bg-white p-5 rounded-xl border border-l-4 shadow-sm relative overflow-hidden ${presc.status === 'active' ? 'border-l-green-500 border-gray-200' : 'border-l-gray-300 border-gray-200 opacity-75'}`}>
-                                <div className="flex justify-between items-start">
-                                    <h3 className="font-bold text-gray-800 text-lg">{presc.medication}</h3>
-                                    {presc.status === 'active' ? (
-                                        <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded flex items-center"><CheckCircle size={12} className="mr-1" /> Activa</span>
-                                    ) : (
-                                        <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">Archivada</span>
-                                    )}
-                                </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border shadow-lg ${
+                                                        record.type === 'consultation' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                                                        record.type === 'checkup' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                    }`}>
+                                                        {record.type === 'consultation' ? 'Consulta Médica' : record.type === 'checkup' ? 'Chequeo General' : 'Atención Urgente'}
+                                                    </span>
+                                                    {record.attachments && record.attachments.length > 0 && (
+                                                        <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+                                                            <FileArchive size={12} className="text-emerald-500" /> {record.attachments.length} archivos adjuntos
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    className="text-emerald-500 hover:text-emerald-400 font-black text-xs uppercase tracking-widest p-0 group/link"
+                                                >
+                                                    Reporte Completo <ChevronRight size={18} className="ml-1 group-hover/link:translate-x-1 transition-transform" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <EmptyState message="No hay consultas registradas." />
+                                )}
+                            </>
+                        )}
 
-                                <p className="text-gray-600 text-sm mt-2">{presc.instructions}</p>
+                        {activeTab === 'prescriptions' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {filteredPrescriptions.length > 0 ? (
+                                    filteredPrescriptions.map(presc => (
+                                        <div key={presc.id} className={`group bg-white/5 backdrop-blur-xl rounded-[2.5rem] border shadow-2xl hover:bg-white/[0.08] transition-all duration-500 relative overflow-hidden flex flex-col ${
+                                            presc.status === 'active' ? 'border-emerald-500/30 ring-1 ring-emerald-500/20' : 'border-white/5 opacity-60'
+                                        }`}>
+                                            {/* Watermark/Pattern */}
+                                            <div className="absolute -right-12 -top-12 text-emerald-500/5 rotate-12 group-hover:rotate-0 transition-transform duration-1000">
+                                                <Pill size={180} />
+                                            </div>
 
-                                <div className="mt-4 pt-4 border-t border-dashed border-gray-200 text-xs text-gray-500 flex justify-between items-center">
-                                    <div>
-                                        <p>Emitida: {presc.date}</p>
-                                        <p>Dr: {presc.doctorName}</p>
+                                            <div className="p-8 flex-1 relative z-10">
+                                                <div className="flex justify-between items-start mb-8">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`p-4 rounded-2xl ${presc.status === 'active' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20' : 'bg-slate-800 text-slate-500'}`}>
+                                                            <Pill size={24} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-xl font-black text-white tracking-tight">Receta Oficial</h3>
+                                                            <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest mt-1">S/N: {presc.id.slice(0,12).toUpperCase()}</p>
+                                                        </div>
+                                                    </div>
+                                                    {presc.status === 'active' ? (
+                                                        <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-black px-4 py-1.5 rounded-full flex items-center border border-emerald-500/20 uppercase tracking-widest animate-pulse">
+                                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+                                                            Vigente
+                                                        </span>
+                                                    ) : (
+                                                        <span className="bg-white/5 text-slate-500 text-[10px] font-black px-4 py-1.5 rounded-full border border-white/10 uppercase tracking-widest">
+                                                            Finalizada
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div className="space-y-4">
+                                                    {presc.medications.map((m, idx) => (
+                                                        <div key={idx} className="bg-black/20 p-5 rounded-2xl border border-white/5 relative group/med hover:bg-black/40 transition-colors">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <p className="font-black text-white text-base">{m.name}</p>
+                                                                <span className="text-xs font-black text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">CANT: {m.quantity}</span>
+                                                            </div>
+                                                            <p className="text-slate-400 text-sm font-medium leading-relaxed italic border-l-2 border-emerald-500/30 pl-3 mt-3">"{m.instructions}"</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <div className="mt-8 pt-8 border-t border-dashed border-white/10 grid grid-cols-2 gap-6">
+                                                    <div className="space-y-1.5">
+                                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Prescriptor</p>
+                                                        <p className="text-sm font-black text-slate-200">{presc.doctorName}</p>
+                                                    </div>
+                                                    <div className="space-y-1.5 text-right">
+                                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Fecha Emisión</p>
+                                                        <p className="text-sm font-black text-slate-200">{new Date(presc.date).toLocaleDateString('es-AR')}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-6 bg-white/[0.02] border-t border-white/5 flex gap-4">
+                                                <Button
+                                                    onClick={() => {
+                                                        const medsInfo = presc.medications.map(m => `- ${m.name}: ${m.instructions} (Cant: ${m.quantity})`).join('\n');
+                                                        handleDownload(`Receta-${presc.id.slice(0,8)}.txt`, `RECETA DIGITAL TELEMED PRO\n\nMedicamentos:\n${medsInfo}\n\nMédico: ${presc.doctorName}\nFecha: ${presc.date}\nFirma: ${presc.digitalSignature}`);
+                                                    }}
+                                                    className="flex-1 bg-white/5 border-white/10 text-white hover:bg-emerald-600 hover:border-emerald-500 h-12 rounded-2xl transition-all font-black text-xs uppercase tracking-widest"
+                                                    icon={<Download size={16} />}
+                                                >
+                                                    Descargar
+                                                </Button>
+                                                {presc.pdfUrl && (
+                                                    <a 
+                                                        href={presc.pdfUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="w-14 flex items-center justify-center bg-emerald-600 text-white rounded-2xl hover:bg-emerald-500 transition shadow-xl shadow-emerald-500/20"
+                                                    >
+                                                        <ExternalLink size={20} />
+                                                    </a>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Signature bar */}
+                                            <div className="bg-slate-900/80 py-2.5 px-6 flex justify-between items-center border-t border-white/5">
+                                                <div className="flex items-center gap-2">
+                                                    <CheckCircle size={10} className="text-emerald-500" />
+                                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Validación Blockchain Digital</p>
+                                                </div>
+                                                <p className="text-[10px] font-mono text-emerald-500 font-black">{presc.digitalSignature}</p>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="col-span-full">
+                                        <EmptyState message="No hay recetas registradas." />
                                     </div>
-                                    <div className="text-right">
-                                        <p className="font-mono text-[10px] text-gray-400">Firma Digital</p>
-                                        <p className="font-mono text-teal-600">{presc.digitalSignature}</p>
-                                    </div>
-                                </div>
-
-                                {presc.status === 'active' && (
-                                    <Button
-                                        onClick={() => handleDownload(`Receta-${presc.medication}.txt`, `RECETA DIGITAL\n\nMedicamento: ${presc.medication}\nInstrucciones: ${presc.instructions}\nMédico: ${presc.doctorName}\nFirma: ${presc.digitalSignature}`)}
-                                        className="w-full mt-4 bg-teal-50 text-teal-700 hover:bg-teal-100 text-sm justification-center"
-                                        icon={<Download size={16} />}
-                                    >
-                                        Descargar Receta
-                                    </Button>
                                 )}
                             </div>
-                        ))}
-                    </div>
-                )}
-
-                {activeTab === 'documents' && (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <table className="w-full">
-                            <thead className="bg-gray-50 border-b border-gray-200">
-                                <tr>
-                                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Documento</th>
-                                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
-                                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Subido Por</th>
-                                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {MOCK_DOCUMENTS.map(doc => (
-                                    <tr key={doc.id} className="hover:bg-gray-50 transition">
-                                        <td className="py-3 px-4">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="p-2 bg-blue-50 text-blue-600 rounded">
-                                                    <FileText size={18} />
-                                                </div>
-                                                <span className="font-medium text-gray-800">{doc.title}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-500">{doc.date}</td>
-                                        <td className="py-3 px-4">
-                                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${doc.uploadedBy === 'doctor' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                {doc.uploadedBy === 'doctor' ? 'Médico' : 'Paciente'}
-                                            </span>
-                                        </td>
-                                        <td className="py-3 px-4 text-right">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDownload(`${doc.title}.txt`, `DOCUMENTO MÉDICO\n\nTitulo: ${doc.title}\nFecha: ${doc.date}\nEste es un documento simulado.`)}
-                                                className="text-teal-600 hover:text-teal-800 p-1"
-                                            >
-                                                <Download size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {MOCK_DOCUMENTS.length === 0 && (
-                            <div className="p-8 text-center text-gray-500">No hay documentos cargados.</div>
                         )}
+
+                        {activeTab === 'documents' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {filteredDocuments.length > 0 ? (
+                                    filteredDocuments.map(doc => (
+                                        <div key={doc.id} className="group bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl hover:bg-white/[0.08] transition-all duration-500 flex flex-col relative overflow-hidden">
+                                            <div className="absolute -right-6 -top-6 text-white/[0.02] group-hover:scale-125 transition-transform duration-1000">
+                                                <FileText size={120} />
+                                            </div>
+
+                                            <div className="flex items-start justify-between mb-8 relative z-10">
+                                                <div className={`p-5 rounded-2xl transition-all duration-500 group-hover:scale-110 shadow-lg border ${
+                                                    doc.type.includes('lab') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-blue-500/10' : 
+                                                    doc.type.includes('imaging') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-purple-500/10' : 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-amber-500/10'
+                                                }`}>
+                                                    {doc.type.includes('lab') ? <FlaskConical size={32} /> : doc.type.includes('imaging') ? <Activity size={32} /> : <FileText size={32} />}
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <span className={`text-[10px] px-4 py-1.5 rounded-full font-black uppercase tracking-widest border shadow-sm ${
+                                                        doc.uploadedBy === 'doctor' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                    }`}>
+                                                        {doc.uploadedBy === 'doctor' ? 'Profesional' : 'Paciente'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            
+                                            <h4 className="font-black text-white text-xl leading-tight mb-4 flex-1 group-hover:text-emerald-400 transition-colors tracking-tight relative z-10">{doc.title}</h4>
+                                            
+                                            <div className="flex items-center text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] gap-6 mb-8 pt-6 border-t border-white/5 relative z-10">
+                                                <span className="flex items-center"><Calendar size={14} className="mr-2 text-emerald-500" /> {new Date(doc.date).toLocaleDateString()}</span>
+                                                <span className="flex items-center"><Hash size={14} className="mr-2 text-emerald-500" /> {doc.type.split('_')[0]}</span>
+                                            </div>
+
+                                            <Button
+                                                as="a"
+                                                href={doc.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="w-full bg-white/5 border-white/10 text-white hover:bg-emerald-600 hover:border-emerald-500 h-14 rounded-2xl transition-all font-black text-xs uppercase tracking-[0.25em] relative z-10"
+                                                icon={<Download size={18} />}
+                                            >
+                                                Descargar
+                                            </Button>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="col-span-full">
+                                        <EmptyState message="No hay documentos cargados." />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                     </div>
                 )}
             </div>
         </div>
     );
 };
+
+const EmptyState: React.FC<{ message: string }> = ({ message }) => (
+    <div className="bg-white/50 backdrop-blur-sm p-20 text-center rounded-3xl border border-dashed border-gray-300 flex flex-col items-center">
+        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6 text-gray-400">
+            <AlertCircle size={40} />
+        </div>
+        <p className="text-gray-500 font-bold text-lg">{message}</p>
+        <p className="text-gray-400 text-sm mt-1 max-w-xs mx-auto">
+            Cuando tengas una consulta o te asignen estudios, aparecerán automáticamente en esta sección.
+        </p>
+    </div>
+);
 
 export default MedicalHistory;

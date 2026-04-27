@@ -52,12 +52,13 @@ const patientUser = {
   role: 'patient' as const,
 };
 
-function renderVideoRoom(user = doctorUser, appointmentId = 'app1') {
+function renderVideoRoom(user: any = doctorUser, appointmentId = 'app1') {
   return render(
     <MemoryRouter initialEntries={[`/room/${appointmentId}`]}>
       <ToastProvider>
         <Routes>
           <Route path="/room/:appointmentId" element={<VideoRoom user={user} />} />
+          <Route path="/doctor/post-consultation/:appointmentId" element={<div data-testid="post-consultation-page">Post Consultation</div>} />
         </Routes>
       </ToastProvider>
     </MemoryRouter>
@@ -155,6 +156,10 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       );
       // Y después marcar como completado
       expect(appointmentRepository.completeAppointment).toHaveBeenCalledWith('app1');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('post-consultation-page')).toBeInTheDocument();
     });
   });
 });

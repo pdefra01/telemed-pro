@@ -9,6 +9,12 @@ export class AuthRepository {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: authEmail,
       password: password,
+      options: {
+        data: {
+          full_name: fullName,
+          role: role,
+        }
+      }
     });
 
     if (signUpError) {
@@ -19,22 +25,18 @@ export class AuthRepository {
     }
     if (!data.user) throw new Error("Error desconocido al crear el usuario.");
 
-    // Crear el perfil en la tabla pública
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: data.user.id,
-        role: role,
-        full_name: fullName,
-      });
-
-    if (profileError) throw profileError;
+    // Extraer DNI para devolver el objeto completo
+    let extractedDni = '';
+    if (authEmail.endsWith('@telemed-paciente.com')) {
+      extractedDni = authEmail.split('@')[0];
+    }
 
     return {
       id: data.user.id,
       name: fullName,
       email: authEmail,
       role: role,
+      dni: extractedDni,
     };
   }
 
@@ -91,8 +93,13 @@ export class AuthRepository {
       name: profileData.full_name,
       email: authEmail,
       role: profileData.role as Role,
-      avatarUrl: profileData.avatar_url
-    };
+      avatarUrl: profileData.avatar_url,
+      dni: profileData.dni,
+      planName: profileData.plan_name || 'Plan Global',
+      bloodType: profileData.blood_type,
+      credentialHash: profileData.credential_hash,
+      phone: profileData.phone,
+    } as any;
   }
 
   async logout(): Promise<void> {
