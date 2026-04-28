@@ -57,7 +57,7 @@ export class NotificationRepository {
    */
   subscribeToNotifications(userId: string, onNotification: (payload: Notification) => void) {
     return supabase
-      .channel(`user-notifications-${userId}`)
+      .channel(`user-notifications-${userId}-${Math.random().toString(36).substring(2, 9)}`)
       .on(
         'postgres_changes',
         {
