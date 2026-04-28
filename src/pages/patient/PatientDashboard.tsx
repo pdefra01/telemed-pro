@@ -295,7 +295,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
                                 <div className="flex-shrink-0 mb-6 sm:mb-0 sm:mr-8 relative">
                                     <div className="w-24 h-24 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-[0_10px_30px_rgba(16,185,129,0.3)] group-hover/card:scale-110 transition-transform duration-500">
-                                        <span className="text-4xl font-black leading-none tracking-tighter">{nextAppointment.date.split('-')[2]}</span>
+                                        <span className="text-4xl font-black leading-none tracking-tighter">{nextAppointment.date?.split('-')[2] || nextAppointment.date}</span>
                                         <span className="text-[10px] font-black uppercase tracking-widest mt-1">Hoy</span>
                                     </div>
                                     <div className="absolute -top-2 -right-2 w-6 h-6 bg-emerald-500 rounded-full border-4 border-slate-900 animate-pulse"></div>

@@ -85,7 +85,10 @@ export class AuthRepository {
         name: "Usuario Autogenerado",
         email: authEmail,
         role: role,
-      };
+        planStatus: 'active',
+        paymentStatus: 'paid',
+        currentPeriodQuotaUsed: 0,
+      } as any;
     }
 
     return {
@@ -99,6 +102,9 @@ export class AuthRepository {
       bloodType: profileData.blood_type,
       credentialHash: profileData.credential_hash,
       phone: profileData.phone,
+      planStatus: profileData.plan_status || 'active',
+      paymentStatus: profileData.payment_status || 'paid',
+      currentPeriodQuotaUsed: profileData.current_period_quota_used || 0,
     } as any;
   }
 

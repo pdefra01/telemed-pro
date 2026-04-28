@@ -50,7 +50,7 @@ export class MedicalRecordRepository {
 
     if (error) throw error;
 
-    return data.map((item: any) => ({
+    return (data || []).map((item: any) => ({
       id: item.id,
       appointmentId: item.appointment_id,
       patientId: item.patient_id,

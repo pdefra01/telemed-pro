@@ -170,7 +170,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                         <h3 className="text-2xl font-black text-white group-hover:text-emerald-400 transition-colors tracking-tight">{record.diagnosis}</h3>
                                                         <div className="flex items-center gap-3 mt-2">
                                                             <div className="w-7 h-7 bg-slate-800 rounded-lg flex items-center justify-center text-[10px] font-black text-slate-400 uppercase">
-                                                                {record.doctorName.charAt(0)}
+                                                                {record.doctorName?.charAt(0) || 'D'}
                                                             </div>
                                                             <p className="text-slate-400 font-bold text-sm">{record.doctorName}</p>
                                                         </div>
