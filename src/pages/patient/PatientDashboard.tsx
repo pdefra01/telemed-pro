@@ -234,7 +234,9 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">Multi-Node Robustness Active</span>
                             </div>
                         </div>
+                        <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-white mb-4 leading-none">
                             Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 bg-[length:200%_auto] animate-gradient-x">{(user.name || 'Paciente').split(' ')[0]}</span>
+                        </h1>
                         <p className="text-xl text-slate-400 font-medium max-w-xl leading-relaxed">
                             Tu ecosistema de salud está <span className="text-white font-bold">sincronizado</span>. Tenemos todo listo para tu próxima atención.
                         </p>
