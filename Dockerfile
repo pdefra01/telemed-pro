@@ -3,6 +3,17 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+# Build arguments for Vite variables
+# These must be provided during build time in Coolify (Build Pack)
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_LIVEKIT_URL
+
+# Set environment variables for the build process
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV VITE_LIVEKIT_URL=$VITE_LIVEKIT_URL
+
 # Copy package files and install dependencies
 COPY package*.json ./
 RUN npm install
@@ -11,7 +22,6 @@ RUN npm install
 COPY . .
 
 # Build the frontend
-# Note: VITE_ variables must be present at build time if they are used in the client
 RUN npm run build
 
 # Stage 2: Serve the app with Express
@@ -30,8 +40,8 @@ COPY server.js ./
 # Set environment to production
 ENV NODE_ENV=production
 
-# Expose the port the app runs on
-EXPOSE 3005
+# Expose the port the app runs on (Coolify default is often 3000)
+EXPOSE 3000
 
 # Start the server
 CMD ["node", "server.js"]

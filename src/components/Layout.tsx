@@ -110,7 +110,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
             <div className="flex items-center p-3 bg-teal-50 rounded-lg space-x-3">
               <img src={user.avatarUrl || `https://ui-avatars.com/api/?name=${user.name}`} alt="Profile" className="w-10 h-10 rounded-full object-cover" />
               <div className="overflow-hidden">
-                <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
+                <p className="text-sm font-semibold text-gray-800 truncate">{user.name || 'Paciente'}</p>
                 <p className="text-xs text-teal-600 capitalize">{user.role === 'patient' ? 'Afiliado' : user.role === 'doctor' ? 'Médico' : 'Admin'}</p>
               </div>
             </div>

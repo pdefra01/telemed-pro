@@ -210,7 +210,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <UserIcon size={20} className="text-slate-400" />
                         </div>
                         <div className="hidden md:block pr-2">
-                            <p className="text-xs font-black text-white leading-none mb-1">{user.name.split(' ')[0]}</p>
+                            <p className="text-xs font-black text-white leading-none mb-1">{(user.name || 'Paciente').split(' ')[0]}</p>
                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Mi Perfil</p>
                         </div>
                     </Link>
@@ -234,9 +234,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">Multi-Node Robustness Active</span>
                             </div>
                         </div>
-                        <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-white mb-4 leading-none">
-                            Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 bg-[length:200%_auto] animate-gradient-x">{user.name.split(' ')[0]}</span>
-                        </h1>
+                            Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 bg-[length:200%_auto] animate-gradient-x">{(user.name || 'Paciente').split(' ')[0]}</span>
                         <p className="text-xl text-slate-400 font-medium max-w-xl leading-relaxed">
                             Tu ecosistema de salud está <span className="text-white font-bold">sincronizado</span>. Tenemos todo listo para tu próxima atención.
                         </p>
@@ -374,7 +372,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                 <div className="flex justify-between items-start mb-3">
                                                     <div>
                                                         <p className="font-black text-white group-hover:text-emerald-400 transition-colors uppercase tracking-tight">{record.diagnosis}</p>
-                                                        <p className="text-xs text-slate-500 font-bold mt-1 tracking-wider uppercase">Dr. {record.doctorName.split(' ')[1]}</p>
+                                                        <p className="text-xs text-slate-500 font-bold mt-1 tracking-wider uppercase">Dr. {record.doctorName?.split(' ')[1] || record.doctorName}</p>
                                                     </div>
                                                     <span className="text-[9px] font-black text-slate-500 bg-white/5 px-3 py-1 rounded-full uppercase tracking-widest border border-white/5">{record.date}</span>
                                                 </div>
@@ -412,7 +410,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         {recentPrescriptions.map(prescription => (
                                             <div key={prescription.id} className="group flex justify-between items-center bg-white/5 hover:bg-white/10 border border-white/5 p-6 rounded-3xl transition-all duration-300">
                                                 <div className="flex-1">
-                                                    <p className="font-black text-white text-base tracking-tight">Dr. {prescription.doctorName.split(' ')[1]}</p>
+                                                    <p className="font-black text-white text-base tracking-tight">Dr. {prescription.doctorName?.split(' ')[1] || prescription.doctorName}</p>
                                                     <p className="text-[10px] text-slate-500 font-bold mb-3 uppercase tracking-widest">{prescription.medications.length} Medicamentos</p>
                                                     <span className="text-[9px] font-black text-teal-400 bg-teal-400/10 px-3 py-1 rounded-full uppercase tracking-widest border border-teal-400/10">{prescription.date}</span>
                                                 </div>

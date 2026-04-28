@@ -90,7 +90,7 @@ export class AuthRepository {
 
     return {
       id: data.user.id,
-      name: profileData.full_name,
+      name: profileData.full_name || 'Paciente',
       email: authEmail,
       role: profileData.role as Role,
       avatarUrl: profileData.avatar_url,
