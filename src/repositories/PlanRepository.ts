@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services/supabase';
 import { Plan } from '../types';
 
 export class PlanRepository {
@@ -55,3 +55,5 @@ export class PlanRepository {
     if (error) throw error;
   }
 }
+
+export const planRepository = new PlanRepository();

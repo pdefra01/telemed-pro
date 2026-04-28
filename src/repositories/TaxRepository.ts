@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services/supabase';
 import { TaxConfiguration } from '../types';
 
 export class TaxRepository {

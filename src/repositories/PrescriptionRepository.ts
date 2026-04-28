@@ -7,7 +7,9 @@ export class PrescriptionRepository {
     const expDate = new Date(today);
     expDate.setDate(today.getDate() + 30); // 30 days expiration
 
-    const digitalSignature = `SIG-${Math.random().toString(36).substr(2, 15).toUpperCase()}`;
+    // Cryptographic signature simulation for MVP (should be a real PKI signature in production)
+    const signaturePayload = `${recordData.appointmentId}-${recordData.patientId}-${Date.now()}`;
+    const digitalSignature = `SIG-${btoa(signaturePayload).substring(0, 16).toUpperCase()}`;
 
     const { data, error } = await supabase
       .from('prescriptions')

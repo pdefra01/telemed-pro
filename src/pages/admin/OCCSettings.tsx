@@ -24,6 +24,12 @@ const OCCSettings: React.FC = () => {
   const [taxes, setTaxes] = useState<TaxConfiguration[]>([]);
   const [delinquencyPolicy, setDelinquencyPolicy] = useState<'block' | 'grace_period'>('grace_period');
   const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newTax, setNewTax] = useState({
+    name: '',
+    rate: 0,
+    scope: 'local' as 'national' | 'local'
+  });
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -60,6 +66,22 @@ const OCCSettings: React.FC = () => {
       toast(`Política de morosidad: ${newPolicy === 'block' ? 'Bloqueo Inmediato' : 'Periodo de Gracia'}`, 'success');
     } catch (error) {
       toast("Error al actualizar política", 'error');
+    }
+  };
+
+  const handleAddTax = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const created = await taxRepository.create({
+        ...newTax,
+        isActive: true
+      });
+      setTaxes([...taxes, created]);
+      setIsModalOpen(false);
+      setNewTax({ name: '', rate: 0, scope: 'provincial' });
+      toast("Impuesto creado exitosamente", 'success');
+    } catch (error) {
+      toast("Error al crear impuesto", 'error');
     }
   };
 
@@ -141,7 +163,10 @@ const OCCSettings: React.FC = () => {
               <Percent size={20} className="mr-2 text-amber-500" />
               Impuestos y Alícuotas
             </h3>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-colors">
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-colors"
+            >
               <Plus size={14} />
               <span>Añadir</span>
             </button>
@@ -204,6 +229,68 @@ const OCCSettings: React.FC = () => {
           </GlassCard>
         </div>
       </div>
+
+      {/* Add Tax Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
+          <GlassCard className="relative w-full max-w-md p-8 animate-in zoom-in duration-300">
+            <h3 className="text-2xl font-bold text-white mb-6">Nuevo Impuesto</h3>
+            <form onSubmit={handleAddTax} className="space-y-6">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500 mb-2">Nombre del Impuesto</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Ej: IVA, IIBB, Ganancias"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500/50"
+                  value={newTax.name}
+                  onChange={(e) => setNewTax({...newTax, name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500 mb-2">Alícuota (%)</label>
+                  <input 
+                    type="number" 
+                    required
+                    step="0.01"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500/50"
+                    value={newTax.rate}
+                    onChange={(e) => setNewTax({...newTax, rate: parseFloat(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500 mb-2">Alcance</label>
+                  <select 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500/50 appearance-none"
+                    value={newTax.scope}
+                    onChange={(e) => setNewTax({...newTax, scope: e.target.value as any})}
+                  >
+                    <option value="national" className="bg-[#0f172a]">Nacional</option>
+                    <option value="local" className="bg-[#0f172a]">Local</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex space-x-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 px-6 py-3 bg-white/5 text-slate-400 rounded-xl font-bold hover:bg-white/10 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                >
+                  Crear Impuesto
+                </button>
+              </div>
+            </form>
+          </GlassCard>
+        </div>
+      )}
     </div>
   );
 };

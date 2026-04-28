@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  telemed-pro:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+      - VITE_LIVEKIT_URL=${VITE_LIVEKIT_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: always

@@ -7,7 +7,7 @@ import {
 import { 
   TrendingUp, Users, DollarSign, AlertTriangle, 
   Building2, ArrowUpRight, Activity, ShieldCheck,
-  CreditCard, Clock
+  CreditCard, Clock, Stethoscope
 } from 'lucide-react';
 import { dashboardRepository, AdminMetrics, WeeklyStat } from '../../repositories/DashboardRepository';
 import { doctorRepository } from '../../repositories/DoctorRepository';
@@ -106,7 +106,7 @@ const AdminDashboard: React.FC = () => {
       </div>
 
       {/* Primary Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Link to="/affiliates" className="block transform transition-transform hover:scale-[1.02]">
           <MetricCard
             icon={<Users size={20} />}
@@ -114,6 +114,15 @@ const AdminDashboard: React.FC = () => {
             value={isLoading ? "---" : metrics.totalAffiliates.toLocaleString()}
             trend="+12%"
             color="blue"
+          />
+        </Link>
+        <Link to="/doctors" className="block transform transition-transform hover:scale-[1.02]">
+          <MetricCard
+            icon={<Stethoscope size={20} />}
+            label="Médicos"
+            value={isLoading ? "---" : metrics.totalDoctors}
+            trend="+2"
+            color="emerald"
           />
         </Link>
         <Link to="/agreements" className="block transform transition-transform hover:scale-[1.02]">
@@ -239,7 +248,7 @@ const AdminDashboard: React.FC = () => {
               </div>
               <div className="flex items-start space-x-3 text-xs">
                 <div className="w-2 h-2 mt-1 rounded-full bg-amber-500 flex-shrink-0"></div>
-                <p className="text-slate-300 italic">Tasa de ausentismo médico > 15% en Clínica Médica.</p>
+                <p className="text-slate-300 italic">Tasa de ausentismo médico &gt; 15% en Clínica Médica.</p>
               </div>
             </div>
           </GlassCard>

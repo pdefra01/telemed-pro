@@ -42,9 +42,6 @@ const App: React.FC = () => {
     localStorage.removeItem('telemed_user');
   };
 
-  return (
-    <Router>
-      <ToastProvider>
   const MainContent = (
     <Routes>
       <Route

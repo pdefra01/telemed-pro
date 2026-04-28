@@ -17,7 +17,7 @@ export const NotificationBell: React.FC<Props> = ({ userId }) => {
     // Initial fetch
     const fetchNotifications = async () => {
       try {
-        const data = await notificationRepository.getMyNotifications();
+        const data = await notificationRepository.getMyNotifications(userId);
         setNotifications(data);
       } catch (err) {
         console.error('Error fetching notifications:', err);

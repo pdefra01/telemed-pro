@@ -15,10 +15,11 @@ export class NotificationRepository {
   /**
    * Obtiene las notificaciones del usuario actual
    */
-  async getMyNotifications(): Promise<Notification[]> {
+  async getMyNotifications(userId: string): Promise<Notification[]> {
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(20);
 

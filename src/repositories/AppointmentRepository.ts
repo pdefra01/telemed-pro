@@ -88,6 +88,19 @@ export class AppointmentRepository {
     specialty: string;
     status: 'pending' | 'confirmed';
   }): Promise<any> {
+    // 1. Verificar solapamiento (Overlap check)
+    const { data: overlaps, error: overlapError } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('doctor_id', data.doctor_id)
+      .eq('scheduled_at', data.scheduled_at)
+      .neq('status', 'cancelled');
+
+    if (overlapError) throw overlapError;
+    if (overlaps && overlaps.length > 0) {
+      throw new Error("El profesional ya tiene un turno asignado para este horario. Por favor, seleccioná otro momento.");
+    }
+
     const { data: insertedData, error } = await supabase
       .from('appointments')
       .insert({

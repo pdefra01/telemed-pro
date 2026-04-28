@@ -32,15 +32,20 @@ ADD COLUMN IF NOT EXISTS notes TEXT;
 3.  **VideoRoom Notes:** A new panel or section in the `VideoRoom` page (only visible to the Doctor) must allow adding/editing text for `medical notes`.
 4.  **Auto-save/Persist:** Changes to the notes should be persisted (e.g., on debounced change or on explicit save button click, but automatic persistence is preferred for UX).
 5.  **Completion Logic:** A "Finalizar Consulta" (Finish Consultation) button must be present in the `VideoRoom` or `DoctorDashboard`.
-6.  **Completion Action:** Clicking "Finalizar Consulta" must:
+6.  **Completion Action:** Clicking "Finalizar Consulta" must trigger a series of atomic actions to close the clinical cycle with a high-fidelity feedback experience:
     *   Set the appointment status to `'completed'`.
     *   Ensure any final notes are saved.
     *   Generate a persistent notification for the patient in the `notifications` table (Title: "Consulta Finalizada", Message: "Tu médico ha finalizado la consulta...").
-    *   (Optionally) Redirect the doctor back to the dashboard or a summary page.
+    *   **Premium Overlay:** The UI MUST display a "Success Overlay" with progress indicators (e.g., "Generando PDF", "Enviando Notificación").
+    *   **Success State:** A final "Success State" MUST be displayed after the operation completes, offering a "Return to Dashboard" action.
     *   Prevent the appointment from being rejoined or further edited by either party.
 7.  **Service/Repository Implementation:** Business logic must be implemented in services/repositories (e.g., `AppointmentRepository.ts`) and tested using Vitest (TDD). UI should focus on state management and integration.
 8.  **Multitasking Dashboard (Doctor):** The doctor must have a "Live Queue" visible during calls to monitor other incoming or waiting patients without leaving the current session.
 9.  **System Health Monitoring:** The UI must display real-time network/latency indicators for both the doctor and the patient to ensure a robust experience.
+10. **Premium Medication Input Experience:** The medication loading section MUST provide a high-end, visual experience to reduce cognitive load and errors.
+    *   **Card-based UI:** Each medication MUST be rendered in its own glass-styled card.
+    *   **Auto-suggestions:** The system SHOULD offer local suggestions for common medication names as the doctor types.
+    *   **Field Validation:** The UI MUST provide real-time visual feedback if a medication is missing its name or posology.
 
 ## Scenarios (TDD Guidance)
 
@@ -69,6 +74,19 @@ These scenarios define the test cases that must pass *before* logic changes are 
     2.  A new record MUST be created in the `notifications` table for the patient.
     3.  Any recent notes must be persisted.
     4.  A subsequent request to join the room for `app1` should fail or be blocked.
+
+### Scenario 5: Doctor adds a medication with visual feedback
+- **Given** the "Receta Electrónica" section is active.
+- **WHEN** the doctor types "Amoxi" in the medication name.
+- **THEN** the system SHOULD display a dropdown with suggestions (e.g., "Amoxicilina 500mg").
+- **AND WHEN** the medication is added, it MUST appear as a distinct card with an "Emerald" or "Blue" glow.
+
+### Scenario 6: Doctor completes consultation with progress feedback
+- **GIVEN** the doctor is in the `PostConsultation` page with valid data.
+- **WHEN** the doctor clicks "Finalizar Consulta".
+- **THEN** the system MUST display a backdrop overlay with a progress animation.
+- **AND WHEN** the backend process completes, the overlay MUST transition to a "Success Message" with a checkmark animation.
+- **AND** the appointments record MUST be updated and notification created as per previous specs.
 
 ## Implementation Tasks
 

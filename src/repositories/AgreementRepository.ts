@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services/supabase';
 import { Agreement } from '../types';
 
 export class AgreementRepository {
@@ -55,3 +55,5 @@ export class AgreementRepository {
     if (error) throw error;
   }
 }
+
+export const agreementRepository = new AgreementRepository();

@@ -3,6 +3,13 @@ import { MedicalRecord } from '../types';
 
 export class MedicalRecordRepository {
   async createMedicalRecord(recordData: Omit<MedicalRecord, 'id' | 'date'>): Promise<MedicalRecord> {
+    if (!recordData.diagnosis || recordData.diagnosis.trim().length < 3) {
+      throw new Error("El diagnóstico es obligatorio y debe ser descriptivo.");
+    }
+    if (!recordData.notes || recordData.notes.trim().length < 5) {
+      throw new Error("Las notas de evolución son obligatorias para la historia clínica.");
+    }
+
     const { data, error } = await supabase
       .from('medical_records')
       .insert([{

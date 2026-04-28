@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '../services/supabase';
 import { Invoice } from '../types';
 
 export class InvoiceRepository {
@@ -12,12 +12,23 @@ export class InvoiceRepository {
     return data || [];
   }
 
+  async getById(id: string): Promise<Invoice | null> {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
   async getByEntity(entityType: 'affiliate' | 'agreement', entityId: string): Promise<Invoice[]> {
     const { data, error } = await supabase
       .from('invoices')
       .select('*')
-      .eq('entityType', entityType)
-      .eq('entityId', entityId)
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
       .order('createdAt', { ascending: false });
 
     if (error) throw error;
@@ -34,6 +45,27 @@ export class InvoiceRepository {
 
     if (error) throw error;
     return data;
+  }
+
+  async create(invoice: Partial<Invoice>): Promise<Invoice> {
+    const { data, error } = await supabase
+      .from('invoices')
+      .insert([invoice])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async createBulk(invoices: Partial<Invoice>[]): Promise<Invoice[]> {
+    const { data, error } = await supabase
+      .from('invoices')
+      .insert(invoices)
+      .select();
+
+    if (error) throw error;
+    return data || [];
   }
 }
 

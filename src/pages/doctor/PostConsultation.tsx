@@ -71,9 +71,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const [addPrescription, setAddPrescription] = useState(false);
-  const [medications, setMedications] = useState<{ name: string; instructions: string }[]>([
-    { name: '', instructions: '' }
-  ]);
+  const [medications, setMedications] = useState<{ name: string; instructions: string }[]>([]);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -535,7 +533,13 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
               <div className={`bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl overflow-hidden shadow-2xl transition-all ${addPrescription ? 'border-blue-500/30 ring-1 ring-blue-500/20' : ''}`}>
                 <div 
                   className="p-8 flex items-center justify-between cursor-pointer group"
-                  onClick={() => setAddPrescription(!addPrescription)}
+                  onClick={() => {
+                    const nextState = !addPrescription;
+                    setAddPrescription(nextState);
+                    if (nextState && medications.length === 0) {
+                      setMedications([{ name: '', instructions: '' }]);
+                    }
+                  }}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2.5 rounded-xl transition-all ${addPrescription ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 group-hover:text-blue-400'}`}>
@@ -568,18 +572,24 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                       ))}
 
                       {medications.length === 0 && (
-                        <div className="py-12 text-center border-2 border-dashed border-slate-800 rounded-3xl animate-pulse">
-                          <Pill className="w-10 h-10 text-slate-800 mx-auto mb-3" />
-                          <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">No hay medicamentos en la receta</p>
+                        <div className="py-16 text-center border-2 border-dashed border-slate-800/50 rounded-[2rem] bg-slate-950/20 group/empty hover:border-blue-500/20 transition-all duration-500">
+                          <div className="relative w-20 h-20 mx-auto mb-6">
+                            <div className="absolute inset-0 bg-blue-500/10 blur-2xl rounded-full animate-pulse"></div>
+                            <div className="relative bg-slate-900 border border-white/5 w-full h-full rounded-2xl flex items-center justify-center text-slate-700 group-hover/empty:text-blue-400 transition-colors">
+                              <Pill className="w-10 h-10" />
+                            </div>
+                          </div>
+                          <h4 className="text-slate-400 font-bold mb-1">Sin medicamentos</h4>
+                          <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Agregue indicaciones para la receta</p>
                         </div>
                       )}
 
                       <button 
                         onClick={handleAddMedication}
-                        className="w-full py-4 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-2 font-bold text-sm"
+                        className="w-full py-5 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"
                       >
                         <Plus size={18} />
-                        Agregar {medications.length === 0 ? 'primer medicamento' : 'otro medicamento'}
+                        {medications.length === 0 ? 'Iniciar Receta' : 'Agregar Medicamento'}
                       </button>
                     </div>
                   </div>
@@ -667,17 +677,20 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                   icon={<Save className="w-5 h-5" />}
                   className={`h-16 text-lg font-bold rounded-2xl shadow-xl transition-all active:scale-95 ${
                     diagnosis.trim() 
-                    ? 'shadow-teal-500/10' 
-                    : 'shadow-none'
-                  }`}
+                    ? 'shadow-teal-500/20 bg-teal-500 hover:bg-teal-400 text-slate-950' 
+                    : 'shadow-none bg-slate-800/50 text-slate-500 grayscale opacity-70'
+                  } ${isSubmitted && !diagnosis.trim() ? 'animate-shake border-red-500/50' : ''}`}
                 >
                   Finalizar Consulta
                 </Button>
                 
-                {!diagnosis.trim() && (
-                  <p className="text-[10px] text-center text-red-400 font-bold uppercase tracking-widest px-4 animate-pulse">
-                    Falta el diagnóstico para cerrar
-                  </p>
+                {isSubmitted && !diagnosis.trim() && (
+                  <div className="flex items-center justify-center gap-2 py-2 px-4 bg-red-500/10 border border-red-500/20 rounded-xl animate-in slide-in-from-top-2 duration-300">
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                    <p className="text-[10px] text-red-400 font-black uppercase tracking-widest">
+                      Diagnóstico Requerido
+                    </p>
+                  </div>
                 )}
                 
                 <p className="text-[10px] text-center text-slate-600 font-medium px-4 leading-relaxed">

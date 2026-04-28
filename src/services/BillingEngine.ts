@@ -54,6 +54,13 @@ export class BillingEngine {
       createdAt: new Date().toISOString()
     };
   }
+
+  /**
+   * Calcula el total de un convenio basado en sus afiliados
+   */
+  calculateAgreementTotal(affiliateCount: number, basePlanCost: number): number {
+    return Number((affiliateCount * basePlanCost).toFixed(2));
+  }
 }
 
 export const billingEngine = new BillingEngine();

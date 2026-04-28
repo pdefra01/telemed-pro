@@ -3,22 +3,29 @@ import cors from 'cors';
 import { AccessToken } from 'livekit-server-sdk';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { dirname, resolve, join } from 'path';
 
-// Load env variables
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, '.env.local') });
+
+// Load env variables only if not in production
+if (process.env.NODE_ENV !== 'production') {
+  config({ path: resolve(__dirname, '.env.local') });
+}
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from Vite build
+const distPath = join(__dirname, 'dist');
+app.use(express.static(distPath));
+
 const apiKey = process.env.LIVEKIT_API_KEY?.trim();
 const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
 
 if (!apiKey || !apiSecret) {
-  console.error("FATAL: Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in .env.local");
-  process.exit(1);
+  console.error("FATAL: Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment");
+  // Don't exit if we just want to serve the frontend, but log the error
 }
 
 app.post('/api/livekit-token', async (req, res) => {
@@ -48,7 +55,15 @@ app.post('/api/livekit-token', async (req, res) => {
   }
 });
 
-const PORT = 3005;
+// Catch-all route to serve index.html for SPA routing
+app.get('*', (req, res) => {
+  res.sendFile(join(distPath, 'index.html'));
+});
+
+const PORT = process.env.PORT || 3005;
 app.listen(PORT, () => {
-  console.log(`✅ Servidor local de tokens corriendo en http://localhost:${PORT}`);
+  console.log(`✅ Servidor corriendo en el puerto ${PORT}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.log(`📁 Sirviendo archivos estáticos desde: ${distPath}`);
+  }
 });

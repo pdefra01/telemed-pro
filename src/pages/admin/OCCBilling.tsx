@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { invoiceRepository } from '../../repositories/InvoiceRepository';
 import { accountingService } from '../../services/AccountingService';
+import { billingService } from '../../services/BillingService';
 import { Invoice } from '../../types';
 
 const GlassCard: React.FC<{
@@ -21,18 +22,21 @@ const OCCBilling: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+
+  const loadInvoices = async () => {
+    try {
+      setIsLoading(true);
+      const data = await invoiceRepository.getAll();
+      setInvoices(data);
+    } catch (error) {
+      console.error("Error loading invoices", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadInvoices = async () => {
-      try {
-        const data = await invoiceRepository.getAll();
-        setInvoices(data);
-      } catch (error) {
-        console.error("Error loading invoices", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     loadInvoices();
   }, []);
 
@@ -40,6 +44,34 @@ const OCCBilling: React.FC = () => {
     const csvContent = accountingService.generateCSVExport(invoices);
     const filename = `telemed-billing-export-${new Date().toISOString().split('T')[0]}.csv`;
     accountingService.downloadCSV(csvContent, filename);
+  };
+
+  const handleProcessCycle = async () => {
+    if (!window.confirm('¿Estás seguro de iniciar el ciclo de facturación mensual? Se generarán comprobantes para todos los convenios y afiliados directos.')) return;
+    
+    try {
+      setIsLoading(true);
+      const period = new Date().toISOString().substring(0, 7); // Formato YYYY-MM
+      const result = await billingService.runMonthlyBillingCycle(period);
+      alert(`Ciclo completado con éxito.\nConvenios: ${result.processedAgreements}\nDirectos: ${result.processedIndividuals}\nTotal: $${result.totalAmount.toLocaleString()}`);
+      await loadInvoices();
+    } catch (error) {
+      console.error("Error en ciclo de facturación", error);
+      alert("Error al procesar el ciclo.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReconcile = async (invoiceId: string) => {
+    try {
+      await billingService.reconcileInvoice(invoiceId);
+      setSelectedInvoice(null);
+      await loadInvoices();
+    } catch (error) {
+      console.error("Error al conciliar", error);
+      alert("Error al conciliar la factura.");
+    }
   };
 
   const filteredInvoices = invoices.filter(inv => 
@@ -57,13 +89,23 @@ const OCCBilling: React.FC = () => {
             OCC <span className="text-slate-500 font-light italic">Billing</span> Center
           </h1>
         </div>
-        <button 
-          onClick={handleExport}
-          className="flex items-center space-x-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold text-sm hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-        >
-          <Download size={18} />
-          <span>Exportar para Estudio</span>
-        </button>
+        <div className="flex flex-col md:flex-row gap-4">
+          <button 
+            onClick={handleProcessCycle}
+            disabled={isLoading}
+            className="flex items-center space-x-2 px-6 py-3 bg-white/5 border border-white/10 text-white rounded-2xl font-bold text-sm hover:bg-white/10 transition-all"
+          >
+            <Calendar size={18} />
+            <span>Procesar Ciclo Mensual</span>
+          </button>
+          <button 
+            onClick={handleExport}
+            className="flex items-center space-x-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold text-sm hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+          >
+            <Download size={18} />
+            <span>Exportar para Estudio</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -173,7 +215,13 @@ const OCCBilling: React.FC = () => {
                       <button className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors">
                         <Download size={14} />
                       </button>
-                      <button className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedInvoice(inv);
+                        }}
+                        className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors"
+                      >
                         <ExternalLink size={14} />
                       </button>
                     </div>
@@ -184,6 +232,83 @@ const OCCBilling: React.FC = () => {
           </table>
         </div>
       </GlassCard>
+
+      {/* Invoice Detail Modal */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedInvoice(null)}></div>
+          <GlassCard className="relative w-full max-w-lg p-8 animate-in zoom-in duration-300">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <p className="text-emerald-500 font-bold text-[10px] uppercase tracking-widest mb-1">Detalle de Comprobante</p>
+                <h3 className="text-2xl font-black text-white tracking-tighter">#{selectedInvoice.id.substring(0, 12).toUpperCase()}</h3>
+              </div>
+              <button 
+                onClick={() => setSelectedInvoice(null)}
+                className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors"
+              >
+                <AlertCircle size={20} className="rotate-45" />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex justify-between py-2 border-b border-white/5">
+                <span className="text-slate-500 text-xs font-bold uppercase">Entidad</span>
+                <span className="text-white text-xs font-black uppercase">{selectedInvoice.entityId}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-white/5">
+                <span className="text-slate-500 text-xs font-bold uppercase">Periodo</span>
+                <span className="text-white text-xs font-black">{selectedInvoice.period}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-white/5">
+                <span className="text-slate-500 text-xs font-bold uppercase">Neto</span>
+                <span className="text-white text-xs font-black">${selectedInvoice.netAmount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-white/5">
+                <span className="text-slate-500 text-xs font-bold uppercase">IVA (21%)</span>
+                <span className="text-white text-xs font-black">${selectedInvoice.taxAmount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between py-4">
+                <span className="text-slate-400 text-sm font-bold uppercase">Total a Pagar</span>
+                <span className="text-emerald-400 text-xl font-black">${selectedInvoice.totalAmount.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button className="flex items-center justify-center space-x-2 py-3 bg-white/5 border border-white/10 text-white rounded-xl font-bold text-xs hover:bg-white/10 transition-all">
+                <Download size={14} />
+                <span>Descargar PDF</span>
+              </button>
+              {selectedInvoice.status !== 'paid' ? (
+                <button 
+                  onClick={() => handleReconcile(selectedInvoice.id)}
+                  className="flex items-center justify-center space-x-2 py-3 bg-emerald-500 text-white rounded-xl font-bold text-xs hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>Conciliar Pago</span>
+                </button>
+              ) : (
+                <div className="flex items-center justify-center space-x-2 py-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl font-bold text-xs">
+                  <CheckCircle2 size={14} />
+                  <span>Pago Conciliado</span>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {/* Global Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-500">
+          <div className="relative">
+            <div className="w-24 h-24 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin"></div>
+            <DollarSign className="absolute inset-0 m-auto text-emerald-500 animate-pulse" size={32} />
+          </div>
+          <h3 className="text-xl font-black text-white mt-8 tracking-tighter uppercase">Procesando Motor Financiero</h3>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2 animate-pulse">Sincronizando con la red de pagos...</p>
+        </div>
+      )}
     </div>
   );
 };

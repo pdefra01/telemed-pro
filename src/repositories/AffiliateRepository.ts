@@ -22,6 +22,36 @@ export class AffiliateRepository {
   }
 
   /**
+   * Obtiene afiliados vinculados a un convenio
+   */
+  async getByAgreement(agreementId: string): Promise<Patient[]> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'patient')
+      .eq('agreement_id', agreementId)
+      .eq('is_active', true);
+
+    if (error) throw error;
+    return (data || []).map(row => this.mapProfileToPatient(row));
+  }
+
+  /**
+   * Obtiene afiliados directos (sin convenio)
+   */
+  async getDirectAffiliates(): Promise<Patient[]> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'patient')
+      .is('agreement_id', null)
+      .eq('is_active', true);
+
+    if (error) throw error;
+    return (data || []).map(row => this.mapProfileToPatient(row));
+  }
+
+  /**
    * Crea un nuevo afiliado
    */
   async createAffiliate(data: Partial<Patient>): Promise<Patient> {
@@ -112,6 +142,22 @@ export class AffiliateRepository {
   }
 
   /**
+   * Actualiza el estado del plan para todos los afiliados de un convenio
+   */
+  async updateStatusByAgreement(agreementId: string, status: Patient['planStatus']): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ plan_status: status })
+      .eq('agreement_id', agreementId)
+      .eq('role', 'patient');
+
+    if (error) {
+      console.error(`Error actualizando masivamente afiliados del convenio ${agreementId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Desactiva a un afiliado (Soft Delete)
    */
   async deactivateAffiliate(id: string): Promise<void> {
@@ -137,7 +183,8 @@ export class AffiliateRepository {
       planStatus: row.plan_status || 'active',
       avatarUrl: row.avatar_url,
       address: row.address,
-      phone: row.phone
+      phone: row.phone,
+      agreementId: row.agreement_id
     };
   }
 }
