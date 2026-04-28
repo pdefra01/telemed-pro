@@ -16,16 +16,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check endpoint for Coolify
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
 // Serve static files from Vite build
-const distPath = join(__dirname, 'dist');
+const distPath = resolve(__dirname, 'dist');
 app.use(express.static(distPath));
 
 const apiKey = process.env.LIVEKIT_API_KEY?.trim();
 const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
 
 if (!apiKey || !apiSecret) {
-  console.error("FATAL: Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment");
-  // Don't exit if we just want to serve the frontend, but log the error
+  console.warn("⚠️ WARNING: Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment. Video tokens will fail.");
 }
 
 app.post('/api/livekit-token', async (req, res) => {
@@ -34,6 +38,10 @@ app.post('/api/livekit-token', async (req, res) => {
 
     if (!appointmentId) {
       return res.status(400).json({ error: 'appointmentId is required' });
+    }
+
+    if (!apiKey || !apiSecret) {
+      return res.status(500).json({ error: 'LiveKit server configuration is incomplete' });
     }
 
     const participantName = `User-${Math.floor(Math.random() * 1000)}`;
@@ -56,13 +64,14 @@ app.post('/api/livekit-token', async (req, res) => {
 });
 
 // Catch-all route to serve index.html for SPA routing
-app.get('*', (req, res) => {
+app.get('(.*)', (req, res) => {
   res.sendFile(join(distPath, 'index.html'));
 });
 
-const PORT = process.env.PORT || 3005;
-app.listen(PORT, () => {
-  console.log(`✅ Servidor corriendo en el puerto ${PORT}`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 TeleMed Pro corriendo en puerto ${PORT}`);
+  console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
   if (process.env.NODE_ENV === 'production') {
     console.log(`📁 Sirviendo archivos estáticos desde: ${distPath}`);
   }
