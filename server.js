@@ -63,8 +63,9 @@ app.post('/api/livekit-token', async (req, res) => {
   }
 });
 
-// Catch-all route to serve index.html for SPA routing
-app.get('(.*)', (req, res) => {
+// Catch-all middleware to serve index.html for SPA routing
+// This is the most compatible way for Express 5
+app.use((req, res) => {
   res.sendFile(join(distPath, 'index.html'));
 });
 
