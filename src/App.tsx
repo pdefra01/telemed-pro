@@ -24,11 +24,69 @@ import AdminLayout from './components/admin/AdminLayout';
 import { ToastProvider } from './context/ToastContext';
 
 import { authRepository } from './repositories/AuthRepository';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+
+// Error Boundary simple para capturar errores de renderizado
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white font-sans">
+          <div className="max-w-md w-full bg-slate-800 rounded-3xl p-8 border border-slate-700 shadow-2xl">
+            <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center text-red-500 mb-6">
+              <AlertCircle size={32} />
+            </div>
+            <h1 className="text-2xl font-black mb-2 tracking-tight">Oops! Algo salió mal</h1>
+            <p className="text-slate-400 mb-6 leading-relaxed">
+              La aplicación encontró un error inesperado. No te preocupes, tus datos están seguros.
+            </p>
+            <div className="bg-slate-900/50 rounded-xl p-4 mb-8 font-mono text-xs text-red-400 overflow-auto max-h-32 border border-red-500/20">
+              {this.state.error?.toString()}
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+            >
+              <RefreshCw size={20} />
+              Reintentar ahora
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('telemed_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('telemed_user');
+      if (!saved) return null;
+      // Validar que sea un JSON válido y que tenga estructura de usuario
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object' && parsed.role) {
+        return parsed;
+      }
+      return null;
+    } catch (e) {
+      console.error("Error al cargar usuario de localStorage:", e);
+      localStorage.removeItem('telemed_user');
+      return null;
+    }
   });
 
   const handleLogin = (loggedInUser: User) => {
@@ -165,20 +223,22 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <ToastProvider>
-        {!user || user.role !== 'admin' ? (
-          <Layout user={user} onLogout={handleLogout}>
-            {MainContent}
-          </Layout>
-        ) : (
-          <AdminLayout user={user} onLogout={handleLogout}>
-            {MainContent}
-          </AdminLayout>
-        )}
+      <ErrorBoundary>
+        <ToastProvider>
+          {!user || user.role !== 'admin' ? (
+            <Layout user={user} onLogout={handleLogout}>
+              {MainContent}
+            </Layout>
+          ) : (
+            <AdminLayout user={user} onLogout={handleLogout}>
+              {MainContent}
+            </AdminLayout>
+          )}
 
-        {/* AI Assistant is available for authenticated users */}
-        {user && <AIChatBot />}
-      </ToastProvider>
+          {/* AI Assistant is available for authenticated users */}
+          {user && <AIChatBot />}
+        </ToastProvider>
+      </ErrorBoundary>
     </Router>
   );
 };
