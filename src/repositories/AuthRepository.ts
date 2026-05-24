@@ -27,7 +27,7 @@ export class AuthRepository {
 
     // Extraer DNI para devolver el objeto completo
     let extractedDni = '';
-    if (authEmail.endsWith('@telemed-paciente.com')) {
+    if (authEmail.endsWith('@medinex-paciente.com')) {
       extractedDni = authEmail.split('@')[0];
     }
 

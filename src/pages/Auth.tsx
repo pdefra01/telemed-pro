@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button';
 import { dniSchema, phoneSchema } from '../utils/validation';
 import { z } from 'zod';
 import { authRepository } from '../repositories/AuthRepository';
+import logoMedinex from '../logo_medinex.jpeg';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -65,10 +66,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       let authEmail = inputValue;
       if (role === 'patient') {
         if (method === 'dni') {
-          authEmail = `${inputValue}@telemed-paciente.com`;
+          authEmail = `${inputValue}@medinex-paciente.com`;
         } else if (method === 'phone') {
           const cleanPhone = inputValue.replace(/\D/g, ''); // Quita espacios/guiones
-          authEmail = `${cleanPhone}@telemed-paciente.com`;
+          authEmail = `${cleanPhone}@medinex-paciente.com`;
         }
       }
 
@@ -124,29 +125,31 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             className="absolute inset-0 w-full h-full object-cover opacity-15 transition-opacity duration-500"
           />
 
-          <div className="relative z-10">
-            <div className="flex items-center space-x-2 mb-6">
-              <div className="bg-teal-600 p-2 rounded-lg text-white">
-                <Stethoscope size={24} />
+          <div className="relative z-10 text-center flex flex-col items-center">
+            <div className="flex flex-col items-center space-y-4 mb-8">
+              <div className="w-48 h-48 bg-white rounded-[2.5rem] shadow-xl border border-gray-100 flex items-center justify-center p-4 hover:scale-105 transition-transform duration-500 select-none">
+                <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
               </div>
-              <h1 className="text-2xl font-bold text-teal-800">TeleMed Pro</h1>
+              <h1 className="text-4xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                MED<span className="text-[#0dbda9]">IN</span>EX
+              </h1>
             </div>
-            <h2 className="text-3xl font-bold text-gray-800 mb-4 leading-tight">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 leading-tight">
               {role === 'patient' && "Tu salud, en tus manos."}
               {role === 'doctor' && "Optimiza tu práctica médica."}
               {role === 'admin' && "Gestión eficiente y segura."}
             </h2>
-            <p className="text-gray-600 text-lg">
+            <p className="text-gray-600 text-sm max-w-sm">
               {role === 'patient' && "Atención médica de calidad desde la comodidad de tu hogar."}
               {role === 'doctor' && "Historia clínica digital, videoconsultas y gestión de turnos simplificada."}
               {role === 'admin' && "Control total de afiliados, prestadores y métricas de rendimiento."}
             </p>
           </div>
 
-          <div className="relative z-10 space-y-4">
-            <div className="flex items-center space-x-3 text-teal-700">
+          <div className="relative z-10 space-y-4 flex justify-center w-full">
+            <div className="flex items-center space-x-3 text-teal-700 justify-center">
               <ShieldCheck className="w-6 h-6" />
-              <span className="font-medium">Plataforma Segura (Supabase)</span>
+              <span className="font-medium text-sm">Plataforma Segura (Supabase)</span>
             </div>
           </div>
         </div>

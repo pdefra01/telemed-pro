@@ -8,52 +8,84 @@ See `_shared/skill-resolver.md` for the full resolution protocol.
 
 | Trigger | Skill | Path |
 |---------|-------|------|
-| When creating a pull request, opening a PR, or preparing changes for review. | branch-pr | ~/.gemini/antigravity/skills/branch-pr/SKILL.md |
-| When writing Go tests, using teatest, or adding test coverage. | go-testing | ~/.gemini/antigravity/skills/go-testing/SKILL.md |
-| When creating a GitHub issue, reporting a bug, or requesting a feature. | issue-creation | ~/.gemini/antigravity/skills/issue-creation/SKILL.md |
-| When user says "judgment day", "judgment-day", "review adversarial", "dual review", "doble review", "juzgar", "que lo juzguen". | judgment-day | ~/.gemini/antigravity/skills/judgment-day/SKILL.md |
-| When user asks to create a new skill, add agent instructions, or document patterns for AI. | skill-creator | ~/.gemini/antigravity/skills/skill-creator/SKILL.md |
+| When creating a pull request, opening a PR, or preparing changes for review. | branch-pr | C:\Users\pdefr\.gemini\antigravity\skills\branch-pr\SKILL.md |
+| Trigger: PRs over 400 lines, stacked PRs, review slices. Split oversized changes into chained PRs that protect review focus. | chained-pr | C:\Users\pdefr\.gemini\antigravity\skills\chained-pr\SKILL.md |
+| Trigger: writing guides, READMEs, RFCs, onboarding, architecture, or review-facing docs. | cognitive-doc-design | C:\Users\pdefr\.gemini\antigravity\skills\cognitive-doc-design\SKILL.md |
+| Trigger: PR feedback, issue replies, reviews, Slack messages, or GitHub comments. | comment-writer | C:\Users\pdefr\.gemini\antigravity\skills\comment-writer\SKILL.md |
+| Trigger: Go tests, go test coverage, Bubbletea teatest, golden files. Apply focused Go testing patterns. | go-testing | C:\Users\pdefr\.gemini\antigravity\skills\go-testing\SKILL.md |
+| Trigger: creating GitHub issues, bug reports, or feature requests. | issue-creation | C:\Users\pdefr\.gemini\antigravity\skills\issue-creation\SKILL.md |
+| Trigger: judgment day, dual review, adversarial review, juzgar. Run blind dual review, fix confirmed issues, then re-judge. | judgment-day | C:\Users\pdefr\.gemini\antigravity\skills\judgment-day\SKILL.md |
+| Trigger: new skills, agent instructions, documenting AI usage patterns. Create LLM-first skills with valid frontmatter. | skill-creator | C:\Users\pdefr\.gemini\antigravity\skills\skill-creator\SKILL.md |
+| Trigger: implementation, commit splitting, chained PRs, or keeping tests and docs with code. | work-unit-commits | C:\Users\pdefr\.gemini\antigravity\skills\work-unit-commits\SKILL.md |
 
 ## Compact Rules
 
 Pre-digested rules per skill. Delegators copy matching blocks into sub-agent prompts as `## Project Standards (auto-resolved)`.
 
 ### branch-pr
-- Every PR MUST link an approved issue (`Closes #N` where issue has `status:approved`)
-- Every PR MUST have exactly one `type:*` label (e.g. `type:bug`, `type:feature`)
-- Branch naming: `^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)\/[a-z0-9._-]+$`
-- PR Body MUST contain: Linked Issue, PR Type, Summary, Changes Table, Test Plan, Contributor Checklist
-- Commits MUST follow Conventional Commits format `type(scope): description`
-- Do NOT add `Co-Authored-By` or AI attribution to commits
+- Every PR MUST link an approved issue (`Closes #N` where issue has `status:approved`).
+- Every PR MUST have exactly one `type:*` label.
+- Branch naming: `^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)\/[a-z0-9._-]+$`.
+- PR Body MUST contain: Linked Issue, PR Type, Summary, Changes Table, Test Plan, Contributor Checklist.
+- Commits MUST follow Conventional Commits format `type(scope): description`.
+- Do NOT add `Co-Authored-By` or AI attribution to commits.
+
+### chained-pr
+- Split PRs over **400 changed lines** unless a maintainer explicitly accepts `size:exception`.
+- Keep each PR reviewable in about **≤60 minutes**.
+- Use one deliverable work unit per PR; keep tests/docs with code.
+- Every child PR must include a dependency diagram marking current PR with `📍`.
+- Feature Branch Chain uses draft tracker PR; children target tracker or parent.
+
+### cognitive-doc-design
+- Lead with the answer: Put decision/action first, context after.
+- Progressive disclosure: Happy path first, then details/edge cases.
+- Chunking: Group related info into small sections.
+- Signposting: Use headings, labels, callouts.
+- Recognition over recall: Prefer tables, checklists, examples over prose.
+
+### comment-writer
+- Be useful fast: Start with actionable point.
+- Be warm and direct: Sound like a teammate, not a bot.
+- Keep it short: 1-3 short paragraphs or tight bullet list.
+- Explain why: Give technical reason for changes.
+- Match thread language: Use user's language (Rioplatense/voseo in Spanish).
+- No em dashes (—).
 
 ### go-testing
-- Use table-driven tests for pure functions and multiple test cases
-- Test Bubbletea Model state transitions directly (`m.Update()`)
-- Use `teatest.NewTestModel` for full interactive flow tests
-- Use golden file testing for visual output comparisons (`os.WriteFile` if `*update` else `os.ReadFile`)
+- Prefer table-driven tests for multiple cases; use `t.Run(tt.name, ...)`.
+- Test behavior and state transitions, not implementation trivia.
+- Use `t.TempDir()` for filesystem tests.
+- For Bubbletea, test `Model.Update()` directly; use `teatest` for interactive flows.
+- Golden files must be deterministic; update only through `-update` path.
 
 ### issue-creation
-- Blank issues are disabled — MUST use Bug Report or Feature Request template
-- Every issue gets `status:needs-review` automatically
-- Maintainer MUST add `status:approved` before any PR can be opened
-- Questions belong in Discussions, not issues
-- Fill all required template fields including Pre-flight Checks
+- Blank issues are disabled — MUST use a template (Bug Report or Feature Request).
+- Every issue gets `status:needs-review` automatically on creation.
+- A maintainer MUST add `status:approved` before any PR can be opened.
+- Questions belong in Discussions, not issues.
+- Search existing issues for duplicates before creating.
 
 ### judgment-day
-- Always follow Skill Resolver Protocol before launching judges (inject compact rules into judge prompts)
-- Launch TWO sub-agents as `delegate` (async, parallel), they must work independently
-- Orchestrator synthesizes verdicts, never reviews code itself
-- WARNINGs must be classified as real (fix required) or theoretical (report as INFO, do not fix)
-- Fix and re-judge: if confirmed CRITICALs or real WARNINGs, delegate Fix Agent, then re-launch both judges
-- Stop and ASK user after 2 fix iterations if issues remain
-- DO NOT declare APPROVED until Round 1 judges return CLEAN or Round 2 has 0 CRITICALs and 0 real WARNINGs
+- Resolve project skills before launching agents (inject compact rules).
+- Launch **two blind judges in parallel**; never review code yourself.
+- Wait for both judges before synthesis.
+- Classify warnings as `WARNING (real)` or `WARNING (theoretical)`.
+- Ask before fixing Round 1 confirmed issues.
+- After any fix agent runs, immediately re-launch both judges in parallel.
 
 ### skill-creator
-- Create skills when patterns repeat or project differs from generic best practices (don't duplicate existing docs)
-- SKILL.md MUST include frontmatter: `name`, `description` (with "Trigger: ..."), `license: Apache-2.0`, `metadata.author`, `metadata.version`
-- Include sections: When to Use, Critical Patterns, Code Examples, Commands, Resources
-- Use `assets/` for templates/schemas and `references/` for local doc links (NO web URLs)
-- Register new skill in `AGENTS.md` table
+- Create a skill when patterns repeat, conventions differ, or complex workflows need instructions.
+- Follow `docs/skill-style-guide.md` if available.
+- Frontmatter MUST include: `name`, `description`, `license`, `metadata.author`, `metadata.version`.
+- Keep body concise: target 180-450 tokens.
+
+### work-unit-commits
+- Commit by work unit (deliverable behavior/fix/docs).
+- Keep tests with code in the same commit.
+- Keep docs with the user-visible change they explain.
+- Tell a story: reviewer should understand why each commit exists.
+- If SDD tasks forecast >400 lines, group commits into chained PR slices.
 
 ## Project Conventions
 

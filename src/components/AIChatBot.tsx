@@ -5,7 +5,7 @@ import { getAIResponse } from '../services/geminiService';
 const AIChatBot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user' | 'ai', text: string}[]>([
-    { role: 'ai', text: '¡Hola! Soy tu asistente virtual de TeleMed Pro. ¿En qué puedo ayudarte hoy?' }
+    { role: 'ai', text: '¡Hola! Soy tu asistente virtual de MEDINEX. ¿En qué puedo ayudarte hoy?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);

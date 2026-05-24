@@ -91,7 +91,7 @@ const OCCSettings: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-blue-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">System Config</h2>
-          <h1 className="text-4xl font-black text-white tracking-tighter">
+          <h1 className="text-4xl font-bold text-white tracking-tighter">
             OCC <span className="text-slate-500 font-light italic">Settings</span> Center
           </h1>
         </div>
@@ -186,13 +186,13 @@ const OCCSettings: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-white uppercase">{tax.name}</h4>
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{tax.scope}</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{tax.scope}</p>
                     </div>
                   </div>
                   
                   <div className="flex items-center space-x-4">
                     <div className="text-right">
-                      <p className="text-lg font-black text-white">{tax.rate}%</p>
+                      <p className="text-lg font-bold text-white">{tax.rate}%</p>
                     </div>
                     <button 
                       onClick={() => handleToggleActive(tax)}
@@ -212,7 +212,7 @@ const OCCSettings: React.FC = () => {
               <div>
                 <h4 className="text-lg font-bold text-amber-400 mb-1">Impacto Fiscal Consolidado</h4>
                 <p className="text-sm text-slate-400 mb-4">
-                  La carga impositiva actual detectada es del <span className="text-white font-black">{taxes.filter(t => t.isActive).reduce((acc, curr) => acc + curr.rate, 0)}%</span>.
+                  La carga impositiva actual detectada es del <span className="text-white font-bold">{taxes.filter(t => t.isActive).reduce((acc, curr) => acc + curr.rate, 0)}%</span>.
                 </p>
                 <div className="flex space-x-4">
                   <div className="flex items-center text-[10px] font-bold text-slate-500 uppercase">

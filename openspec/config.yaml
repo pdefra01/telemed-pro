@@ -1,7 +1,7 @@
 schema: spec-driven
 
 context: |
-  Tech stack: React 19, TypeScript, Vite, Supabase, LiveKit
+  Tech stack: React 19, TypeScript, Vite, Supabase, LiveKit, Tailwind CSS 4
   Architecture: Clean Architecture (Repositories, Services), Pages/Components
   Testing: Vitest, React Testing Library
   Style: standard, lucide-react icons

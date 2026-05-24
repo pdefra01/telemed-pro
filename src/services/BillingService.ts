@@ -85,7 +85,7 @@ export class BillingService {
     for (const affiliate of activeDirects) {
       // Buscar costo en la tabla de planes según el nombre del plan
       const plan = plans.find(p => p.name === affiliate.planName);
-      const baseCost = plan?.price || 5000;
+      const baseCost = plan?.monthlyCost || 5000;
 
       individualInvoices.push(billingEngine.generateInvoiceData(
         affiliate.id,

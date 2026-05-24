@@ -53,6 +53,84 @@ const COMMON_MEDS = [
   "Sertralina 50mg"
 ];
 
+interface MedicationCardProps {
+  med: { name: string; instructions: string };
+  index: number;
+  onChange: (index: number, field: 'name' | 'instructions', value: string) => void;
+  onRemove: (index: number) => void;
+  showRemove: boolean;
+}
+
+const MedicationCard: React.FC<MedicationCardProps> = ({ 
+  med, 
+  index, 
+  onChange, 
+  onRemove, 
+  showRemove 
+}) => {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const filteredMeds = COMMON_MEDS.filter(m => 
+    m.toLowerCase().includes(med.name.toLowerCase()) && med.name.length > 0
+  ).slice(0, 5);
+
+  return (
+    <div className="relative grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-900/40 border border-white/5 rounded-2xl group/med animate-fade-in-up hover:border-blue-500/30 transition-all duration-300">
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Medicamento #{index + 1}</label>
+        <div className="relative">
+          <input
+            type="text"
+            value={med.name}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            onChange={(e) => onChange(index, 'name', e.target.value)}
+            className="w-full bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all pl-12 text-sm"
+            placeholder="Ej. Amoxicilina 500mg"
+          />
+          <Pill className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600" />
+          
+          {showSuggestions && filteredMeds.length > 0 && (
+            <div className="absolute z-10 left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+              {filteredMeds.map((m, i) => (
+                <button
+                  key={i}
+                  onMouseDown={() => onChange(index, 'name', m)}
+                  className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-blue-600 hover:text-white transition-colors"
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Posología / Instrucciones</label>
+        <div className="relative">
+          <input
+            type="text"
+            value={med.instructions}
+            onChange={(e) => onChange(index, 'instructions', e.target.value)}
+            className="w-full bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all pl-12 text-sm"
+            placeholder="Cada 8hs por 7 días..."
+          />
+          <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600" />
+        </div>
+      </div>
+
+      {showRemove && (
+        <button 
+          onClick={() => onRemove(index)}
+          className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover/med:opacity-100 shadow-xl"
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
+  );
+};
+
 interface PostConsultationProps {
   user: Doctor;
 }
@@ -75,83 +153,6 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-
-  // Internal component for Medication Card
-  const MedicationCard = ({ 
-    med, 
-    index, 
-    onChange, 
-    onRemove, 
-    showRemove 
-  }: { 
-    med: { name: string; instructions: string }, 
-    index: number, 
-    onChange: (index: number, field: string, value: string) => void,
-    onRemove: (index: number) => void,
-    showRemove: boolean
-  }) => {
-    const [showSuggestions, setShowSuggestions] = useState(false);
-    const filteredMeds = COMMON_MEDS.filter(m => 
-      m.toLowerCase().includes(med.name.toLowerCase()) && med.name.length > 0
-    ).slice(0, 5);
-
-    return (
-      <div className="relative grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-900/40 border border-white/5 rounded-2xl group/med animate-fade-in-up hover:border-blue-500/30 transition-all duration-300">
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Medicamento #{index + 1}</label>
-          <div className="relative">
-            <input
-              type="text"
-              value={med.name}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-              onChange={(e) => onChange(index, 'name', e.target.value)}
-              className="w-full bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all pl-12 text-sm"
-              placeholder="Ej. Amoxicilina 500mg"
-            />
-            <Pill className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600" />
-            
-            {showSuggestions && filteredMeds.length > 0 && (
-              <div className="absolute z-10 left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                {filteredMeds.map((m, i) => (
-                  <button
-                    key={i}
-                    onMouseDown={() => onChange(index, 'name', m)}
-                    className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-blue-600 hover:text-white transition-colors"
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Posología / Instrucciones</label>
-          <div className="relative">
-            <input
-              type="text"
-              value={med.instructions}
-              onChange={(e) => onChange(index, 'instructions', e.target.value)}
-              className="w-full bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all pl-12 text-sm"
-              placeholder="Cada 8hs por 7 días..."
-            />
-            <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600" />
-          </div>
-        </div>
-
-        {showRemove && (
-          <button 
-            onClick={() => onRemove(index)}
-            className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover/med:opacity-100 shadow-xl"
-          >
-            <Trash2 size={14} />
-          </button>
-        )}
-      </div>
-    );
-  };
 
   // History Sidebar State
   const [patientRecords, setPatientRecords] = useState<MedicalRecord[]>([]);
@@ -198,14 +199,14 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 </div>
               </div>
               <div className="space-y-3">
-                <h3 className="text-3xl font-black text-white tracking-tighter uppercase">¡Consulta Exitosa!</h3>
+                <h3 className="text-3xl font-bold text-white tracking-tighter uppercase">¡Consulta Exitosa!</h3>
                 <p className="text-slate-400 leading-relaxed">
                   La consulta ha sido cerrada y los documentos enviados al paciente. Redirigiendo a su panel central...
                 </p>
               </div>
               <button 
                 onClick={() => navigate('/doctor')}
-                className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-black rounded-2xl transition-all shadow-xl shadow-teal-500/20 uppercase tracking-widest text-xs"
+                className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-2xl transition-all shadow-xl shadow-teal-500/20 uppercase tracking-widest text-xs"
               >
                 Volver al Inicio Ahora
               </button>
@@ -493,7 +494,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 
                 {aiSuggestions.length > 0 && (
                   <div className="mb-6 space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
-                    <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-1">Sugerencias de Redacción AI</p>
+                    <p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest ml-1">Sugerencias de Redacción AI</p>
                     <div className="grid grid-cols-1 gap-2">
                       {aiSuggestions.map((s, i) => (
                         <button
@@ -580,13 +581,13 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                             </div>
                           </div>
                           <h4 className="text-slate-400 font-bold mb-1">Sin medicamentos</h4>
-                          <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Agregue indicaciones para la receta</p>
+                          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Agregue indicaciones para la receta</p>
                         </div>
                       )}
 
                       <button 
                         onClick={handleAddMedication}
-                        className="w-full py-5 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"
+                        className="w-full py-5 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-3 font-bold text-xs uppercase tracking-widest"
                       >
                         <Plus size={18} />
                         {medications.length === 0 ? 'Iniciar Receta' : 'Agregar Medicamento'}
@@ -631,7 +632,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 <button 
                   onClick={handleAiSuggestDiagnosis}
                   disabled={isAnalyzing || !notes.trim()}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-50"
                 >
                   <Sparkles size={14} className={isAnalyzing ? 'animate-spin' : ''} />
                   {isAnalyzing ? 'Analizando Cuadro...' : 'Sugerir con Inteligencia Artificial'}
@@ -639,7 +640,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
                 {suggestions.length > 0 && (
                   <div className="space-y-2 animate-in slide-in-from-top duration-300">
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
                       <Lightbulb size={10} />
                       Posibles diagnósticos (CIE-10)
                     </p>
@@ -687,7 +688,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 {isSubmitted && !diagnosis.trim() && (
                   <div className="flex items-center justify-center gap-2 py-2 px-4 bg-red-500/10 border border-red-500/20 rounded-xl animate-in slide-in-from-top-2 duration-300">
                     <AlertCircle className="w-4 h-4 text-red-500" />
-                    <p className="text-[10px] text-red-400 font-black uppercase tracking-widest">
+                    <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest">
                       Diagnóstico Requerido
                     </p>
                   </div>
@@ -735,8 +736,8 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                       <FolderOpen size={20} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-black text-white tracking-tight leading-none">Bóveda Médica</h3>
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Historial del Paciente</p>
+                      <h3 className="text-lg font-bold text-white tracking-tight leading-none">Bóveda Médica</h3>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Historial del Paciente</p>
                     </div>
                   </div>
                 </div>
@@ -744,7 +745,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 <div className="p-4 bg-slate-950/40 border-b border-white/5 flex gap-2">
                   <button 
                     onClick={() => setHistoryTab('records')}
-                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
                       historyTab === 'records' ? 'bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20' : 'bg-slate-900 text-slate-500 hover:text-slate-300'
                     }`}
                   >
@@ -752,7 +753,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                   </button>
                   <button 
                     onClick={() => setHistoryTab('documents')}
-                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
                       historyTab === 'documents' ? 'bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20' : 'bg-slate-900 text-slate-500 hover:text-slate-300'
                     }`}
                   >
@@ -764,29 +765,29 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                   {isFetchingHistory ? (
                     <div className="flex flex-col items-center justify-center py-20">
                       <div className="w-10 h-10 border-2 border-teal-500/20 border-t-teal-500 rounded-full animate-spin mb-4"></div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-teal-500/60">Consultando archivo...</p>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-teal-500/60">Consultando archivo...</p>
                     </div>
                   ) : historyTab === 'records' ? (
                     patientRecords.length > 0 ? (
                       patientRecords.map((record) => (
                         <div key={record.id} className="p-5 rounded-3xl bg-white/[0.03] border border-white/5 hover:border-teal-500/20 transition-all group">
                           <div className="flex items-center justify-between mb-3">
-                            <span className="text-[9px] font-black text-teal-400 uppercase tracking-widest px-3 py-1 bg-teal-500/10 rounded-full">{record.date}</span>
-                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{record.type}</span>
+                            <span className="text-[9px] font-bold text-teal-400 uppercase tracking-widest px-3 py-1 bg-teal-500/10 rounded-full">{record.date}</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{record.type}</span>
                           </div>
                           <h4 className="font-bold text-white mb-2 leading-tight group-hover:text-teal-400 transition-colors">{record.diagnosis}</h4>
                           <p className="text-xs text-slate-400 line-clamp-3 italic mb-4">"{record.notes}"</p>
                           <div className="flex items-center gap-2 pt-4 border-t border-white/5">
-                            <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-black text-teal-500">
+                            <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-bold text-teal-500">
                               {record.doctorName?.charAt(0)}
                             </div>
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dr. {record.doctorName?.split(' ').pop()}</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Dr. {record.doctorName?.split(' ').pop()}</span>
                           </div>
                         </div>
                       ))
                     ) : (
                       <div className="text-center py-20 bg-slate-950/20 rounded-3xl border border-white/5 border-dashed">
-                        <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Sin antecedentes registrados</p>
+                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Sin antecedentes registrados</p>
                       </div>
                     )
                   ) : (
@@ -799,10 +800,10 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                                doc.type === 'imaging' ? <ImageIcon size={18} /> : 
                                <FileGeneric size={18} />}
                             </div>
-                            <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">{doc.date}</span>
+                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">{doc.date}</span>
                           </div>
                           <h4 className="font-bold text-white mb-1 leading-tight group-hover:text-teal-400 transition-colors">{doc.title}</h4>
-                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4">
+                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-4">
                             {doc.type === 'lab_result' ? 'Laboratorio' : doc.type === 'imaging' ? 'Imagen' : 'Documento'}
                           </p>
                           <div className="flex gap-2">
@@ -810,7 +811,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                               href={doc.url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="flex-1 py-3 bg-white/5 hover:bg-teal-500 text-white hover:text-slate-950 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                              className="flex-1 py-3 bg-white/5 hover:bg-teal-500 text-white hover:text-slate-950 rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                             >
                               <ExternalLink size={12} /> Ver
                             </a>
@@ -822,7 +823,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                       ))
                     ) : (
                       <div className="text-center py-20 bg-slate-950/20 rounded-3xl border border-white/5 border-dashed">
-                        <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Sin documentos cargados</p>
+                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Sin documentos cargados</p>
                       </div>
                     )
                   )}

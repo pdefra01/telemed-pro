@@ -42,7 +42,7 @@ const OCCBilling: React.FC = () => {
 
   const handleExport = () => {
     const csvContent = accountingService.generateCSVExport(invoices);
-    const filename = `telemed-billing-export-${new Date().toISOString().split('T')[0]}.csv`;
+    const filename = `medinex-billing-export-${new Date().toISOString().split('T')[0]}.csv`;
     accountingService.downloadCSV(csvContent, filename);
   };
 
@@ -85,7 +85,7 @@ const OCCBilling: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-emerald-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Financial Engine</h2>
-          <h1 className="text-4xl font-black text-white tracking-tighter">
+          <h1 className="text-4xl font-bold text-white tracking-tighter">
             OCC <span className="text-slate-500 font-light italic">Billing</span> Center
           </h1>
         </div>
@@ -112,17 +112,17 @@ const OCCBilling: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <GlassCard className="p-6 border-l-4 border-l-blue-500">
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Total Facturado (Mes)</p>
-          <h4 className="text-3xl font-black text-white">$1.240.500</h4>
+          <h4 className="text-3xl font-bold text-white">$1.240.500</h4>
           <p className="text-emerald-400 text-[10px] font-bold mt-2">+12.5% vs mes anterior</p>
         </GlassCard>
         <GlassCard className="p-6 border-l-4 border-l-amber-500">
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Pendiente de Cobro</p>
-          <h4 className="text-3xl font-black text-white">$320.000</h4>
+          <h4 className="text-3xl font-bold text-white">$320.000</h4>
           <p className="text-amber-400 text-[10px] font-bold mt-2">14 facturas vencidas</p>
         </GlassCard>
         <GlassCard className="p-6 border-l-4 border-l-indigo-500">
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Próximo Cierre</p>
-          <h4 className="text-3xl font-black text-white">30 Abr</h4>
+          <h4 className="text-3xl font-bold text-white">30 Abr</h4>
           <p className="text-indigo-400 text-[10px] font-bold mt-2">Cierre automático programado</p>
         </GlassCard>
       </div>
@@ -194,10 +194,10 @@ const OCCBilling: React.FC = () => {
                   <td className="py-4 text-xs text-white font-bold">${inv.netAmount.toLocaleString()}</td>
                   <td className="py-4 text-xs text-slate-400">${inv.taxAmount.toLocaleString()}</td>
                   <td className="py-4">
-                    <span className="text-sm font-black text-white">${inv.totalAmount.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-white">${inv.totalAmount.toLocaleString()}</span>
                   </td>
                   <td className="py-4">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-lg border text-[10px] font-black uppercase tracking-tighter ${
+                    <div className={`inline-flex items-center px-2 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-tighter ${
                       inv.status === 'paid' 
                         ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                         : inv.status === 'issued'
@@ -241,7 +241,7 @@ const OCCBilling: React.FC = () => {
             <div className="flex justify-between items-start mb-6">
               <div>
                 <p className="text-emerald-500 font-bold text-[10px] uppercase tracking-widest mb-1">Detalle de Comprobante</p>
-                <h3 className="text-2xl font-black text-white tracking-tighter">#{selectedInvoice.id.substring(0, 12).toUpperCase()}</h3>
+                <h3 className="text-2xl font-bold text-white tracking-tighter">#{selectedInvoice.id.substring(0, 12).toUpperCase()}</h3>
               </div>
               <button 
                 onClick={() => setSelectedInvoice(null)}
@@ -254,23 +254,23 @@ const OCCBilling: React.FC = () => {
             <div className="space-y-4 mb-8">
               <div className="flex justify-between py-2 border-b border-white/5">
                 <span className="text-slate-500 text-xs font-bold uppercase">Entidad</span>
-                <span className="text-white text-xs font-black uppercase">{selectedInvoice.entityId}</span>
+                <span className="text-white text-xs font-bold uppercase">{selectedInvoice.entityId}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-white/5">
                 <span className="text-slate-500 text-xs font-bold uppercase">Periodo</span>
-                <span className="text-white text-xs font-black">{selectedInvoice.period}</span>
+                <span className="text-white text-xs font-bold">{selectedInvoice.period}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-white/5">
                 <span className="text-slate-500 text-xs font-bold uppercase">Neto</span>
-                <span className="text-white text-xs font-black">${selectedInvoice.netAmount.toLocaleString()}</span>
+                <span className="text-white text-xs font-bold">${selectedInvoice.netAmount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-white/5">
                 <span className="text-slate-500 text-xs font-bold uppercase">IVA (21%)</span>
-                <span className="text-white text-xs font-black">${selectedInvoice.taxAmount.toLocaleString()}</span>
+                <span className="text-white text-xs font-bold">${selectedInvoice.taxAmount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between py-4">
                 <span className="text-slate-400 text-sm font-bold uppercase">Total a Pagar</span>
-                <span className="text-emerald-400 text-xl font-black">${selectedInvoice.totalAmount.toLocaleString()}</span>
+                <span className="text-emerald-400 text-xl font-bold">${selectedInvoice.totalAmount.toLocaleString()}</span>
               </div>
             </div>
 
@@ -305,7 +305,7 @@ const OCCBilling: React.FC = () => {
             <div className="w-24 h-24 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin"></div>
             <DollarSign className="absolute inset-0 m-auto text-emerald-500 animate-pulse" size={32} />
           </div>
-          <h3 className="text-xl font-black text-white mt-8 tracking-tighter uppercase">Procesando Motor Financiero</h3>
+          <h3 className="text-xl font-bold text-white mt-8 tracking-tighter uppercase">Procesando Motor Financiero</h3>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2 animate-pulse">Sincronizando con la red de pagos...</p>
         </div>
       )}

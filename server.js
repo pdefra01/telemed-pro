@@ -14,7 +14,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
 // Health check endpoint for Coolify
 app.get('/health', (req, res) => {
@@ -32,12 +32,26 @@ if (!apiKey || !apiSecret) {
   console.warn("⚠️ WARNING: Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment. Video tokens will fail.");
 }
 
+// Rechazar métodos distintos a POST explícitamente
+app.all('/api/livekit-token', (req, res, next) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: `Method ${req.method} not allowed` });
+  }
+  next();
+});
+
+const APPOINTMENT_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.post('/api/livekit-token', async (req, res) => {
   try {
     const { appointmentId } = req.body;
 
     if (!appointmentId) {
       return res.status(400).json({ error: 'appointmentId is required' });
+    }
+
+    if (!APPOINTMENT_ID_REGEX.test(appointmentId)) {
+      return res.status(400).json({ error: 'Invalid appointmentId format' });
     }
 
     if (!apiKey || !apiSecret) {

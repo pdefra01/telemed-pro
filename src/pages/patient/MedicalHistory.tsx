@@ -85,7 +85,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                         <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20">
                             <FileArchive size={24} />
                         </div>
-                        <h1 className="text-4xl font-black text-white tracking-tight">Expediente Médico</h1>
+                        <h1 className="text-4xl font-bold text-white tracking-tight">Expediente Médico</h1>
                     </div>
                     <p className="text-slate-400 font-medium max-w-xl text-lg leading-relaxed">
                         Tu historial de salud completo, protegido bajo estándares de seguridad médica internacional.
@@ -109,7 +109,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
             <div className="flex p-2 bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white/10 max-w-2xl">
                 <button
                     onClick={() => setActiveTab('records')}
-                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
+                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-bold uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
                         activeTab === 'records' 
                         ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 translate-y-[-2px]' 
                         : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
@@ -119,7 +119,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                 </button>
                 <button
                     onClick={() => setActiveTab('prescriptions')}
-                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
+                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-bold uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
                         activeTab === 'prescriptions' 
                         ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 translate-y-[-2px]' 
                         : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
@@ -129,7 +129,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                 </button>
                 <button
                     onClick={() => setActiveTab('documents')}
-                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
+                    className={`flex-1 py-4 px-6 rounded-[2rem] text-xs font-bold uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all duration-500 ${
                         activeTab === 'documents' 
                         ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 translate-y-[-2px]' 
                         : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
@@ -148,7 +148,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                             <div className="w-24 h-24 border-4 border-t-emerald-500 rounded-full animate-spin absolute top-0 left-0 shadow-[0_0_15px_rgba(16,185,129,0.3)]"></div>
                         </div>
                         <div className="text-center">
-                           <p className="text-emerald-500 font-black tracking-[0.3em] uppercase text-sm animate-pulse">Sincronizando Expediente</p>
+                           <p className="text-emerald-500 font-bold tracking-[0.3em] uppercase text-sm animate-pulse">Sincronizando Expediente</p>
                            <p className="text-slate-500 text-xs mt-2 font-bold uppercase tracking-widest">Encriptación Militar Activa</p>
                         </div>
                     </div>
@@ -167,9 +167,9 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                         <FileText size={28} />
                                                     </div>
                                                     <div>
-                                                        <h3 className="text-2xl font-black text-white group-hover:text-emerald-400 transition-colors tracking-tight">{record.diagnosis}</h3>
+                                                        <h3 className="text-2xl font-bold text-white group-hover:text-emerald-400 transition-colors tracking-tight">{record.diagnosis}</h3>
                                                         <div className="flex items-center gap-3 mt-2">
-                                                            <div className="w-7 h-7 bg-slate-800 rounded-lg flex items-center justify-center text-[10px] font-black text-slate-400 uppercase">
+                                                            <div className="w-7 h-7 bg-slate-800 rounded-lg flex items-center justify-center text-[10px] font-bold text-slate-400 uppercase">
                                                                 {record.doctorName?.charAt(0) || 'D'}
                                                             </div>
                                                             <p className="text-slate-400 font-bold text-sm">{record.doctorName}</p>
@@ -178,7 +178,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 </div>
                                                 <div className="flex items-center bg-white/5 px-5 py-3 rounded-2xl border border-white/5 shadow-inner">
                                                     <Calendar size={18} className="text-emerald-500 mr-3" />
-                                                    <span className="text-slate-200 text-sm font-black uppercase tracking-widest">
+                                                    <span className="text-slate-200 text-sm font-bold uppercase tracking-widest">
                                                         {new Date(record.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                     </span>
                                                 </div>
@@ -192,21 +192,21 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
 
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
-                                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border shadow-lg ${
+                                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] border shadow-lg ${
                                                         record.type === 'consultation' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
                                                         record.type === 'checkup' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
                                                     }`}>
                                                         {record.type === 'consultation' ? 'Consulta Médica' : record.type === 'checkup' ? 'Chequeo General' : 'Atención Urgente'}
                                                     </span>
                                                     {record.attachments && record.attachments.length > 0 && (
-                                                        <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+                                                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
                                                             <FileArchive size={12} className="text-emerald-500" /> {record.attachments.length} archivos adjuntos
                                                         </div>
                                                     )}
                                                 </div>
                                                 <Button 
                                                     variant="ghost" 
-                                                    className="text-emerald-500 hover:text-emerald-400 font-black text-xs uppercase tracking-widest p-0 group/link"
+                                                    className="text-emerald-500 hover:text-emerald-400 font-bold text-xs uppercase tracking-widest p-0 group/link"
                                                 >
                                                     Reporte Completo <ChevronRight size={18} className="ml-1 group-hover/link:translate-x-1 transition-transform" />
                                                 </Button>
@@ -238,17 +238,17 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                             <Pill size={24} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-xl font-black text-white tracking-tight">Receta Oficial</h3>
+                                                            <h3 className="text-xl font-bold text-white tracking-tight">Receta Oficial</h3>
                                                             <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest mt-1">S/N: {presc.id.slice(0,12).toUpperCase()}</p>
                                                         </div>
                                                     </div>
                                                     {presc.status === 'active' ? (
-                                                        <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-black px-4 py-1.5 rounded-full flex items-center border border-emerald-500/20 uppercase tracking-widest animate-pulse">
+                                                        <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-4 py-1.5 rounded-full flex items-center border border-emerald-500/20 uppercase tracking-widest animate-pulse">
                                                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
                                                             Vigente
                                                         </span>
                                                     ) : (
-                                                        <span className="bg-white/5 text-slate-500 text-[10px] font-black px-4 py-1.5 rounded-full border border-white/10 uppercase tracking-widest">
+                                                        <span className="bg-white/5 text-slate-500 text-[10px] font-bold px-4 py-1.5 rounded-full border border-white/10 uppercase tracking-widest">
                                                             Finalizada
                                                         </span>
                                                     )}
@@ -258,8 +258,8 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                     {presc.medications.map((m, idx) => (
                                                         <div key={idx} className="bg-black/20 p-5 rounded-2xl border border-white/5 relative group/med hover:bg-black/40 transition-colors">
                                                             <div className="flex justify-between items-center mb-2">
-                                                                <p className="font-black text-white text-base">{m.name}</p>
-                                                                <span className="text-xs font-black text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">CANT: {m.quantity}</span>
+                                                                <p className="font-bold text-white text-base">{m.name}</p>
+                                                                <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">CANT: {m.quantity}</span>
                                                             </div>
                                                             <p className="text-slate-400 text-sm font-medium leading-relaxed italic border-l-2 border-emerald-500/30 pl-3 mt-3">"{m.instructions}"</p>
                                                         </div>
@@ -268,12 +268,12 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
 
                                                 <div className="mt-8 pt-8 border-t border-dashed border-white/10 grid grid-cols-2 gap-6">
                                                     <div className="space-y-1.5">
-                                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Prescriptor</p>
-                                                        <p className="text-sm font-black text-slate-200">{presc.doctorName}</p>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Prescriptor</p>
+                                                        <p className="text-sm font-bold text-slate-200">{presc.doctorName}</p>
                                                     </div>
                                                     <div className="space-y-1.5 text-right">
-                                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Fecha Emisión</p>
-                                                        <p className="text-sm font-black text-slate-200">{new Date(presc.date).toLocaleDateString('es-AR')}</p>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Fecha Emisión</p>
+                                                        <p className="text-sm font-bold text-slate-200">{new Date(presc.date).toLocaleDateString('es-AR')}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -282,9 +282,9 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 <Button
                                                     onClick={() => {
                                                         const medsInfo = presc.medications.map(m => `- ${m.name}: ${m.instructions} (Cant: ${m.quantity})`).join('\n');
-                                                        handleDownload(`Receta-${presc.id.slice(0,8)}.txt`, `RECETA DIGITAL TELEMED PRO\n\nMedicamentos:\n${medsInfo}\n\nMédico: ${presc.doctorName}\nFecha: ${presc.date}\nFirma: ${presc.digitalSignature}`);
+                                                        handleDownload(`Receta-${presc.id.slice(0,8)}.txt`, `RECETA DIGITAL MEDINEX\n\nMedicamentos:\n${medsInfo}\n\nMédico: ${presc.doctorName}\nFecha: ${presc.date}\nFirma: ${presc.digitalSignature}`);
                                                     }}
-                                                    className="flex-1 bg-white/5 border-white/10 text-white hover:bg-emerald-600 hover:border-emerald-500 h-12 rounded-2xl transition-all font-black text-xs uppercase tracking-widest"
+                                                    className="flex-1 bg-white/5 border-white/10 text-white hover:bg-emerald-600 hover:border-emerald-500 h-12 rounded-2xl transition-all font-bold text-xs uppercase tracking-widest"
                                                     icon={<Download size={16} />}
                                                 >
                                                     Descargar
@@ -305,9 +305,9 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                             <div className="bg-slate-900/80 py-2.5 px-6 flex justify-between items-center border-t border-white/5">
                                                 <div className="flex items-center gap-2">
                                                     <CheckCircle size={10} className="text-emerald-500" />
-                                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Validación Blockchain Digital</p>
+                                                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Validación Blockchain Digital</p>
                                                 </div>
-                                                <p className="text-[10px] font-mono text-emerald-500 font-black">{presc.digitalSignature}</p>
+                                                <p className="text-[10px] font-mono text-emerald-500 font-bold">{presc.digitalSignature}</p>
                                             </div>
                                         </div>
                                     ))
@@ -336,7 +336,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                     {doc.type.includes('lab') ? <FlaskConical size={32} /> : doc.type.includes('imaging') ? <Activity size={32} /> : <FileText size={32} />}
                                                 </div>
                                                 <div className="flex flex-col items-end gap-2">
-                                                    <span className={`text-[10px] px-4 py-1.5 rounded-full font-black uppercase tracking-widest border shadow-sm ${
+                                                    <span className={`text-[10px] px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm ${
                                                         doc.uploadedBy === 'doctor' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
                                                     }`}>
                                                         {doc.uploadedBy === 'doctor' ? 'Profesional' : 'Paciente'}
@@ -344,9 +344,9 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 </div>
                                             </div>
                                             
-                                            <h4 className="font-black text-white text-xl leading-tight mb-4 flex-1 group-hover:text-emerald-400 transition-colors tracking-tight relative z-10">{doc.title}</h4>
+                                            <h4 className="font-bold text-white text-xl leading-tight mb-4 flex-1 group-hover:text-emerald-400 transition-colors tracking-tight relative z-10">{doc.title}</h4>
                                             
-                                            <div className="flex items-center text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] gap-6 mb-8 pt-6 border-t border-white/5 relative z-10">
+                                            <div className="flex items-center text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] gap-6 mb-8 pt-6 border-t border-white/5 relative z-10">
                                                 <span className="flex items-center"><Calendar size={14} className="mr-2 text-emerald-500" /> {new Date(doc.date).toLocaleDateString()}</span>
                                                 <span className="flex items-center"><Hash size={14} className="mr-2 text-emerald-500" /> {doc.type.split('_')[0]}</span>
                                             </div>
@@ -356,7 +356,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 href={doc.url}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="w-full bg-white/5 border-white/10 text-white hover:bg-emerald-600 hover:border-emerald-500 h-14 rounded-2xl transition-all font-black text-xs uppercase tracking-[0.25em] relative z-10"
+                                                className="w-full bg-white/5 border-white/10 text-white hover:bg-emerald-600 hover:border-emerald-500 h-14 rounded-2xl transition-all font-bold text-xs uppercase tracking-[0.25em] relative z-10"
                                                 icon={<Download size={18} />}
                                             >
                                                 Descargar

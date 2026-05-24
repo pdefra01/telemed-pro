@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Agent standards
+.atl/
+
+# Environment
+.env
+.env.*

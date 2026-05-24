@@ -48,7 +48,7 @@ const AIImageEditor: React.FC = () => {
     if (generatedImage) {
       const link = document.createElement('a');
       link.href = generatedImage;
-      link.download = 'telemed-ia-edit.png';
+      link.download = 'medinex-ia-edit.png';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

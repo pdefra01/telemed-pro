@@ -28,7 +28,7 @@ const Payments: React.FC = () => {
     const handleDownload = (period: string) => {
         // Simulate file download
         const element = document.createElement("a");
-        const file = new Blob([`Factura TeleMed Pro\nPeriodo: ${period}\nAfiliado: ${MOCK_PATIENT.name}\nEstado: PAGADO`], { type: 'text/plain' });
+        const file = new Blob([`Factura MEDINEX\nPeriodo: ${period}\nAfiliado: ${MOCK_PATIENT.name}\nEstado: PAGADO`], { type: 'text/plain' });
         element.href = URL.createObjectURL(file);
         element.download = `Factura-${period}.txt`;
         document.body.appendChild(element);
@@ -43,7 +43,7 @@ const Payments: React.FC = () => {
                         <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20">
                             <CreditCard size={24} />
                         </div>
-                        <h1 className="text-4xl font-black text-white tracking-tight">Plan y Facturación</h1>
+                        <h1 className="text-4xl font-bold text-white tracking-tight">Plan y Facturación</h1>
                     </div>
                     <p className="text-slate-400 font-medium max-w-xl text-lg leading-relaxed">
                         Gestioná tu suscripción y accedé a tus comprobantes fiscales con validez legal.
@@ -60,18 +60,18 @@ const Payments: React.FC = () => {
                 <div className="relative z-10 flex flex-col lg:flex-row gap-12 items-start lg:items-center">
                     <div className="flex-1 space-y-6">
                         <div className="space-y-1">
-                            <p className="text-emerald-500 font-black text-xs uppercase tracking-[0.3em]">Estado de Cobertura</p>
-                            <h2 className="text-5xl font-black text-white tracking-tighter">{MOCK_PATIENT.planName}</h2>
+                            <p className="text-emerald-500 font-bold text-xs uppercase tracking-[0.3em]">Estado de Cobertura</p>
+                            <h2 className="text-5xl font-bold text-white tracking-tighter">{MOCK_PATIENT.planName}</h2>
                         </div>
                         
                         <div className="flex flex-wrap gap-4">
                             <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-2xl flex items-center gap-2">
                                 <CheckCircle size={16} className="text-emerald-500" />
-                                <span className="text-emerald-400 text-xs font-black uppercase tracking-widest">Activo</span>
+                                <span className="text-emerald-400 text-xs font-bold uppercase tracking-widest">Activo</span>
                             </div>
                             <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2">
                                 <ShieldCheck size={16} className="text-slate-400" />
-                                <span className="text-slate-300 text-xs font-black uppercase tracking-widest">Cobertura Nacional</span>
+                                <span className="text-slate-300 text-xs font-bold uppercase tracking-widest">Cobertura Nacional</span>
                             </div>
                         </div>
                     </div>
@@ -80,12 +80,12 @@ const Payments: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-12">
                         <div className="space-y-1">
-                            <p className="text-slate-500 font-black text-[10px] uppercase tracking-[0.2em]">Grupo Familiar</p>
-                            <p className="text-2xl font-black text-white">{MOCK_PATIENT.familyMembers?.length ? MOCK_PATIENT.familyMembers.length + 1 : 1} <span className="text-slate-500 text-sm font-bold uppercase tracking-widest ml-2">Integrantes</span></p>
+                            <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.2em]">Grupo Familiar</p>
+                            <p className="text-2xl font-bold text-white">{MOCK_PATIENT.familyMembers?.length ? MOCK_PATIENT.familyMembers.length + 1 : 1} <span className="text-slate-500 text-sm font-bold uppercase tracking-widest ml-2">Integrantes</span></p>
                         </div>
                         <div className="space-y-1">
-                            <p className="text-slate-500 font-black text-[10px] uppercase tracking-[0.2em]">Próximo Vencimiento</p>
-                            <p className="text-2xl font-black text-white">05 <span className="text-slate-500 text-sm font-bold uppercase tracking-widest ml-2">May 2026</span></p>
+                            <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.2em]">Próximo Vencimiento</p>
+                            <p className="text-2xl font-bold text-white">05 <span className="text-slate-500 text-sm font-bold uppercase tracking-widest ml-2">May 2026</span></p>
                         </div>
                     </div>
                 </div>
@@ -100,19 +100,19 @@ const Payments: React.FC = () => {
                                 <AlertTriangle size={28} />
                             </div>
                             <div>
-                                <h3 className="text-2xl font-black text-white tracking-tight">Pago Pendiente Detectado</h3>
+                                <h3 className="text-2xl font-bold text-white tracking-tight">Pago Pendiente Detectado</h3>
                                 <p className="text-orange-300 font-bold text-sm mt-1 uppercase tracking-widest">Período correspondiente a {pendingPayment.period}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-8 w-full md:w-auto">
                             <div className="text-right">
-                                <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-1">Monto a Abonar</p>
-                                <span className="text-4xl font-black text-white tracking-tighter">${pendingPayment.amount.toLocaleString()}</span>
+                                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Monto a Abonar</p>
+                                <span className="text-4xl font-bold text-white tracking-tighter">${pendingPayment.amount.toLocaleString()}</span>
                             </div>
                             <Button
                                 onClick={handlePay}
                                 isLoading={isProcessing}
-                                className="h-16 px-10 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl shadow-2xl shadow-orange-600/30 font-black text-sm uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95"
+                                className="h-16 px-10 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl shadow-2xl shadow-orange-600/30 font-bold text-sm uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95"
                             >
                                 Regularizar Ahora
                             </Button>
@@ -123,14 +123,14 @@ const Payments: React.FC = () => {
                         <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500">
                             <CheckCircle size={20} />
                         </div>
-                        <p className="text-emerald-400 font-black text-lg tracking-tight uppercase tracking-[0.1em]">Tus pagos están al día. ¡Gracias por confiar en nosotros!</p>
+                        <p className="text-emerald-400 font-bold text-lg tracking-tight uppercase tracking-[0.1em]">Tus pagos están al día. ¡Gracias por confiar en nosotros!</p>
                     </div>
                 )}
 
                 {/* Transaction History - Modern List View */}
                 <div className="space-y-8">
                     <div className="flex items-center justify-between px-2">
-                        <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-3">
+                        <h3 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
                             Historial de Transacciones
                             <span className="bg-white/5 text-slate-500 text-[10px] px-3 py-1 rounded-full border border-white/5">{payments.length} Registros</span>
                         </h3>
@@ -148,7 +148,7 @@ const Payments: React.FC = () => {
                                         <CreditCard size={20} />
                                     </div>
                                     <div>
-                                        <p className="text-white font-black text-lg tracking-tight">{payment.period}</p>
+                                        <p className="text-white font-bold text-lg tracking-tight">{payment.period}</p>
                                         <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
                                             {payment.date ? `Pagado el ${new Date(payment.date).toLocaleDateString()}` : 'Pendiente de Procesamiento'}
                                         </p>
@@ -157,10 +157,10 @@ const Payments: React.FC = () => {
 
                                 <div className="flex items-center gap-10">
                                     <div className="text-right">
-                                        <p className="text-white font-black text-xl">${payment.amount.toLocaleString()}</p>
+                                        <p className="text-white font-bold text-xl">${payment.amount.toLocaleString()}</p>
                                         <div className="flex items-center justify-end gap-2 mt-1">
                                             <div className={`w-1.5 h-1.5 rounded-full ${payment.status === 'paid' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-orange-500 animate-pulse'}`}></div>
-                                            <p className={`text-[10px] font-black uppercase tracking-widest ${payment.status === 'paid' ? 'text-emerald-500' : 'text-orange-500'}`}>
+                                            <p className={`text-[10px] font-bold uppercase tracking-widest ${payment.status === 'paid' ? 'text-emerald-500' : 'text-orange-500'}`}>
                                                 {payment.status === 'paid' ? 'Completado' : 'Pendiente'}
                                             </p>
                                         </div>

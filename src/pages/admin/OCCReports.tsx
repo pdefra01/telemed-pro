@@ -110,7 +110,7 @@ const OCCReports: React.FC = () => {
             <TrendingUp size={16} />
             <span className="text-[10px] uppercase tracking-[0.3em] font-bold">Operational Intelligence</span>
           </div>
-          <h2 className="text-4xl font-black tracking-tighter bg-gradient-to-r from-white via-white to-slate-500 bg-clip-text text-transparent">
+          <h2 className="text-4xl font-bold tracking-tighter bg-gradient-to-r from-white via-white to-slate-500 bg-clip-text text-transparent">
             Centro de Inteligencia
           </h2>
           <p className="text-slate-400 mt-2 max-w-2xl text-sm leading-relaxed">
@@ -274,7 +274,7 @@ const OCCReports: React.FC = () => {
           <div className="mt-6 flex items-center justify-between p-4 rounded-2xl bg-rose-500/5 border border-rose-500/10">
             <div>
               <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Current Leakage</p>
-              <p className="text-2xl font-black text-rose-400">17.3%</p>
+              <p className="text-2xl font-bold text-rose-400">17.3%</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-slate-400 max-w-[200px]">
@@ -290,21 +290,21 @@ const OCCReports: React.FC = () => {
         <div className="bg-[#0f172a]/20 border border-white/5 p-6 rounded-3xl">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Total Consultas (YTD)</p>
           <div className="flex items-baseline space-x-2">
-            <p className="text-3xl font-black text-white">24.8k</p>
+            <p className="text-3xl font-bold text-white">24.8k</p>
             <span className="text-xs text-emerald-400 font-bold">+15%</span>
           </div>
         </div>
         <div className="bg-[#0f172a]/20 border border-white/5 p-6 rounded-3xl">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Churn Rate Afiliados</p>
           <div className="flex items-baseline space-x-2">
-            <p className="text-3xl font-black text-white">2.4%</p>
+            <p className="text-3xl font-bold text-white">2.4%</p>
             <span className="text-xs text-emerald-400 font-bold">-0.8%</span>
           </div>
         </div>
         <div className="bg-[#0f172a]/20 border border-white/5 p-6 rounded-3xl">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Satisfacción Promedio</p>
           <div className="flex items-baseline space-x-2">
-            <p className="text-3xl font-black text-white">4.8</p>
+            <p className="text-3xl font-bold text-white">4.8</p>
             <div className="flex space-x-0.5">
               {[1, 2, 3, 4, 5].map(s => (
                 <div key={s} className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>

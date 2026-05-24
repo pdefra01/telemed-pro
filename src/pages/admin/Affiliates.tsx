@@ -107,7 +107,7 @@ const Affiliates: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h2 className="text-emerald-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Comercial / CRM</h2>
-          <h1 className="text-4xl font-black text-white tracking-tighter">Padrón de <span className="text-slate-500 font-light italic">Afiliados</span></h1>
+          <h1 className="text-4xl font-bold text-white tracking-tighter">Padrón de <span className="text-slate-500 font-light italic">Afiliados</span></h1>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -180,7 +180,7 @@ const Affiliates: React.FC = () => {
                 <tr key={patient.id} className="group hover:bg-white/5 transition-all duration-200">
                   <td className="px-8 py-5">
                     <div className="flex items-center">
-                      <div className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-emerald-400 font-black text-lg transition-transform group-hover:scale-110">
+                      <div className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-emerald-400 font-bold text-lg transition-transform group-hover:scale-110">
                         {patient.name.charAt(0)}
                       </div>
                       <div className="ml-4">
@@ -197,7 +197,7 @@ const Affiliates: React.FC = () => {
                     <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-tighter">Premium Network</div>
                   </td>
                   <td className="px-6 py-5 text-center">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest
                       ${patient.planStatus === 'active' 
                         ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
                         : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'}`}>
@@ -236,13 +236,13 @@ const Affiliates: React.FC = () => {
           <div className="bg-[#0f172a] border border-white/10 rounded-[2.5rem] p-8 w-full max-w-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
             
-            <h3 className="text-2xl font-black text-white mb-6">
+            <h3 className="text-2xl font-bold text-white mb-6">
               {editId ? 'Editar' : 'Registrar'} <span className="text-emerald-500">Afiliado</span>
             </h3>
             
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-widest font-black text-slate-500 ml-1">Nombre Completo</label>
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Nombre Completo</label>
                 <input
                   type="text" required
                   className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
@@ -253,7 +253,7 @@ const Affiliates: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-widest font-black text-slate-500 ml-1">DNI</label>
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">DNI</label>
                   <input
                     type="text" required
                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
@@ -262,7 +262,7 @@ const Affiliates: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-widest font-black text-slate-500 ml-1">Email Corporativo</label>
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Email Corporativo</label>
                   <input
                     type="email" required
                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
@@ -273,7 +273,7 @@ const Affiliates: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-widest font-black text-slate-500 ml-1">Nivel de Cobertura</label>
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Nivel de Cobertura</label>
                 <select
                   className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors appearance-none"
                   value={formData.planName}
@@ -296,7 +296,7 @@ const Affiliates: React.FC = () => {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-[#020617] px-8 py-3 rounded-2xl font-black transition-all disabled:opacity-50"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-[#020617] px-8 py-3 rounded-2xl font-bold transition-all disabled:opacity-50"
                 >
                   {isSubmitting ? 'Procesando...' : 'Guardar Cambios'}
                 </button>
@@ -313,8 +313,8 @@ const Affiliates: React.FC = () => {
             <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-3xl bg-rose-500/10 mb-6 border border-rose-500/20">
               <AlertCircle className="h-8 w-8 text-rose-500" />
             </div>
-            <h3 className="text-xl font-black text-white mb-2">¿Confirmar Suspensión?</h3>
-            <p className="text-sm text-slate-400 mb-8 font-medium">El acceso a los servicios de TeleMed será revocado inmediatamente.</p>
+            <h3 className="text-xl font-bold text-white mb-2">¿Confirmar Suspensión?</h3>
+            <p className="text-sm text-slate-400 mb-8 font-medium">El acceso a los servicios de MEDINEX será revocado inmediatamente.</p>
             <div className="flex justify-center space-x-4">
               <button
                 onClick={() => setDeleteConfirmId(null)}
@@ -325,7 +325,7 @@ const Affiliates: React.FC = () => {
               <button
                 onClick={() => handleDeactivate(deleteConfirmId)}
                 disabled={isSubmitting}
-                className="px-6 py-3 bg-rose-500 text-white rounded-2xl font-black hover:bg-rose-600 transition-all"
+                className="px-6 py-3 bg-rose-500 text-white rounded-2xl font-bold hover:bg-rose-600 transition-all"
               >
                 {isSubmitting ? '...' : 'Confirmar'}
               </button>

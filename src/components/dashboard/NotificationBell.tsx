@@ -86,7 +86,7 @@ export const NotificationBell: React.FC<Props> = ({ userId }) => {
       >
         <Bell size={24} className={unreadCount > 0 ? 'animate-bounce-subtle' : ''} />
         {unreadCount > 0 && (
-          <span className="absolute top-2 right-2 w-5 h-5 bg-emerald-500 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.5)]">
+          <span className="absolute top-2 right-2 w-5 h-5 bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.5)]">
             {unreadCount > 9 ? '+9' : unreadCount}
           </span>
         )}
@@ -95,11 +95,11 @@ export const NotificationBell: React.FC<Props> = ({ userId }) => {
       {isOpen && (
         <div className="absolute right-0 mt-4 w-96 max-h-[500px] bg-slate-900/90 backdrop-blur-3xl border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
-            <h3 className="font-black text-white text-lg tracking-tight">Notificaciones</h3>
+            <h3 className="font-bold text-white text-lg tracking-tight">Notificaciones</h3>
             {unreadCount > 0 && (
               <button 
                 onClick={handleMarkAllAsRead}
-                className="text-[10px] font-black text-emerald-400 hover:text-emerald-300 uppercase tracking-widest transition-colors"
+                className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 uppercase tracking-widest transition-colors"
               >
                 Marcar todo como leído
               </button>
@@ -126,11 +126,11 @@ export const NotificationBell: React.FC<Props> = ({ userId }) => {
                     <div className="absolute top-4 left-2 w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
                   )}
                   <div className="flex items-start gap-3">
-                    <div className={`mt-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter border ${getTypeStyles(notif.type)}`}>
+                    <div className={`mt-1 px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-tighter border ${getTypeStyles(notif.type)}`}>
                       {notif.type}
                     </div>
                     <div className="flex-1">
-                      <h4 className={`text-sm font-black tracking-tight mb-1 ${notif.isRead ? 'text-slate-400' : 'text-white'}`}>
+                      <h4 className={`text-sm font-bold tracking-tight mb-1 ${notif.isRead ? 'text-slate-400' : 'text-white'}`}>
                         {notif.title}
                       </h4>
                       <p className="text-xs text-slate-400 leading-relaxed mb-3">
@@ -172,7 +172,7 @@ export const NotificationBell: React.FC<Props> = ({ userId }) => {
           </div>
 
           <div className="p-4 bg-white/5 border-t border-white/10 text-center">
-            <button className="text-[10px] font-black text-slate-500 hover:text-white uppercase tracking-[0.3em] transition-colors">
+            <button className="text-[10px] font-bold text-slate-500 hover:text-white uppercase tracking-[0.3em] transition-colors">
               Ver historial completo
             </button>
           </div>

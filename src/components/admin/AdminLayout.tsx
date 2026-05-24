@@ -15,6 +15,7 @@ import {
   Building2
 } from 'lucide-react';
 import { User } from '../../types';
+import logoMedinex from '../../logo_medinex.jpeg';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -47,8 +48,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
       {/* Mobile Header */}
       <div className="md:hidden bg-[#0f172a]/80 backdrop-blur-md border-b border-white/5 p-4 flex justify-between items-center sticky top-0 z-50">
         <div className="flex items-center space-x-2 font-bold text-emerald-400 text-xl tracking-tight">
-          <ShieldCheck className="text-emerald-500" />
-          <span>OCC <span className="text-slate-400 font-light text-sm">v2.0</span></span>
+          <img src={logoMedinex} alt="Medinex Logo" className="w-10 h-10 object-contain rounded-lg border border-white/10" />
+          <span>MEDINEX <span className="text-slate-400 font-light text-sm">v2.0</span></span>
         </div>
         <button
           type="button"
@@ -64,15 +65,15 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
         className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 ease-out z-40 w-72 bg-[#0f172a]/40 backdrop-blur-xl border-r border-white/5 flex flex-col`}
       >
         <div className="p-8">
-          <div className="flex items-center space-x-3 mb-10 hidden md:flex">
-            <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-500/50 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.2)]">
-              <ShieldCheck className="text-emerald-400" size={24} />
+          <div className="flex flex-col items-center space-y-4 mb-10 hidden md:flex text-center border-b border-white/5 pb-6 w-full">
+            <div className="w-24 h-24 bg-white/5 rounded-2xl shadow-xl border border-white/10 flex items-center justify-center p-2 hover:scale-105 transition-transform duration-500 select-none">
+              <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                OCC Premium
+              <h1 className="font-extrabold text-xl tracking-[0.05em] bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                MEDINEX
               </h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-500/70 font-semibold">Command Center</p>
+              <p className="text-[9px] uppercase tracking-[0.25em] text-emerald-500/70 font-bold mt-1">Command Center</p>
             </div>
           </div>
 

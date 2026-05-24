@@ -128,7 +128,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               <div className="w-8 h-8 bg-amber-500/10 text-amber-500 rounded-lg flex items-center justify-center">
                 <Users size={16} />
               </div>
-              <h3 className="font-black text-white text-sm tracking-tight uppercase">Sala de Espera</h3>
+              <h3 className="font-bold text-white text-sm tracking-tight uppercase">Sala de Espera</h3>
             </div>
             
             <div className="space-y-3">
@@ -140,7 +140,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'waiting' ? 'bg-amber-500 animate-pulse' : 'bg-slate-600'}`}></span>
-                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">{p.status === 'waiting' ? 'En Espera' : 'Programado'}</span>
+                    <span className="text-[9px] font-bold uppercase text-slate-500 tracking-widest">{p.status === 'waiting' ? 'En Espera' : 'Programado'}</span>
                   </div>
                 </div>
               ))}
@@ -148,7 +148,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
           </div>
           
           <div className="mt-auto p-6 border-t border-white/5">
-             <Button variant="outline" className="w-full text-[9px] h-11 border-white/10 tracking-[0.2em] uppercase font-black">
+             <Button variant="outline" className="w-full text-[9px] h-11 border-white/10 tracking-[0.2em] uppercase font-bold">
                Agenda Completa
              </Button>
           </div>
@@ -181,16 +181,16 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 <span className={`absolute -top-1 -right-1 w-3.5 h-3.5 ${isMicrophoneEnabled ? 'bg-emerald-500' : 'bg-red-500'} rounded-full border-[3px] border-slate-900 animate-pulse`}></span>
               </div>
               <div>
-                <p className={`text-[9px] font-black ${isDoctor ? 'text-teal-500' : 'text-emerald-500'} uppercase tracking-[0.25em] leading-none mb-2`}>
+                <p className={`text-[9px] font-bold ${isDoctor ? 'text-teal-500' : 'text-emerald-500'} uppercase tracking-[0.25em] leading-none mb-2`}>
                   {isDoctor ? 'MÉDICO EN LÍNEA' : 'PACIENTE EN LÍNEA'}
                 </p>
                 <div className="flex items-center gap-3">
-                  <h1 className="text-base font-black text-white tracking-tight leading-none">
+                  <h1 className="text-base font-bold text-white tracking-tight leading-none">
                     {isDoctor ? (appointment?.patientName || 'Cargando Paciente...') : 'Dr. Profesional'}
                   </h1>
                   <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
                     <Shield size={10} className="text-emerald-500" />
-                    <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">SECURE</span>
+                    <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest">SECURE</span>
                   </div>
                 </div>
               </div>
@@ -199,8 +199,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
             <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 px-6 py-4 rounded-3xl flex items-center gap-4 shadow-2xl">
               <Clock size={16} className="text-slate-500" />
               <div className="flex flex-col">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-0.5">DURACIÓN</span>
-                <span className="text-sm font-black font-mono text-white tracking-wider">{formatTime(elapsed)}</span>
+                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">DURACIÓN</span>
+                <span className="text-sm font-bold font-mono text-white tracking-wider">{formatTime(elapsed)}</span>
               </div>
             </div>
           </div>
@@ -208,18 +208,18 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
           <div className="flex items-center gap-3 pointer-events-auto">
             <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-4 rounded-3xl flex items-center gap-8 shadow-2xl">
               <div className="flex flex-col items-center">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">CONEXIÓN</span>
+                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">CONEXIÓN</span>
                 <div className="flex items-center gap-2">
                   <Activity size={14} className={getQualityColor()} />
-                  <span className={`text-[10px] font-mono font-black uppercase ${getQualityColor()}`}>{quality}</span>
+                  <span className={`text-[10px] font-mono font-bold uppercase ${getQualityColor()}`}>{quality}</span>
                 </div>
               </div>
               <div className="w-px h-8 bg-white/5"></div>
               <div className="flex flex-col items-center">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">CIFRADO</span>
+                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">CIFRADO</span>
                 <div className="flex items-center gap-2">
                   <Lock size={14} className="text-emerald-500" />
-                  <span className="text-[10px] font-mono font-black text-emerald-500">AES-256</span>
+                  <span className="text-[10px] font-mono font-bold text-emerald-500">AES-256</span>
                 </div>
               </div>
             </div>
@@ -254,18 +254,18 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                   <FileText size={24} />
                 </div>
                 <div>
-                  <h3 className="font-black text-white text-xl tracking-tight uppercase">Expediente</h3>
-                  <p className="text-[9px] font-black text-slate-500 tracking-[0.3em] uppercase">Control Clínico</p>
+                  <h3 className="font-bold text-white text-xl tracking-tight uppercase">Expediente</h3>
+                  <p className="text-[9px] font-bold text-slate-500 tracking-[0.3em] uppercase">Control Clínico</p>
                 </div>
               </div>
               
               <div className="space-y-3">
                 <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Identidad Paciente</span>
+                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Identidad Paciente</span>
                   <p className="text-sm font-bold text-white">{appointment?.patientName || 'Cargando...'}</p>
                 </div>
                 <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">ID Sesión Encriptada</span>
+                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">ID Sesión Encriptada</span>
                   <p className="text-xs font-mono text-slate-400">{appointmentId?.substring(0, 16).toUpperCase()}</p>
                 </div>
               </div>
@@ -279,7 +279,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                     <Database size={16} />
                   </div>
                   <div className="text-left">
-                    <p className="text-[10px] font-black text-white uppercase tracking-widest">Bóveda Médica</p>
+                    <p className="text-[10px] font-bold text-white uppercase tracking-widest">Bóveda Médica</p>
                     <p className="text-[9px] text-emerald-500/60 font-bold uppercase tracking-widest">Historial Previo</p>
                   </div>
                 </div>
@@ -289,14 +289,14 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
 
             <div className="flex-1 p-10 flex flex-col min-h-0">
               <div className="flex items-center justify-between mb-6">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Evolución Médica</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em]">Evolución Médica</label>
                 <button 
                   onClick={handleAiProfessionalize}
                   disabled={isAnalyzing || !notes.trim()}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${isAnalyzing ? 'bg-white/5 border-white/10 opacity-50' : 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 text-emerald-400 hover:scale-105 shadow-lg shadow-emerald-500/10'}`}
                 >
                   <Sparkles size={14} className={isAnalyzing ? 'animate-spin' : ''} />
-                  <span className="text-[9px] font-black uppercase tracking-widest">{isAnalyzing ? 'PROCESANDO...' : 'AI MAGIC'}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest">{isAnalyzing ? 'PROCESANDO...' : 'AI MAGIC'}</span>
                 </button>
               </div>
               <textarea
@@ -313,7 +313,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 onClick={handleSaveNotes}
                 isLoading={isSavingNotes}
                 disabled={!notes.trim()}
-                className="w-full border-white/10 text-white hover:bg-white/5 h-14 rounded-2xl tracking-[0.25em] uppercase text-[10px] font-black"
+                className="w-full border-white/10 text-white hover:bg-white/5 h-14 rounded-2xl tracking-[0.25em] uppercase text-[10px] font-bold"
                 icon={<Save size={18} />}
               >
                 Actualizar Ficha
@@ -323,7 +323,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 variant="primary"
                 onClick={handleCompleteAppointment}
                 isLoading={isCompleting}
-                className="w-full bg-teal-600 hover:bg-teal-500 text-white h-14 rounded-2xl shadow-[0_10px_40px_rgba(20,184,166,0.2)] tracking-[0.25em] uppercase text-[10px] font-black border-none"
+                className="w-full bg-teal-600 hover:bg-teal-500 text-white h-14 rounded-2xl shadow-[0_10px_40px_rgba(20,184,166,0.2)] tracking-[0.25em] uppercase text-[10px] font-bold border-none"
                 icon={<CheckCircle size={18} />}
               >
                 Finalizar Turno
@@ -334,21 +334,21 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
           /* PATIENT INFO & PRIVACY */
           <div className="flex flex-col h-full">
             <div className="p-12 border-b border-white/5 bg-gradient-to-b from-emerald-500/10 to-transparent text-center">
-              <div className="w-24 h-24 bg-slate-800 rounded-[2.5rem] mx-auto mb-8 flex items-center justify-center text-emerald-500 text-4xl font-black border border-white/10 shadow-2xl relative">
+              <div className="w-24 h-24 bg-slate-800 rounded-[2.5rem] mx-auto mb-8 flex items-center justify-center text-emerald-500 text-4xl font-bold border border-white/10 shadow-2xl relative">
                 DR
                 <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-xl flex items-center justify-center text-white border-4 border-slate-950 shadow-xl">
                   <Shield size={16} />
                 </div>
               </div>
-              <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em] mb-3">Atención Profesional</p>
-              <h3 className="text-2xl font-black text-white tracking-tight">Dr. Profesional</h3>
+              <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.4em] mb-3">Atención Profesional</p>
+              <h3 className="text-2xl font-bold text-white tracking-tight">Dr. Profesional</h3>
               <p className="text-xs text-slate-500 font-bold mt-2 uppercase tracking-[0.2em]">Cardiología Avanzada</p>
             </div>
 
             <div className="flex-1 p-10 space-y-12 overflow-y-auto">
               {/* Privacy Checklist */}
               <div className="space-y-6">
-                <h4 className="text-[11px] font-black text-white uppercase tracking-[0.3em] flex items-center gap-3">
+                <h4 className="text-[11px] font-bold text-white uppercase tracking-[0.3em] flex items-center gap-3">
                   <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
                   Privacidad & Seguridad
                 </h4>
@@ -399,7 +399,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               <div className="p-8 bg-slate-900/50 rounded-[2rem] border border-white/5 relative overflow-hidden group">
                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-emerald-500/10 transition-all duration-700"></div>
                  <Shield className="text-emerald-500/40 mb-6" size={40} />
-                 <h4 className="text-xs font-black text-white uppercase tracking-[0.2em] mb-3">Protocolo HIPAA & GDPR</h4>
+                 <h4 className="text-xs font-bold text-white uppercase tracking-[0.2em] mb-3">Protocolo HIPAA & GDPR</h4>
                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
                    Sus datos médicos están protegidos bajo los estándares internacionales más rigurosos. Ningún tercero tiene acceso a esta sesión.
                  </p>
@@ -412,8 +412,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                  <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
                  <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
                </div>
-               <p className="text-[10px] text-slate-700 font-black uppercase tracking-[0.5em]">
-                 TELEMED PRO ZEN
+               <p className="text-[10px] text-slate-700 font-bold uppercase tracking-[0.5em]">
+                 MEDINEX ZEN
                </p>
             </div>
           </div>
@@ -430,8 +430,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                   <Database size={28} />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black text-white tracking-tight uppercase">Bóveda Médica</h3>
-                  <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em]">Historial Clínico del Paciente</p>
+                  <h3 className="text-2xl font-bold text-white tracking-tight uppercase">Bóveda Médica</h3>
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.4em]">Historial Clínico del Paciente</p>
                 </div>
               </div>
               <button 
@@ -464,8 +464,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                       <div className="flex-1 bg-white/5 border border-white/5 p-8 rounded-[2.5rem] group-hover:border-emerald-500/30 transition-all duration-500">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1 block">Consulta Finalizada</span>
-                            <h4 className="text-lg font-black text-white tracking-tight">{new Date(record.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}</h4>
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1 block">Consulta Finalizada</span>
+                            <h4 className="text-lg font-bold text-white tracking-tight">{new Date(record.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}</h4>
                           </div>
                           <div className="px-3 py-1.5 bg-slate-900 border border-white/10 rounded-xl">
                             <span className="text-[10px] font-mono text-slate-400 uppercase">{record.id.substring(0, 8)}</span>
@@ -480,11 +480,11 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                               <UserIcon size={14} />
                             </div>
                             <div>
-                              <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Médico Tratante</p>
+                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Médico Tratante</p>
                               <p className="text-[10px] font-bold text-white uppercase">{record.doctorName || 'Dr. Desconocido'}</p>
                             </div>
                           </div>
-                          <Button variant="outline" className="h-10 px-4 text-[9px] border-white/10 hover:bg-white/5 tracking-widest font-black uppercase">
+                          <Button variant="outline" className="h-10 px-4 text-[9px] border-white/10 hover:bg-white/5 tracking-widest font-bold uppercase">
                             Ver PDF
                           </Button>
                         </div>
@@ -498,7 +498,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
             <div className="p-10 border-t border-white/5 bg-slate-950/50">
                <div className="flex items-center justify-center gap-2 opacity-20">
                  <Lock size={12} />
-                 <span className="text-[8px] font-black uppercase tracking-[0.4em]">Acceso Restringido - Sólo Personal Autorizado</span>
+                 <span className="text-[8px] font-bold uppercase tracking-[0.4em]">Acceso Restringido - Sólo Personal Autorizado</span>
                </div>
             </div>
           </div>
@@ -661,17 +661,40 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
       <WaitingExperience 
         patientName={user.name || 'Paciente'} 
         onReady={() => setIsHandshakeComplete(true)} 
+        onCancel={() => navigate(user.role === 'doctor' ? '/doctor' : '/patient')}
       />
     );
   }
 
   if (!serverUrl || error || !token) {
-    // Basic loading/error states (simplified for brevity here, normally expanded)
     return (
-      <div className="h-screen bg-slate-950 flex items-center justify-center p-6 text-white font-black uppercase tracking-widest">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <Activity className="text-teal-500" size={48} />
-          <span>{error ? 'Error de Conexión' : 'Sincronizando Túnel de Video...'}</span>
+      <div className="h-screen bg-slate-950 flex items-center justify-center p-6 text-white font-sans">
+        <div className="flex flex-col items-center gap-6 max-w-md text-center bg-slate-900/40 border border-white/5 p-12 rounded-[2.5rem] backdrop-blur-3xl shadow-3xl">
+          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${error ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-teal-500/10 text-teal-400 border border-teal-500/20'} ${!error ? 'animate-pulse' : ''}`}>
+            {error ? <AlertCircle size={28} /> : <Activity size={28} />}
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-white tracking-tight uppercase mb-2">
+              {error ? 'Fallo de Conexión' : 'Sincronizando Túnel'}
+            </h3>
+            <p className="text-slate-400 text-xs font-medium leading-relaxed">
+              {error ? `No pudimos inicializar la videollamada: ${error}` : 'Estableciendo cifrado de punto a punto y negociando códecs de video...'}
+            </p>
+          </div>
+          {error ? (
+            <button 
+              onClick={() => navigate(user.role === 'doctor' ? '/doctor' : '/patient')}
+              className="mt-4 px-8 py-3.5 bg-white hover:bg-emerald-500 text-slate-950 hover:text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all shadow-xl active:scale-95"
+            >
+              Volver al Dashboard
+            </button>
+          ) : (
+            <div className="flex gap-1.5 justify-center py-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-bounce [animation-delay:-0.3s]"></div>
+              <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-bounce [animation-delay:-0.15s]"></div>
+              <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-bounce"></div>
+            </div>
+          )}
         </div>
       </div>
     );

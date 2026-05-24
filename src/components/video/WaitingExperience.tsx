@@ -4,9 +4,10 @@ import { Shield, Camera, Mic, Wifi, Activity, CheckCircle2, Lock } from 'lucide-
 interface WaitingExperienceProps {
   patientName: string;
   onReady: () => void;
+  onCancel?: () => void;
 }
 
-export const WaitingExperience: React.FC<WaitingExperienceProps> = ({ patientName, onReady }) => {
+export const WaitingExperience: React.FC<WaitingExperienceProps> = ({ patientName, onReady, onCancel }) => {
   const [steps, setSteps] = useState([
     { id: 'perms', label: 'Verificando Permisos Biométricos', status: 'loading', icon: Shield },
     { id: 'media', label: 'Sincronizando Cámara y Micrófono', status: 'pending', icon: Camera },
@@ -46,9 +47,9 @@ export const WaitingExperience: React.FC<WaitingExperienceProps> = ({ patientNam
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full mb-6">
             <Shield size={14} className="text-emerald-500" />
-            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">Protocolo de Seguridad Activo</span>
+            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.2em]">Protocolo de Seguridad Activo</span>
           </div>
-          <h2 className="text-3xl font-black text-white tracking-tight mb-2">Hola, {patientName}</h2>
+          <h2 className="text-3xl font-bold text-white tracking-tight mb-2">Hola, {patientName}</h2>
           <p className="text-slate-400 text-sm font-medium">Estamos preparando su sala de consulta privada.</p>
         </div>
 
@@ -93,8 +94,16 @@ export const WaitingExperience: React.FC<WaitingExperienceProps> = ({ patientNam
           <div className="flex items-center gap-6 opacity-40">
              <Activity size={16} className="text-slate-400" />
              <div className="w-px h-4 bg-white/20"></div>
-             <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em]">TeleMed Pro Zen v1.0</span>
+             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">MEDINEX Zen v1.0</span>
           </div>
+          {onCancel && (
+            <button 
+              onClick={onCancel}
+              className="text-slate-600 hover:text-emerald-400 transition-colors text-[10px] font-bold uppercase tracking-[0.25em] bg-white/5 border border-white/5 px-6 py-2.5 rounded-xl hover:bg-white/10 active:scale-95"
+            >
+              Cancelar y Volver
+            </button>
+          )}
         </div>
       </div>
 

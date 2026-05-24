@@ -133,6 +133,8 @@ export interface Agreement {
   taxCategory?: string;
   basePlanId?: string;
   metadata?: Record<string, any>;
+  status?: string;
+  baseCostPerAffiliate?: number;
 }
 
 export interface FamilyGroup {

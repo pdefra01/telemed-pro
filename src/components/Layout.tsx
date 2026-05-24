@@ -16,6 +16,7 @@ import {
   Wand2
 } from 'lucide-react';
 import { User, Role } from '../types';
+import logoMedinex from '../logo_medinex.jpeg';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -82,8 +83,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       {/* Mobile Header */}
       <div className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-50">
         <div className="flex items-center space-x-2 font-bold text-teal-600 text-xl">
-          <Stethoscope />
-          <span>TeleMed Pro</span>
+          <img src={logoMedinex} alt="Medinex Logo" className="w-10 h-10 object-contain rounded-md shadow-sm" />
+          <span>MEDINEX</span>
         </div>
         <button
           type="button"
@@ -101,9 +102,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-200 ease-in-out z-40 w-64 bg-white shadow-lg flex flex-col justify-between`}
       >
         <div>
-          <div className="p-6 flex items-center space-x-2 font-bold text-teal-600 text-2xl hidden md:flex">
-            <Stethoscope size={28} />
-            <span>TeleMed Pro</span>
+          <div className="p-6 flex flex-col items-center space-y-3 hidden md:flex border-b border-gray-100 mb-6 text-center">
+            <div className="w-24 h-24 bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center p-2 hover:scale-105 transition-transform duration-500 select-none">
+              <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
+            </div>
+            <span className="text-xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+              MED<span className="text-[#0dbda9]">IN</span>EX
+            </span>
           </div>
 
           <div className="px-6 mb-6">

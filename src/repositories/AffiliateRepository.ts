@@ -184,7 +184,9 @@ export class AffiliateRepository {
       avatarUrl: row.avatar_url,
       address: row.address,
       phone: row.phone,
-      agreementId: row.agreement_id
+      agreementId: row.agreement_id,
+      paymentStatus: row.payment_status || 'paid',
+      currentPeriodQuotaUsed: row.current_period_quota_used || 0
     };
   }
 }

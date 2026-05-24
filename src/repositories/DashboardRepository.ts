@@ -78,7 +78,10 @@ export class DashboardRepository {
       return {
         totalDoctors: 0,
         totalAffiliates: 0,
-        recentAppointments: 0
+        recentAppointments: 0,
+        activeAgreements: 0,
+        monthlyRevenue: 0,
+        pendingInvoices: 0
       };
     }
   }

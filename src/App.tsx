@@ -28,10 +28,8 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 
 // Error Boundary simple para capturar errores de renderizado
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+  state: {hasError: boolean, error: any} = { hasError: false, error: null };
+  props: {children: React.ReactNode};
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
@@ -49,7 +47,7 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
             <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center text-red-500 mb-6">
               <AlertCircle size={32} />
             </div>
-            <h1 className="text-2xl font-black mb-2 tracking-tight">Oops! Algo salió mal</h1>
+            <h1 className="text-2xl font-bold mb-2 tracking-tight">Oops! Algo salió mal</h1>
             <p className="text-slate-400 mb-6 leading-relaxed">
               La aplicación encontró un error inesperado. No te preocupes, tus datos están seguros.
             </p>
@@ -74,7 +72,7 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem('telemed_user');
+      const saved = localStorage.getItem('medinex_user');
       if (!saved) return null;
       // Validar que sea un JSON válido y que tenga estructura de usuario
       const parsed = JSON.parse(saved);
@@ -84,20 +82,20 @@ const App: React.FC = () => {
       return null;
     } catch (e) {
       console.error("Error al cargar usuario de localStorage:", e);
-      localStorage.removeItem('telemed_user');
+      localStorage.removeItem('medinex_user');
       return null;
     }
   });
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
-    localStorage.setItem('telemed_user', JSON.stringify(loggedInUser));
+    localStorage.setItem('medinex_user', JSON.stringify(loggedInUser));
   };
 
   const handleLogout = async () => {
     await authRepository.logout();
     setUser(null);
-    localStorage.removeItem('telemed_user');
+    localStorage.removeItem('medinex_user');
   };
 
   const MainContent = (

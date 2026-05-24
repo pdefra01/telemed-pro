@@ -95,7 +95,7 @@ const AdminDashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-emerald-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Live Monitor</h2>
-          <h1 className="text-4xl font-black text-white tracking-tighter">
+          <h1 className="text-4xl font-bold text-white tracking-tighter">
             Operational <span className="text-slate-500 font-light italic">Command</span> Center
           </h1>
         </div>
@@ -296,7 +296,7 @@ const AdminDashboard: React.FC = () => {
                     </td>
                     <td className="py-4 text-right">
                       <div className="inline-flex items-center bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-xl">
-                        <span className="text-emerald-400 font-black text-xs mr-1">{doc.rating}</span>
+                        <span className="text-emerald-400 font-bold text-xs mr-1">{doc.rating}</span>
                         <ShieldCheck size={12} className="text-emerald-500" />
                       </div>
                     </td>

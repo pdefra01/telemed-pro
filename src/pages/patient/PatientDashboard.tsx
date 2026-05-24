@@ -200,7 +200,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         />
                     </div>
                     <div className="hidden sm:block">
-                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Status: <span className="text-emerald-500">Encrypted & Online</span></p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em]">Status: <span className="text-emerald-500">Encrypted & Online</span></p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -210,7 +210,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <UserIcon size={20} className="text-slate-400" />
                         </div>
                         <div className="hidden md:block pr-2">
-                            <p className="text-xs font-black text-white leading-none mb-1">{(user.name || 'Paciente').split(' ')[0]}</p>
+                            <p className="text-xs font-bold text-white leading-none mb-1">{(user.name || 'Paciente').split(' ')[0]}</p>
                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Mi Perfil</p>
                         </div>
                     </Link>
@@ -227,14 +227,14 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         <div className="flex flex-wrap items-center gap-3 mb-6">
                             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em]">Sistema Operativo</span>
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-[0.3em]">Sistema Operativo</span>
                             </div>
                             <div className="hidden sm:inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)]">
                                 <Shield size={12} className="text-blue-400" />
-                                <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">Multi-Node Robustness Active</span>
+                                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-[0.3em]">Multi-Node Robustness Active</span>
                             </div>
                         </div>
-                        <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-white mb-4 leading-none">
+                        <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white mb-4 leading-none">
                             Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 bg-[length:200%_auto] animate-gradient-x">{(user.name || 'Paciente').split(' ')[0]}</span>
                         </h1>
                         <p className="text-xl text-slate-400 font-medium max-w-xl leading-relaxed">
@@ -250,7 +250,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         >
                             <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                             <Video size={24} className="mr-4 transition-transform group-hover:scale-110 group-hover:rotate-12" /> 
-                            <span className="text-xl font-black uppercase tracking-widest">Nuevo Turno</span>
+                            <span className="text-xl font-bold uppercase tracking-widest">Nuevo Turno</span>
                         </Button>
                         <Button
                             variant="outline"
@@ -259,7 +259,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             className="bg-white/5 border-white/10 hover:bg-white/10 text-white px-10 py-8 rounded-3xl group h-20"
                         >
                             <Upload size={24} className="mr-4 transition-transform group-hover:-translate-y-2" /> 
-                            <span className="text-xl font-black uppercase tracking-widest">Subir Estudio</span>
+                            <span className="text-xl font-bold uppercase tracking-widest">Subir Estudio</span>
                         </Button>
                     </div>
                 </div>
@@ -270,7 +270,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                     {/* Next Appointment Card */}
                     <div className="group bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl transition-all hover:border-emerald-500/20">
                         <div className="flex justify-between items-center mb-10">
-                            <h3 className="font-black text-2xl text-white flex items-center tracking-tight">
+                            <h3 className="font-bold text-2xl text-white flex items-center tracking-tight">
                                 <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mr-4 border border-emerald-500/20">
                                     <Clock className="text-emerald-400" size={24} />
                                 </div>
@@ -279,7 +279,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <button
                                 type="button"
                                 onClick={() => setShowAppointmentModal(true)}
-                                className="text-xs text-emerald-400 font-black cursor-pointer hover:text-emerald-300 transition-all uppercase tracking-[0.3em] bg-emerald-500/5 px-4 py-2 rounded-full border border-emerald-500/10"
+                                className="text-xs text-emerald-400 font-bold cursor-pointer hover:text-emerald-300 transition-all uppercase tracking-[0.3em] bg-emerald-500/5 px-4 py-2 rounded-full border border-emerald-500/10"
                             >
                                 Gestionar Agenda
                             </button>
@@ -288,24 +288,24 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         {isLoadingAppointments ? (
                             <div className="flex flex-col items-center justify-center py-16 text-emerald-400/60">
                                 <div className="w-12 h-12 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-6"></div>
-                                <span className="text-[10px] font-black tracking-[0.4em] uppercase">Resolviendo Conexión Segura...</span>
+                                <span className="text-[10px] font-bold tracking-[0.4em] uppercase">Resolviendo Conexión Segura...</span>
                             </div>
                         ) : nextAppointment ? (
                             <div className="group/card relative flex flex-col sm:flex-row items-center bg-white/5 hover:bg-white/10 rounded-[2rem] p-8 border border-white/5 transition-all duration-500 overflow-hidden">
                                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
                                 <div className="flex-shrink-0 mb-6 sm:mb-0 sm:mr-8 relative">
                                     <div className="w-24 h-24 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-[0_10px_30px_rgba(16,185,129,0.3)] group-hover/card:scale-110 transition-transform duration-500">
-                                        <span className="text-4xl font-black leading-none tracking-tighter">{nextAppointment.date?.split('-')[2] || nextAppointment.date}</span>
-                                        <span className="text-[10px] font-black uppercase tracking-widest mt-1">Hoy</span>
+                                        <span className="text-4xl font-bold leading-none tracking-tighter">{nextAppointment.date?.split('-')[2] || nextAppointment.date}</span>
+                                        <span className="text-[10px] font-bold uppercase tracking-widest mt-1">Hoy</span>
                                     </div>
                                     <div className="absolute -top-2 -right-2 w-6 h-6 bg-emerald-500 rounded-full border-4 border-slate-900 animate-pulse"></div>
                                 </div>
                                 <div className="flex-1 text-center sm:text-left relative">
                                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-3">
-                                        <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full uppercase tracking-[0.2em]">Live Session</span>
-                                        <span className="text-[9px] font-black bg-white/5 text-slate-500 px-3 py-1 rounded-full uppercase tracking-[0.2em]">ID: {nextAppointment.id.slice(0, 8)}</span>
+                                        <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full uppercase tracking-[0.2em]">Live Session</span>
+                                        <span className="text-[9px] font-bold bg-white/5 text-slate-500 px-3 py-1 rounded-full uppercase tracking-[0.2em]">ID: {nextAppointment.id.slice(0, 8)}</span>
                                     </div>
-                                    <p className="font-black text-3xl text-white mb-2 tracking-tight group-hover/card:text-emerald-400 transition-colors">{nextAppointment.doctorName}</p>
+                                    <p className="font-bold text-3xl text-white mb-2 tracking-tight group-hover/card:text-emerald-400 transition-colors">{nextAppointment.doctorName}</p>
                                     <p className="text-slate-400 font-bold text-lg flex items-center justify-center sm:justify-start">
                                         <Video size={18} className="mr-3 text-emerald-500" /> 
                                         {nextAppointment.time} <span className="mx-2 opacity-30">|</span> 
@@ -316,13 +316,13 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     {nextAppointment.status === 'confirmed' ? (
                                         <Link
                                             to={`/room/${nextAppointment.id}`}
-                                            className="group/btn relative bg-emerald-500 hover:bg-emerald-400 text-white px-10 py-5 rounded-2xl font-black transition-all inline-block text-center shadow-[0_10px_40px_rgba(16,185,129,0.2)] overflow-hidden"
+                                            className="group/btn relative bg-emerald-500 hover:bg-emerald-400 text-white px-10 py-5 rounded-2xl font-bold transition-all inline-block text-center shadow-[0_10px_40px_rgba(16,185,129,0.2)] overflow-hidden"
                                         >
                                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform"></div>
                                             <span className="relative z-10 text-lg tracking-widest">INGRESAR</span>
                                         </Link>
                                     ) : (
-                                        <div className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-[0.3em] flex items-center gap-3">
+                                        <div className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-[0.3em] flex items-center gap-3">
                                             <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
                                             Pendiente
                                         </div>
@@ -346,7 +346,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             toast(error.message || 'Error al generar el turno', 'error');
                                         }
                                     }}
-                                    className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 rounded-2xl px-10 py-6 font-black uppercase tracking-widest text-xs"
+                                    className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 rounded-2xl px-10 py-6 font-bold uppercase tracking-widest text-xs"
                                 >
                                     Generar Acceso de Prueba
                                 </Button>
@@ -358,7 +358,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-10">
                         {/* Recent Records */}
                         <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl">
-                            <h3 className="font-black text-xl text-white mb-8 flex items-center tracking-tight">
+                            <h3 className="font-bold text-xl text-white mb-8 flex items-center tracking-tight">
                                 <FileText className="text-blue-400 mr-4" size={24} /> Historial Reciente
                             </h3>
                             <div className="space-y-5">
@@ -373,24 +373,24 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             <div key={record.id} className="group cursor-pointer bg-white/5 hover:bg-white/10 border border-white/5 p-6 rounded-3xl transition-all duration-300">
                                                 <div className="flex justify-between items-start mb-3">
                                                     <div>
-                                                        <p className="font-black text-white group-hover:text-emerald-400 transition-colors uppercase tracking-tight">{record.diagnosis}</p>
+                                                        <p className="font-bold text-white group-hover:text-emerald-400 transition-colors uppercase tracking-tight">{record.diagnosis}</p>
                                                         <p className="text-xs text-slate-500 font-bold mt-1 tracking-wider uppercase">Dr. {record.doctorName?.split(' ')[1] || record.doctorName}</p>
                                                     </div>
-                                                    <span className="text-[9px] font-black text-slate-500 bg-white/5 px-3 py-1 rounded-full uppercase tracking-widest border border-white/5">{record.date}</span>
+                                                    <span className="text-[9px] font-bold text-slate-500 bg-white/5 px-3 py-1 rounded-full uppercase tracking-widest border border-white/5">{record.date}</span>
                                                 </div>
                                                 <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed italic">"{record.notes}"</p>
                                             </div>
                                         ))}
                                         <Link
                                             to="/history"
-                                            className="w-full mt-4 py-5 text-center text-emerald-400 text-[10px] font-black hover:bg-emerald-400/5 rounded-2xl transition-all flex items-center justify-center border border-emerald-500/10 uppercase tracking-[0.4em]"
+                                            className="w-full mt-4 py-5 text-center text-emerald-400 text-[10px] font-bold hover:bg-emerald-400/5 rounded-2xl transition-all flex items-center justify-center border border-emerald-500/10 uppercase tracking-[0.4em]"
                                         >
                                             Historial Completo <ChevronRight size={14} className="ml-2" />
                                         </Link>
                                     </>
                                 ) : (
                                     <div className="text-center py-10 bg-white/2 rounded-3xl border border-dashed border-white/5">
-                                        <p className="text-[10px] text-slate-600 font-black uppercase tracking-[0.3em]">Sin Registros</p>
+                                        <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em]">Sin Registros</p>
                                     </div>
                                 )}
                             </div>
@@ -398,7 +398,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
                         {/* Recent Prescriptions */}
                         <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl">
-                            <h3 className="font-black text-xl text-white mb-8 flex items-center tracking-tight">
+                            <h3 className="font-bold text-xl text-white mb-8 flex items-center tracking-tight">
                                 <Plus className="text-teal-400 mr-4" size={24} /> Mis Recetas
                             </h3>
                             <div className="space-y-5">
@@ -412,9 +412,9 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         {recentPrescriptions.map(prescription => (
                                             <div key={prescription.id} className="group flex justify-between items-center bg-white/5 hover:bg-white/10 border border-white/5 p-6 rounded-3xl transition-all duration-300">
                                                 <div className="flex-1">
-                                                    <p className="font-black text-white text-base tracking-tight">Dr. {prescription.doctorName?.split(' ')[1] || prescription.doctorName}</p>
+                                                    <p className="font-bold text-white text-base tracking-tight">Dr. {prescription.doctorName?.split(' ')[1] || prescription.doctorName}</p>
                                                     <p className="text-[10px] text-slate-500 font-bold mb-3 uppercase tracking-widest">{prescription.medications.length} Medicamentos</p>
-                                                    <span className="text-[9px] font-black text-teal-400 bg-teal-400/10 px-3 py-1 rounded-full uppercase tracking-widest border border-teal-400/10">{prescription.date}</span>
+                                                    <span className="text-[9px] font-bold text-teal-400 bg-teal-400/10 px-3 py-1 rounded-full uppercase tracking-widest border border-teal-400/10">{prescription.date}</span>
                                                 </div>
                                                 {prescription.pdfUrl ? (
                                                     <a 
@@ -425,23 +425,23 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                         title="Descargar PDF"
                                                     >
                                                         <Download size={20} />
-                                                        <span className="text-[8px] font-black mt-1 uppercase">PDF</span>
+                                                        <span className="text-[8px] font-bold mt-1 uppercase">PDF</span>
                                                     </a>
                                                 ) : (
-                                                    <span className="text-[9px] text-slate-700 italic font-black uppercase tracking-tighter">N/A</span>
+                                                    <span className="text-[9px] text-slate-700 italic font-bold uppercase tracking-tighter">N/A</span>
                                                 )}
                                             </div>
                                         ))}
                                         <Link
                                             to="/prescriptions"
-                                            className="w-full mt-4 py-5 text-center text-teal-400 text-[10px] font-black hover:bg-teal-400/5 rounded-2xl transition-all flex items-center justify-center border border-teal-500/10 uppercase tracking-[0.4em]"
+                                            className="w-full mt-4 py-5 text-center text-teal-400 text-[10px] font-bold hover:bg-teal-400/5 rounded-2xl transition-all flex items-center justify-center border border-teal-500/10 uppercase tracking-[0.4em]"
                                         >
                                             Ver Todas <ChevronRight size={14} className="ml-2" />
                                         </Link>
                                     </>
                                 ) : (
                                     <div className="text-center py-10 bg-white/2 rounded-3xl border border-dashed border-white/5">
-                                        <p className="text-[10px] text-slate-600 font-black uppercase tracking-[0.3em]">Sin Recetas</p>
+                                        <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em]">Sin Recetas</p>
                                     </div>
                                 )}
                             </div>
@@ -461,8 +461,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         <div className="relative z-10 flex-1 flex flex-col justify-between">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <p className="text-[10px] text-blue-200 uppercase tracking-[0.4em] font-black opacity-60">ID Digital</p>
-                                    <h3 className="text-2xl font-black mt-2 tracking-tighter">TELEMED <span className="text-blue-300">PRO</span></h3>
+                                    <p className="text-[10px] text-blue-200 uppercase tracking-[0.4em] font-bold opacity-60">ID Digital</p>
+                                    <h3 className="text-2xl font-bold mt-2 tracking-tighter text-blue-300">MEDINEX</h3>
                                 </div>
                                 <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
                                     <Shield size={24} className="text-blue-200" />
@@ -479,16 +479,16 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     </div>
                                 </div>
                                 <div>
-                                    <p className="font-black text-2xl leading-none tracking-tight uppercase group-hover:text-blue-200 transition-colors">{user.name}</p>
+                                    <p className="font-bold text-2xl leading-none tracking-tight uppercase group-hover:text-blue-200 transition-colors">{user.name}</p>
                                     <div className="flex flex-col gap-1 mt-3">
-                                        <p className="text-[10px] text-blue-100/60 font-black uppercase tracking-widest flex items-center">
+                                        <p className="text-[10px] text-blue-100/60 font-bold uppercase tracking-widest flex items-center">
                                             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span> DNI: {user.dni || 'NO CARGADO'}
                                         </p>
-                                        <p className="text-[10px] text-blue-100/60 font-black uppercase tracking-widest flex items-center">
+                                        <p className="text-[10px] text-blue-100/60 font-bold uppercase tracking-widest flex items-center">
                                             <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full mr-2"></span> {user.planName || 'PLAN GLOBAL'}
                                         </p>
                                         {user.bloodType && (
-                                            <p className="text-[10px] text-red-300 font-black uppercase tracking-widest flex items-center">
+                                            <p className="text-[10px] text-red-300 font-bold uppercase tracking-widest flex items-center">
                                                 <span className="w-1.5 h-1.5 bg-red-400 rounded-full mr-2"></span> GS: {user.bloodType}
                                             </p>
                                         )}
@@ -498,15 +498,15 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
                             <div className="pt-6 border-t border-white/10 flex justify-between items-end">
                                 <div className="flex flex-col">
-                                    <p className="text-[9px] text-blue-300/40 uppercase font-black tracking-[0.3em] mb-1">Hash de Seguridad</p>
-                                    <p className="text-[10px] font-black tracking-[0.2em] text-blue-100/80">
+                                    <p className="text-[9px] text-blue-300/40 uppercase font-bold tracking-[0.3em] mb-1">Hash de Seguridad</p>
+                                    <p className="text-[10px] font-bold tracking-[0.2em] text-blue-100/80">
                                         {user.credentialHash ? `SEC-${user.credentialHash.slice(0, 8).toUpperCase()}` : 'VERIFICANDO...'}
                                     </p>
                                 </div>
                                 <div className="flex flex-col items-end">
                                     <div className="flex items-center gap-2 mb-2">
                                         <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
-                                        <span className="text-[8px] font-black text-blue-200/40 uppercase tracking-[0.2em]">Verified Hub</span>
+                                        <span className="text-[8px] font-bold text-blue-200/40 uppercase tracking-[0.2em]">Verified Hub</span>
                                     </div>
                                     <div className="bg-white/95 p-2 rounded-2xl shadow-[0_10px_20px_rgba(255,255,255,0.1)] group-hover:scale-110 transition-transform duration-500">
                                         <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden">
@@ -527,7 +527,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                     {/* Family Group Card */}
                     <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="font-black text-xl text-white tracking-tight">Grupo Familiar</h3>
+                            <h3 className="font-bold text-xl text-white tracking-tight">Grupo Familiar</h3>
                             <button
                                 type="button"
                                 onClick={() => setShowFamilyModal(true)}
@@ -540,17 +540,17 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <div className="flex items-center p-4 bg-emerald-500/5 rounded-3xl border border-emerald-500/10 group cursor-pointer hover:bg-emerald-500/10 transition-all">
                                 <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-2xl mr-4 border border-white/10 shadow-lg" />
                                 <div>
-                                    <p className="font-black text-white text-xs uppercase tracking-tight">{user.name}</p>
-                                    <p className="text-[9px] text-emerald-500 font-black uppercase tracking-[0.2em] mt-1">Titular</p>
+                                    <p className="font-bold text-white text-xs uppercase tracking-tight">{user.name}</p>
+                                    <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-[0.2em] mt-1">Titular</p>
                                 </div>
                             </div>
                             {user.familyMembers?.map(member => (
                                 <div key={member.id} className="flex items-center p-4 bg-white/2 rounded-3xl border border-white/5 group cursor-pointer hover:bg-white/5 transition-all">
-                                    <div className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-500 border border-white/5 flex items-center justify-center font-black mr-4 text-xl">
+                                    <div className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-500 border border-white/5 flex items-center justify-center font-bold mr-4 text-xl">
                                         {member.name.charAt(0)}
                                     </div>
                                     <div>
-                                        <p className="font-black text-slate-200 text-xs uppercase tracking-tight">{member.name}</p>
+                                        <p className="font-bold text-slate-200 text-xs uppercase tracking-tight">{member.name}</p>
                                         <p className="text-[9px] text-slate-600 font-bold uppercase tracking-widest mt-1">{member.relation} • {member.age} Años</p>
                                     </div>
                                 </div>
@@ -563,14 +563,14 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         <div className="absolute top-0 right-0 p-4">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
                         </div>
-                        <h3 className="font-black text-xl text-white mb-6 tracking-tight">Asistencia Inmediata</h3>
+                        <h3 className="font-bold text-xl text-white mb-6 tracking-tight">Asistencia Inmediata</h3>
                         <p className="text-xs text-slate-400 font-medium leading-relaxed mb-8">¿Necesitás ayuda técnica o médica urgente?</p>
                         <a
                             href="https://wa.me/1234567890" target="_blank" rel="noreferrer"
                             className="p-5 bg-emerald-500 hover:bg-emerald-400 rounded-[1.5rem] transition-all flex items-center justify-center space-x-4 group shadow-[0_10px_30px_rgba(16,185,129,0.3)] h-16"
                         >
                                 <Phone size={22} className="text-white group-hover:scale-110 transition-transform" />
-                                <span className="font-black text-white uppercase tracking-[0.2em] text-sm">WhatsApp Concierge</span>
+                                <span className="font-bold text-white uppercase tracking-[0.2em] text-sm">WhatsApp Concierge</span>
                             </a>
                         </div>
                     </div>
@@ -584,7 +584,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         {!uploadSuccess ? (
                             <>
                                 <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-2xl font-black text-white">Subir Estudio</h3>
+                                    <h3 className="text-2xl font-bold text-white">Subir Estudio</h3>
                                     <button onClick={() => setShowUploadModal(false)} className="text-slate-500 hover:text-white transition">
                                         <X size={28} />
                                     </button>
@@ -595,7 +595,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
                                 <div className="space-y-6 mb-8">
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Título del Estudio</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Título del Estudio</label>
                                         <input 
                                             type="text" 
                                             value={uploadTitle}
@@ -605,7 +605,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Categoría</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Categoría</label>
                                         <select 
                                             value={uploadType}
                                             onChange={(e) => setUploadType(e.target.value as any)}
@@ -629,7 +629,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     <div className="bg-emerald-500/10 p-5 rounded-2xl text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
                                         <Upload size={32} />
                                     </div>
-                                    <p className="text-sm font-black text-slate-300">
+                                    <p className="text-sm font-bold text-slate-300">
                                         {selectedFile ? selectedFile.name : 'Seleccionar Archivo'}
                                     </p>
                                     <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-tighter">PDF o Imagen (Máx. 5MB)</p>
@@ -639,13 +639,13 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     <Button
                                         onClick={handleUpload}
                                         disabled={isUploading || !selectedFile || !uploadTitle}
-                                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-500/20 disabled:bg-slate-800 disabled:text-slate-600"
+                                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-emerald-500/20 disabled:bg-slate-800 disabled:text-slate-600"
                                     >
                                         {isUploading ? 'SUBIENDO...' : 'CONFIRMAR ENVÍO'}
                                     </Button>
                                     <button
                                         onClick={() => setShowUploadModal(false)}
-                                        className="w-full py-4 text-slate-500 font-black text-sm hover:text-white transition uppercase tracking-widest"
+                                        className="w-full py-4 text-slate-500 font-bold text-sm hover:text-white transition uppercase tracking-widest"
                                     >
                                         Cancelar
                                     </button>
@@ -656,7 +656,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce border border-emerald-500/20">
                                     <Check size={40} />
                                 </div>
-                                <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">¡Éxito!</h3>
+                                <h3 className="text-2xl font-bold text-white mb-2 uppercase tracking-tight">¡Éxito!</h3>
                                 <p className="text-slate-400 font-medium">Tu estudio fue cargado correctamente.</p>
                             </div>
                         )}
@@ -669,7 +669,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
                     <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 w-full max-w-xl shadow-2xl animate-fade-in-up max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Agendar Turno</h3>
+                            <h3 className="text-2xl font-bold text-white uppercase tracking-tight">Agendar Turno</h3>
                             <button onClick={() => setShowAppointmentModal(false)} className="text-slate-500 hover:text-white transition">
                                 <X size={28} />
                             </button>
@@ -678,14 +678,14 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         <div className="space-y-8">
                             {/* Specialty Selection */}
                             <div>
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Especialidad</label>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Especialidad</label>
                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     {specialties.length > 0 ? (
                                         specialties.map(s => (
                                             <button
                                                 key={s}
                                                 onClick={() => setSelectedSpecialty(s)}
-                                                className={`p-3 text-xs font-black rounded-xl border transition-all ${
+                                                className={`p-3 text-xs font-bold rounded-xl border transition-all ${
                                                     selectedSpecialty === s 
                                                     ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
                                                     : 'bg-white/5 border-white/5 text-slate-400 hover:border-emerald-500/30'
@@ -696,7 +696,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         ))
                                     ) : (
                                         <div className="col-span-full py-4 text-center bg-white/5 rounded-xl border border-dashed border-white/10">
-                                            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
                                                 No hay especialidades disponibles en este momento
                                             </p>
                                         </div>
@@ -706,12 +706,12 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
                             {/* Doctor Selection */}
                             <div>
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Profesional Disponible</label>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Profesional Disponible</label>
                                 <div className="space-y-3">
                                     {isLoadingDoctors ? (
                                         <div className="flex flex-col items-center justify-center py-10 bg-white/5 rounded-2xl border border-dashed border-white/10">
                                             <div className="w-8 h-8 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-3"></div>
-                                            <span className="text-[10px] font-black text-emerald-400/60 uppercase tracking-[0.3em]">Sincronizando Profesionales...</span>
+                                            <span className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-[0.3em]">Sincronizando Profesionales...</span>
                                         </div>
                                     ) : availableDoctors.length > 0 ? (
                                         availableDoctors.map(doc => (
@@ -724,7 +724,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     : 'border-white/5 hover:border-emerald-500/30 hover:bg-white/10'
                                                 }`}
                                             >
-                                                <div className="w-14 h-14 bg-slate-800 rounded-xl mr-4 flex items-center justify-center text-emerald-400 font-black overflow-hidden border border-white/10 group-hover/doc:scale-105 transition-transform">
+                                                <div className="w-14 h-14 bg-slate-800 rounded-xl mr-4 flex items-center justify-center text-emerald-400 font-bold overflow-hidden border border-white/10 group-hover/doc:scale-105 transition-transform">
                                                     {doc.avatarUrl ? (
                                                         <img src={doc.avatarUrl} alt="" className="w-full h-full object-cover" />
                                                     ) : (
@@ -732,7 +732,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     )}
                                                 </div>
                                                 <div className="flex-1">
-                                                    <p className="font-black text-white group-hover/doc:text-emerald-400 transition-colors">{doc.name.toUpperCase()}</p>
+                                                    <p className="font-bold text-white group-hover/doc:text-emerald-400 transition-colors">{doc.name.toUpperCase()}</p>
                                                     <div className="flex items-center text-[10px] font-bold text-slate-500 mt-1">
                                                         <span className="flex items-center text-amber-400 mr-3">★ {doc.rating}</span>
                                                         <span className="uppercase tracking-widest">{doc.specialty}</span>
@@ -749,7 +749,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         ))
                                     ) : (
                                         <div className="text-center py-10 bg-white/5 rounded-2xl border border-dashed border-white/10">
-                                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">No se encontraron profesionales disponibles</p>
+                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">No se encontraron profesionales disponibles</p>
                                         </div>
                                     )}
                                 </div>
@@ -759,13 +759,13 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             {/* Slot Selection */}
                             {selectedDoctor && (
                                 <div className="animate-fade-in bg-white/5 p-6 rounded-2xl border border-white/5">
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Horarios Disponibles</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Horarios Disponibles</label>
                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                                         {selectedDoctor.availability?.map(slot => (
                                             <button
                                                 key={slot}
                                                 onClick={() => setSelectedSlot(slot)}
-                                                className={`py-3 text-xs font-black rounded-xl border transition-all ${
+                                                className={`py-3 text-xs font-bold rounded-xl border transition-all ${
                                                     selectedSlot === slot 
                                                         ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20' 
                                                         : 'bg-slate-800 border-white/5 text-slate-400 hover:border-emerald-500/30'
@@ -808,7 +808,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         }
                                     }}
                                     disabled={!selectedDoctor || !selectedSlot || isBooking}
-                                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-500/20 disabled:bg-slate-800"
+                                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-5 rounded-2xl shadow-xl shadow-emerald-500/20 disabled:bg-slate-800"
                                 >
                                     {isBooking ? 'PROCESANDO...' : 'CONFIRMAR TURNO'}
                                 </Button>
@@ -823,7 +823,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
                     <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Nuevo Familiar</h3>
+                            <h3 className="text-2xl font-bold text-white uppercase tracking-tight">Nuevo Familiar</h3>
                             <button onClick={() => setShowFamilyModal(false)} className="text-slate-500 hover:text-white transition">
                                 <X size={28} />
                             </button>
@@ -834,16 +834,16 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             setShowFamilyModal(false);
                         }}>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Nombre Completo</label>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Nombre Completo</label>
                                 <input type="text" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50" required placeholder="Ej: Maria Perez" />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">DNI</label>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">DNI</label>
                                 <input type="text" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50" required placeholder="XX.XXX.XXX" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Parentesco</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Parentesco</label>
                                     <select className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none">
                                         <option>Hijo/a</option>
                                         <option>Cónyuge</option>
@@ -851,11 +851,11 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">F. Nacimiento</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">F. Nacimiento</label>
                                     <input type="date" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50" required />
                                 </div>
                             </div>
-                            <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-500/20 mt-4">
+                            <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-emerald-500/20 mt-4">
                                 GUARDAR INTEGRANTE
                             </Button>
                         </form>

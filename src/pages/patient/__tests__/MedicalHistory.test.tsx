@@ -43,8 +43,8 @@ describe('MedicalHistory Component', () => {
 
     render(<MedicalHistory user={MOCK_PATIENT} />);
 
-    // El título ahora es "Mi Historia Clínica"
-    expect(screen.getByText(/Mi Historia Clínica/i)).toBeDefined();
+    // El título ahora es "Expediente Médico"
+    expect(screen.getByText(/Expediente Médico/i)).toBeDefined();
     
     await waitFor(() => {
       expect(screen.getByText('Gripe Fuerte')).toBeDefined();
@@ -64,7 +64,7 @@ describe('MedicalHistory Component', () => {
     prescriptionsTab.click();
 
     await waitFor(() => {
-      expect(screen.getByText(/No tenés recetas registradas aún/i)).toBeDefined();
+      expect(screen.getByText(/No hay recetas registradas/i)).toBeDefined();
     });
 
   });

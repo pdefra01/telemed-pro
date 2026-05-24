@@ -1,12 +1,12 @@
 import { Doctor, Patient, Appointment, MedicalRecord, Prescription, Payment, MedicalDocument } from './types';
 
-export const APP_NAME = "TeleMed Pro";
+export const APP_NAME = "MEDINEX";
 
 export const MOCK_DOCTORS: Doctor[] = [
   {
     id: 'd1',
     name: 'Dr. Alejandro Silva',
-    email: 'asilva@telemed.com',
+    email: 'asilva@medinex.com',
     role: 'doctor',
     specialty: 'Cardiología',
     rating: 4.8,
@@ -27,7 +27,7 @@ export const MOCK_DOCTORS: Doctor[] = [
   {
     id: 'd2',
     name: 'Dra. Elena Rossi',
-    email: 'erossi@telemed.com',
+    email: 'erossi@medinex.com',
     role: 'doctor',
     specialty: 'Pediatría',
     rating: 4.9,
@@ -48,7 +48,7 @@ export const MOCK_DOCTORS: Doctor[] = [
   {
     id: 'd3',
     name: 'Dr. Marco Polo',
-    email: 'mpolo@telemed.com',
+    email: 'mpolo@medinex.com',
     role: 'doctor',
     specialty: 'Medicina General',
     rating: 3.8,
@@ -80,6 +80,8 @@ export const MOCK_PATIENT: Patient = {
   birthDate: '1985-04-12',
   planName: 'Plan Familiar Premium',
   avatarUrl: 'https://picsum.photos/seed/patient1/200/200',
+  paymentStatus: 'paid',
+  currentPeriodQuotaUsed: 0,
   familyMembers: [
     { id: 'f1', name: 'María Pérez', relation: 'Esposa', age: 34 },
     { id: 'f2', name: 'Tomas Pérez', relation: 'Hijo', age: 8 }

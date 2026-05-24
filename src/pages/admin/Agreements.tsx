@@ -96,7 +96,7 @@ const Agreements: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-indigo-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Commercial Hub</h2>
-          <h1 className="text-4xl font-black text-white tracking-tighter">
+          <h1 className="text-4xl font-bold text-white tracking-tighter">
             Convenios <span className="text-slate-500 font-light italic">& Planes</span>
           </h1>
         </div>
@@ -185,11 +185,11 @@ const Agreements: React.FC = () => {
                 <p className="text-slate-400 text-sm mb-4">CUIT: {agreement.cuit || 'N/D'}</p>
                 
                 <div className="flex items-center space-x-4 mb-6">
-                  <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <div className="flex items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
                     <Users size={12} className="mr-1.5" />
                     <span>248 Afiliados</span>
                   </div>
-                  <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                  <div className="flex items-center text-[10px] font-bold uppercase tracking-widest text-emerald-400">
                     <CheckCircle2 size={12} className="mr-1.5" />
                     <span>Activo</span>
                   </div>
@@ -216,7 +216,7 @@ const Agreements: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Costo Mensual</p>
-                  <p className="text-2xl font-black text-white">${plan.monthlyCost}</p>
+                  <p className="text-2xl font-bold text-white">${plan.monthlyCost}</p>
                 </div>
               </div>
 

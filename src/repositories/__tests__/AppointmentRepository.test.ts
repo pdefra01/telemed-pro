@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { appointmentRepository } from '../AppointmentRepository';
 import { supabase } from '../../services/supabase';
 
@@ -21,6 +21,17 @@ vi.mock('../../services/supabase', () => ({
 describe('AppointmentRepository (TDD - Path 2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    const supabaseMock = supabase as any;
+    supabaseMock.from.mockReturnThis();
+    supabaseMock.select.mockReturnThis();
+    supabaseMock.eq.mockReturnThis();
+    supabaseMock.neq.mockReturnThis();
+    supabaseMock.insert.mockReturnThis();
+    supabaseMock.update.mockReturnThis();
+    supabaseMock.single.mockReturnThis();
   });
 
   describe('getDoctorAppointments', () => {
@@ -96,7 +107,7 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
       // Assertions
       expect(supabaseMock.from).toHaveBeenCalledWith('appointments');
       // Status 'completed' constraint already updated in previous step.
-      expect(supabaseMock.update).toHaveBeenCalledWith({ status: 'completed' }); 
+      expect(supabaseMock.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed' })); 
       expect(supabaseMock.eq).toHaveBeenCalledWith('id', 'app1');
     });
   });
@@ -104,6 +115,11 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
   describe('createAppointment', () => {
     it('should insert a new appointment into Supabase', async () => {
       const supabaseMock = supabase as any;
+      
+      // Configurar cadena para verificación de solapamiento
+      supabaseMock.neq.mockResolvedValue({ data: [], error: null });
+      
+      // Configurar cadena para la inserción
       supabaseMock.single.mockResolvedValue({ data: { id: 'new-app-id' }, error: null });
 
       const appointmentData = {

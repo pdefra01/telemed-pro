@@ -11,10 +11,28 @@ vi.mock('../../repositories/AppointmentRepository', () => ({
   appointmentRepository: {
     saveAppointmentNotes: vi.fn().mockResolvedValue(undefined),
     completeAppointment: vi.fn().mockResolvedValue(undefined),
+    getAppointmentById: vi.fn().mockResolvedValue({
+      id: 'app1',
+      patientId: 'pat1',
+      patientName: 'Juan Pérez',
+      doctorId: 'doc1',
+      doctorName: 'Dr. García',
+      date: '2024-05-20',
+      time: '14:00',
+      status: 'confirmed',
+      type: 'video'
+    }),
+    getDoctorAppointments: vi.fn().mockResolvedValue([]),
   },
 }));
 
-// Mock de supabase (para el token fetch)
+vi.mock('../../repositories/MedicalRecordRepository', () => ({
+  medicalRecordRepository: {
+    getRecordsByPatientId: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+// Mock de supabase (para el token fetch y canales)
 vi.mock('../../services/supabase', () => ({
   supabase: {
     functions: {
@@ -23,6 +41,11 @@ vi.mock('../../services/supabase', () => ({
         error: null,
       }),
     },
+    channel: vi.fn().mockReturnValue({
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+    }),
+    removeChannel: vi.fn(),
   },
 }));
 
@@ -31,9 +54,26 @@ vi.mock('@livekit/components-react', () => ({
   LiveKitRoom: ({ children }: { children: React.ReactNode }) => <div data-testid="livekit-room">{children}</div>,
   VideoConference: () => <div data-testid="video-conference">VideoConference Mock</div>,
   RoomAudioRenderer: () => <div data-testid="room-audio">Audio Mock</div>,
+  useLocalParticipant: () => ({
+    localParticipant: { identity: 'mock-identity' },
+    isMicrophoneEnabled: true,
+    isCameraEnabled: true,
+  }),
+  useConnectionQualityIndicator: () => ({
+    quality: 'excellent',
+  }),
 }));
 
 vi.mock('@livekit/components-styles', () => ({}));
+
+vi.mock('../../components/video/WaitingExperience', () => ({
+  WaitingExperience: ({ onReady }: { onReady: () => void }) => {
+    React.useEffect(() => {
+      onReady();
+    }, [onReady]);
+    return <div data-testid="waiting-experience-mock">Waiting Mock</div>;
+  },
+}));
 
 // Mock import.meta.env
 vi.stubEnv('VITE_LIVEKIT_URL', 'wss://fake-livekit.example.com');
@@ -78,7 +118,7 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
     });
 
-    expect(screen.getByPlaceholderText(/notas médicas/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Documente hallazgos/i)).toBeInTheDocument();
   });
 
   it('should NOT show the notes panel for patient users', async () => {
@@ -88,7 +128,7 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
     });
 
-    expect(screen.queryByPlaceholderText(/notas médicas/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Documente hallazgos/i)).not.toBeInTheDocument();
   });
 
   // Spec Scenario 3: Doctor saves medical notes
@@ -99,10 +139,10 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
     });
 
-    const textarea = screen.getByPlaceholderText(/notas médicas/i);
+    const textarea = screen.getByPlaceholderText(/Documente hallazgos/i);
     fireEvent.change(textarea, { target: { value: 'Paciente presenta fiebre alta...' } });
 
-    const saveButton = screen.getByRole('button', { name: /guardar notas/i });
+    const saveButton = screen.getByRole('button', { name: /Actualizar Ficha/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -121,7 +161,7 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('button', { name: /finalizar consulta/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Finalizar Turno/i })).toBeInTheDocument();
   });
 
   it('should NOT show "Finalizar Consulta" button for patients', async () => {
@@ -131,7 +171,7 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
     });
 
-    expect(screen.queryByRole('button', { name: /finalizar consulta/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Finalizar Turno/i })).not.toBeInTheDocument();
   });
 
   // Spec Scenario 4: Clicking "Finalizar" saves notes AND completes appointment
@@ -142,10 +182,10 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
     });
 
-    const textarea = screen.getByPlaceholderText(/notas médicas/i);
+    const textarea = screen.getByPlaceholderText(/Documente hallazgos/i);
     fireEvent.change(textarea, { target: { value: 'Diagnóstico final: gripe estacional' } });
 
-    const finalizarButton = screen.getByRole('button', { name: /finalizar consulta/i });
+    const finalizarButton = screen.getByRole('button', { name: /Finalizar Turno/i });
     fireEvent.click(finalizarButton);
 
     await waitFor(() => {

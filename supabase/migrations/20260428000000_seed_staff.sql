@@ -78,7 +78,7 @@ VALUES (
 -- Nota: La contraseña es 'admin123'
 INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, confirmation_token, email_change, email_change_token_new, recovery_token)
 VALUES (
-  'a1234567-b89c-4d0e-9f0a-1b2c3d4e5f6g',
+  'a1234567-b89c-4d0e-9f0a-1b2c3d4e5f6f',
   '00000000-0000-0000-0000-000000000000',
   'admin@telemed.com',
   crypt('admin123', gen_salt('bf')),
