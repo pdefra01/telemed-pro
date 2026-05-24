@@ -108,6 +108,10 @@ function renderVideoRoom(user: any = doctorUser, appointmentId = 'app1') {
 describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ token: 'mock-token-123' }),
+    }));
   });
 
   // Spec AC #3: Panel de notas solo visible para el Doctor
@@ -202,4 +206,38 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
       expect(screen.getByTestId('post-consultation-page')).toBeInTheDocument();
     });
   });
+
+  it('should render Retry button on token fetch failure and refetch on click', async () => {
+    // Mock fetch to fail first
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('Network connection lost')));
+
+    renderVideoRoom(doctorUser);
+
+    // Expect error screen and Retry button
+    await waitFor(() => {
+      expect(screen.getByText(/Fallo de Conexión/i)).toBeInTheDocument();
+      expect(screen.getByText(/Network connection lost/i)).toBeInTheDocument();
+    });
+
+    const retryButton = screen.getByRole('button', { name: /Reintentar/i });
+    expect(retryButton).toBeInTheDocument();
+
+    // Mock fetch to succeed next time
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ token: 'recovered-mock-token-456' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    // Click retry
+    fireEvent.click(retryButton);
+
+    // Expect it to recover and show LiveKit room
+    await waitFor(() => {
+      expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
+    });
+
+    expect(mockFetch).toHaveBeenCalled();
+  });
 });
+

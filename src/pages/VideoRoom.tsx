@@ -538,37 +538,52 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
   const [patientHistory, setPatientHistory] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  useEffect(() => {
-    const fetchDetails = async () => {
-      try {
-        if (!appointmentId) throw new Error("ID de turno no encontrado");
+  const fetchDetails = useCallback(async () => {
+    if (!appointmentId) {
+      setError("ID de turno no encontrado");
+      return;
+    }
 
-        const appt = await appointmentRepository.getAppointmentById(appointmentId);
-        if (appt) {
-          setAppointment(appt);
-          // Fetch patient history for the vault
-          const history = await medicalRecordRepository.getRecordsByPatientId(appt.patientId);
-          setPatientHistory(history);
-        }
+    setError(null);
+    setToken(null);
 
-        const { data, error: functionError } = await supabase.functions.invoke('livekit-token', {
-          body: { appointmentId }
-        });
-
-        if (functionError) throw new Error(functionError.message);
-
-        if (data?.token) {
-          setToken(data.token);
-        } else {
-          throw new Error("Token inválido");
-        }
-      } catch (err: any) {
-        setError(err.message);
+    try {
+      const appt = await appointmentRepository.getAppointmentById(appointmentId);
+      if (appt) {
+        setAppointment(appt);
+        // Fetch patient history for the vault
+        const history = await medicalRecordRepository.getRecordsByPatientId(appt.patientId);
+        setPatientHistory(history);
       }
-    };
 
-    fetchDetails();
+      const response = await fetch('/api/livekit-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ appointmentId }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Error de servidor (${response.status})`);
+      }
+
+      const data = await response.json();
+
+      if (data?.token) {
+        setToken(data.token);
+      } else {
+        throw new Error("Token inválido recibido del servidor");
+      }
+    } catch (err: any) {
+      setError(err.message || 'Fallo al obtener credenciales de videollamada');
+    }
   }, [appointmentId]);
+
+  useEffect(() => {
+    fetchDetails();
+  }, [fetchDetails]);
 
   // Real-time Queue Subscription
   useEffect(() => {
@@ -682,12 +697,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
             </p>
           </div>
           {error ? (
-            <button 
-              onClick={() => navigate(user.role === 'doctor' ? '/doctor' : '/patient')}
-              className="mt-4 px-8 py-3.5 bg-white hover:bg-emerald-500 text-slate-950 hover:text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all shadow-xl active:scale-95"
-            >
-              Volver al Dashboard
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4 w-full justify-center mt-4">
+              <button 
+                onClick={fetchDetails}
+                className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 active:scale-95 flex-1"
+              >
+                Reintentar
+              </button>
+              <button 
+                onClick={() => navigate(user.role === 'doctor' ? '/doctor' : '/patient')}
+                className="px-8 py-3.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all active:scale-95 flex-1"
+              >
+                Volver al Dashboard
+              </button>
+            </div>
           ) : (
             <div className="flex gap-1.5 justify-center py-2">
               <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-bounce [animation-delay:-0.3s]"></div>
