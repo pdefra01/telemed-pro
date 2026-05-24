@@ -2,11 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   LiveKitRoom,
-  VideoConference,
   RoomAudioRenderer,
   useConnectionQualityIndicator,
   useLocalParticipant,
+  useTracks,
+  VideoTrack,
 } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 import '@livekit/components-styles';
 import { supabase } from '../services/supabase';
 import { User } from '../types';
@@ -33,7 +35,11 @@ import {
   AlertCircle,
   Lock,
   Sparkles,
-  Database
+  Database,
+  Mic,
+  MicOff,
+  VideoOff,
+  PhoneOff
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { WaitingExperience } from '../components/video/WaitingExperience';
@@ -91,6 +97,20 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
 }) => {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const { quality } = useConnectionQualityIndicator({ participant: localParticipant });
+
+  // Hook de LiveKit para escuchar todas las pistas de audio y video de la sala
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false }
+    ],
+    { onlySubscribed: false }
+  );
+
+  // Clasificar pistas locales y remotas
+  const localVideoTrack = tracks.find(t => t.participant.isLocal && t.source === Track.Source.Camera);
+  const remoteVideoTrack = tracks.find(t => !t.participant.isLocal && t.source === Track.Source.Camera);
+  const remoteScreenShareTrack = tracks.find(t => !t.participant.isLocal && t.source === Track.Source.ScreenShare);
   
   if (!appointment) {
     console.error("CRITICAL: appointment is null in VideoRoomContent");
@@ -122,7 +142,11 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
     <div className="absolute inset-0 flex overflow-hidden">
       {/* 1. DOCTOR QUEUE (Left) */}
       {isDoctor && (
-        <div className={`transition-all duration-500 ease-in-out border-r border-white/5 flex flex-col bg-slate-900/40 backdrop-blur-3xl z-40 ${queuePanelOpen ? 'w-72' : 'w-0 overflow-hidden'}`}>
+        <div className={`transition-all duration-500 ease-in-out border-r border-white/5 flex flex-col bg-slate-900/95 backdrop-blur-xl lg:bg-slate-900/40 z-40 fixed lg:relative left-0 top-0 bottom-0 h-full ${
+          queuePanelOpen 
+            ? 'w-72 opacity-100 shadow-3xl' 
+            : 'w-0 opacity-0 overflow-hidden pointer-events-none'
+        }`}>
           <div className="p-6 border-b border-white/5">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 bg-amber-500/10 text-amber-500 rounded-lg flex items-center justify-center">
@@ -230,20 +254,124 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
           </div>
         </div>
 
-        {/* Video Components (Provided by LiveKitRoom) */}
-        <div className="flex-1 flex flex-col relative z-0">
-          <VideoConference />
+        {/* Video Components (Custom Interactive Layout) */}
+        <div className="flex-1 relative z-0 flex items-center justify-center p-4">
+          <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border border-white/10 bg-slate-950 flex items-center justify-center shadow-3xl">
+            
+            {/* 1. REMOTE VIDEO TRACK (Médico o Paciente - Principal) */}
+            {remoteScreenShareTrack ? (
+              <VideoTrack trackRef={remoteScreenShareTrack} className="w-full h-full object-contain" />
+            ) : remoteVideoTrack && remoteVideoTrack.publication?.isSubscribed ? (
+              <VideoTrack trackRef={remoteVideoTrack} className="w-full h-full object-cover transition-all duration-500" />
+            ) : (
+              // PLACEHOLDER: Si el otro participante aún no se conecta
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 p-8 text-center select-none">
+                <div className="relative mb-6">
+                  <div className="w-24 h-24 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20 shadow-2xl relative">
+                    <UserIcon className="text-emerald-400 animate-pulse" size={40} />
+                  </div>
+                  <div className="absolute -inset-2 rounded-full border border-emerald-500/30 animate-ping [animation-duration:3s]"></div>
+                </div>
+                <h4 className="text-lg font-bold text-white uppercase tracking-wider mb-2">
+                  {isDoctor ? 'Esperando al Paciente...' : 'Esperando al Profesional...'}
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm leading-relaxed font-medium">
+                  Estableciendo cifrado de grado médico de punto a punto y negociando códecs seguros...
+                </p>
+              </div>
+            )}
+
+            {/* 2. LOCAL VIDEO MINIATURE (Vos - Flotante y responsiva) */}
+            {isCameraEnabled && localVideoTrack ? (
+              <div className="absolute bottom-24 right-4 sm:bottom-28 sm:right-6 w-28 h-40 sm:w-36 sm:h-48 rounded-2xl overflow-hidden border border-white/20 shadow-2xl z-20 transition-all duration-300 hover:scale-105 active:scale-95 bg-slate-900">
+                <VideoTrack trackRef={localVideoTrack} className="w-full h-full object-cover" />
+                <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md border border-white/10 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                  <span className="text-[9px] font-bold text-white tracking-widest uppercase">Vos</span>
+                </div>
+              </div>
+            ) : (
+              // Si la cámara local está desactivada
+              <div className="absolute bottom-24 right-4 sm:bottom-28 sm:right-6 w-28 h-40 sm:w-36 sm:h-48 rounded-2xl border border-dashed border-white/10 bg-slate-900/60 backdrop-blur-md z-20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 bg-red-500/20 text-red-400 rounded-xl border border-red-500/20">
+                  <VideoOff size={16} />
+                </div>
+                <span className="text-[9px] font-bold text-slate-500 tracking-wider uppercase">Cámara Off</span>
+              </div>
+            )}
+
+            {/* 3. FLOATING CONSOLE CONTROLS (Táctiles, responsive, modernos) */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3.5 bg-slate-950/80 backdrop-blur-xl px-6 py-3.5 rounded-full border border-white/10 shadow-2xl">
+              {/* Toggle Audio */}
+              <button 
+                onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  isMicrophoneEnabled 
+                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' 
+                    : 'bg-red-500/20 hover:bg-red-500/30 text-red-500 border border-red-500/30'
+                }`}
+                title={isMicrophoneEnabled ? "Silenciar Micrófono" : "Activar Micrófono"}
+              >
+                {isMicrophoneEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+              </button>
+
+              {/* Toggle Video */}
+              <button 
+                onClick={() => localParticipant.setCameraEnabled(!isCameraEnabled)}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  isCameraEnabled 
+                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' 
+                    : 'bg-red-500/20 hover:bg-red-500/30 text-red-500 border border-red-500/30'
+                }`}
+                title={isCameraEnabled ? "Apagar Cámara" : "Encender Cámara"}
+              >
+                {isCameraEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+              </button>
+
+              {/* Toggle Panel lateral */}
+              <button 
+                onClick={() => setNotesPanelOpen(!notesPanelOpen)}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  notesPanelOpen 
+                    ? 'bg-teal-500/20 text-teal-400 border border-teal-500/20' 
+                    : 'bg-slate-900 hover:bg-white/10 text-slate-300 border border-white/5'
+                }`}
+                title="Ficha / Privacidad"
+              >
+                <FileText size={20} />
+              </button>
+
+              {/* Hangup / Finish Call */}
+              {isDoctor ? (
+                <button 
+                  onClick={handleCompleteAppointment}
+                  className="px-5 h-12 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center gap-2 transition-all font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-500/20 cursor-pointer active:scale-95"
+                  title="Finalizar Consulta"
+                >
+                  <PhoneOff size={16} />
+                  <span className="hidden sm:inline">Finalizar</span>
+                </button>
+              ) : (
+                <button 
+                  onClick={() => navigate('/patient')}
+                  className="w-12 h-12 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-all shadow-lg shadow-red-500/20 cursor-pointer active:scale-95"
+                  title="Salir de la Sala"
+                >
+                  <PhoneOff size={20} />
+                </button>
+              )}
+            </div>
+
+          </div>
         </div>
       </div>
 
       {/* 3. SIDEBAR (Right) */}
-      <div className={`transition-all duration-700 ease-in-out border-l border-white/5 flex flex-col bg-slate-950 relative z-40 ${notesPanelOpen ? 'w-[400px]' : 'w-0 overflow-hidden shadow-none'}`}>
-        <button
-          onClick={() => setNotesPanelOpen(!notesPanelOpen)}
-          className={`absolute top-1/2 -translate-y-1/2 -left-6 z-50 w-6 h-32 bg-slate-900/90 backdrop-blur-3xl border border-white/10 flex items-center justify-center text-slate-500 hover:text-white transition-all duration-300 rounded-l-2xl shadow-2xl`}
-        >
-          {notesPanelOpen ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </button>
+      <div className={`transition-all duration-500 ease-in-out border-l border-white/5 flex flex-col bg-slate-950/95 lg:bg-slate-950 z-40 fixed lg:relative right-0 top-0 bottom-0 h-full ${
+        notesPanelOpen 
+          ? 'w-full sm:w-[400px] lg:w-[400px] opacity-100 shadow-3xl' 
+          : 'w-0 opacity-0 overflow-hidden pointer-events-none shadow-none'
+      }`}>
 
         {isDoctor ? (
           <div className="flex flex-col h-full bg-slate-900/10">
@@ -420,6 +548,17 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
         )}
       </div>
 
+      {/* Floating Notes Panel Toggle handle (always clickable, positioned relative to the right edge) */}
+      <button
+        onClick={() => setNotesPanelOpen(!notesPanelOpen)}
+        className={`absolute top-1/2 -translate-y-1/2 z-50 w-8 h-32 bg-slate-900/90 backdrop-blur-3xl border border-white/10 hover:border-teal-500/30 flex items-center justify-center text-slate-400 hover:text-white transition-all duration-500 rounded-l-2xl shadow-2xl ${
+          notesPanelOpen ? 'right-[100%] sm:right-[400px] lg:right-[400px]' : 'right-0'
+        } ${!isDoctor && 'hover:border-emerald-500/30'}`}
+        style={{ transitionProperty: 'right, background-color, border-color, color' }}
+      >
+        {notesPanelOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+      </button>
+
       {/* MEDICAL VAULT OVERLAY */}
       {isVaultOpen && (
         <div className="absolute inset-0 z-[100] bg-slate-950/80 backdrop-blur-2xl flex items-center justify-end p-8 animate-in fade-in duration-500">
@@ -521,7 +660,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
   const [notes, setNotes] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
-  const [notesPanelOpen, setNotesPanelOpen] = useState(true);
+  const [notesPanelOpen, setNotesPanelOpen] = useState(window.innerWidth >= 1024);
   const [queuePanelOpen, setQueuePanelOpen] = useState(false);
   const [appointment, setAppointment] = useState<{ patientName: string } | null>(null);
   
@@ -770,15 +909,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
           </LiveKitRoom>
         </div>
         
-        {/* FOOTER ACTIONS (Mobile or Float) */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3">
-          <button className="w-12 h-12 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition-all shadow-2xl">
-            <MessageSquare size={18} />
-          </button>
-          <button className="w-12 h-12 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition-all shadow-2xl">
-            <Maximize2 size={18} />
-          </button>
-        </div>
+        {/* Footer actions removed to prevent overlay duplication with the central interactive bar */}
       </div>
 
       {/* Sidebar logic moved to VideoRoomContent */}

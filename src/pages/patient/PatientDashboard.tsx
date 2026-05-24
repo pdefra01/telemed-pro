@@ -580,7 +580,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
             {/* Upload Modal */}
             {showUploadModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-                    <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl animate-fade-in-up">
+                    <div className="bg-slate-900 border border-white/10 rounded-[2rem] sm:rounded-3xl p-5 sm:p-8 w-full max-w-md shadow-2xl animate-fade-in-up">
                         {!uploadSuccess ? (
                             <>
                                 <div className="flex justify-between items-center mb-6">
@@ -667,7 +667,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
             {/* New Appointment Modal */}
             {showAppointmentModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-                    <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 w-full max-w-xl shadow-2xl animate-fade-in-up max-h-[90vh] overflow-y-auto">
+                    <div className="bg-slate-900 border border-white/10 rounded-[2rem] sm:rounded-3xl p-5 sm:p-8 w-full max-w-xl shadow-2xl animate-fade-in-up max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="text-2xl font-bold text-white uppercase tracking-tight">Agendar Turno</h3>
                             <button onClick={() => setShowAppointmentModal(false)} className="text-slate-500 hover:text-white transition">
@@ -795,7 +795,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                 doctor_id: selectedDoctor.id,
                                                 scheduled_at: scheduledDate.toISOString(),
                                                 specialty: selectedSpecialty,
-                                                status: 'pending'
+                                                status: 'confirmed'
                                             });
 
                                             toast('¡Turno agendado con éxito!', 'success');
@@ -821,7 +821,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
             {/* Add Family Member Modal */}
             {showFamilyModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-                    <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl">
+                    <div className="bg-slate-900 border border-white/10 rounded-[2rem] sm:rounded-3xl p-5 sm:p-8 w-full max-w-md shadow-2xl">
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="text-2xl font-bold text-white uppercase tracking-tight">Nuevo Familiar</h3>
                             <button onClick={() => setShowFamilyModal(false)} className="text-slate-500 hover:text-white transition">

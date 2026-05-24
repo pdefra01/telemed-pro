@@ -79,11 +79,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
   const navItems = getNavItems(user.role);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col md:flex-row">
       {/* Mobile Header */}
-      <div className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-50">
+      <div className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-50 flex-shrink-0 border-b border-gray-100">
         <div className="flex items-center space-x-2 font-bold text-teal-600 text-xl">
-          <img src={logoMedinex} alt="Medinex Logo" className="w-10 h-10 object-contain rounded-md shadow-sm" />
+          <img src={logoMedinex} alt="Medinex Logo" className="w-10 h-10 object-contain rounded-md shadow-sm flex-shrink-0" />
           <span>MEDINEX</span>
         </div>
         <button
@@ -160,7 +160,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen scroll-smooth">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-[calc(100vh-73px)] md:h-screen scroll-smooth">
         <div className="max-w-7xl mx-auto">
           {children}
         </div>

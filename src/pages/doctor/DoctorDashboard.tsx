@@ -10,6 +10,7 @@ import { prescriptionRepository } from '../../repositories/PrescriptionRepositor
 import { dashboardRepository } from '../../repositories/DashboardRepository';
 import { notificationRepository, Notification } from '../../repositories/NotificationRepository';
 import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, Download, ExternalLink, History, FolderOpen } from 'lucide-react';
+import { supabase } from '../../services/supabase';
 
 interface Props {
     user: Doctor;
@@ -93,8 +94,23 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             }
         });
 
+        // Suscripción en tiempo real a la tabla de appointments
+        const channel = supabase
+            .channel('doctor-dashboard-appointments')
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'appointments',
+                filter: `doctor_id=eq.${user.id}`
+            }, () => {
+                console.log("Cambio detectado en appointments local, refrescando cola...");
+                fetchAppointments();
+            })
+            .subscribe();
+
         return () => {
             subscription.unsubscribe();
+            supabase.removeChannel(channel);
         };
     }, [user.id]);
 
@@ -330,56 +346,56 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 </div>
                             ) : queueAppointments.length > 0 ? (
                                 queueAppointments.map((apt, idx) => (
-                                    <div key={apt.id} className="group relative bg-slate-900/20 hover:bg-slate-900/40 backdrop-blur-xl rounded-[2.5rem] p-8 border border-white/5 hover:border-emerald-500/30 transition-all duration-500 flex flex-col md:flex-row md:items-center justify-between gap-8 overflow-hidden">
+                                    <div key={apt.id} className="group relative bg-slate-900/20 hover:bg-slate-900/40 backdrop-blur-xl rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 border border-white/5 hover:border-emerald-500/30 transition-all duration-500 flex flex-col md:flex-row md:items-center justify-between gap-6 sm:gap-8 overflow-hidden">
                                         {/* Row Decoration */}
                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
                                         <div className="absolute right-0 top-0 p-8 text-white/[0.01] pointer-events-none font-bold text-8xl italic">0{idx+1}</div>
 
-                                        <div className="flex items-center gap-6 relative z-10">
+                                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 relative z-10 text-center sm:text-left w-full md:w-auto">
                                             <div className="relative">
-                                                <div className="w-20 h-20 bg-slate-950 border border-white/10 rounded-3xl flex items-center justify-center text-white font-bold text-3xl shadow-2xl group-hover:scale-105 transition-transform duration-700 overflow-hidden">
+                                                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-950 border border-white/10 rounded-2xl sm:rounded-3xl flex items-center justify-center text-white font-bold text-2xl sm:text-3xl shadow-2xl group-hover:scale-105 transition-transform duration-700 overflow-hidden mx-auto">
                                                     {apt.patientAvatar ? (
                                                         <img src={apt.patientAvatar} alt={apt.patientName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                                                     ) : (
                                                         <span className="text-white font-bold">{apt.patientName.charAt(0)}</span>
                                                     )}
                                                 </div>
-                                                <div className={`absolute -bottom-1 -right-1 w-6 h-6 border-4 border-slate-950 rounded-full ${apt.status === 'confirmed' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse' : 'bg-amber-500'}`}></div>
+                                                <div className={`absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 border-2 sm:border-4 border-slate-950 rounded-full ${apt.status === 'confirmed' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse' : 'bg-amber-500'}`}></div>
                                             </div>
                                             
                                             <div className="space-y-1">
-                                                <h4 className="text-2xl font-bold text-white tracking-tighter group-hover:text-emerald-400 transition-colors">{apt.patientName}</h4>
-                                                <div className="flex flex-wrap items-center gap-3">
-                                                    <div className="flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-xl border border-white/5">
+                                                <h4 className="text-xl sm:text-2xl font-bold text-white tracking-tighter group-hover:text-emerald-400 transition-colors truncate">{apt.patientName}</h4>
+                                                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 sm:gap-3">
+                                                    <div className="flex items-center gap-2 bg-slate-950/80 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-white/5">
                                                         <Clock size={12} className="text-emerald-500" />
                                                         <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{apt.time}</span>
                                                     </div>
-                                                    <span className="text-[9px] font-bold px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20 uppercase tracking-widest">
+                                                    <span className="text-[9px] font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 bg-blue-500/10 text-blue-400 rounded-lg sm:rounded-xl border border-blue-500/20 uppercase tracking-widest">
                                                         {apt.patientPlan || 'Plan Global'}
                                                     </span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-4 relative z-10">
+                                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 relative z-10 w-full md:w-auto pt-4 md:pt-0 border-t border-white/5 md:border-t-0">
                                             <button 
                                                 onClick={() => setSelectedPatientId(apt.patientId)}
-                                                className="h-14 px-8 bg-slate-950 hover:bg-slate-900 border border-white/5 rounded-2xl flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-white transition-all group/btn"
+                                                className="h-12 sm:h-14 px-6 sm:px-8 bg-slate-950 hover:bg-slate-900 border border-white/5 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2.5 sm:gap-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-white transition-all group/btn"
                                             >
-                                                <FileText size={16} className="group-hover/btn:text-emerald-500 transition-colors" /> Expediente
+                                                <FileText size={14} className="group-hover/btn:text-emerald-500 transition-colors" /> Expediente
                                             </button>
                                             
                                             {apt.status === 'confirmed' ? (
                                                 <Link
                                                     to={`/room/${apt.id}`}
-                                                    className="h-14 px-10 bg-white hover:bg-emerald-500 text-slate-950 hover:text-white rounded-2xl flex items-center gap-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all shadow-2xl shadow-white/5 hover:shadow-emerald-500/40 active:scale-95"
+                                                    className="h-12 sm:h-14 px-8 sm:px-10 bg-white hover:bg-emerald-500 text-slate-950 hover:text-white rounded-xl sm:rounded-2xl flex items-center justify-center gap-3 sm:gap-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all shadow-2xl shadow-white/5 hover:shadow-emerald-500/40 active:scale-95"
                                                 >
-                                                    <Video size={18} /> Iniciar Llamada
-                                                    <Zap size={14} className="animate-bounce" />
+                                                    <Video size={16} /> Iniciar Llamada
+                                                    <Zap size={12} className="animate-bounce" />
                                                 </Link>
                                             ) : (
-                                                <div className="h-14 px-10 bg-amber-500/5 border border-amber-500/20 text-amber-500 rounded-2xl flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest">
-                                                    <Activity size={16} className="animate-pulse" /> En Espera
+                                                <div className="h-12 sm:h-14 px-8 sm:px-10 bg-amber-500/5 border border-amber-500/20 text-amber-500 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2.5 sm:gap-3 text-[10px] font-bold uppercase tracking-widest">
+                                                    <Activity size={14} className="animate-pulse" /> En Espera
                                                 </div>
                                             )}
                                         </div>
@@ -499,38 +515,38 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             {selectedPatientId && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-2xl" onClick={() => setSelectedPatientId(null)}></div>
-                    <div className="bg-slate-900 border border-white/10 rounded-[3.5rem] w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-3xl relative animate-in fade-in slide-in-from-bottom-10 duration-700">
-                        <div className="p-12 border-b border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-950/30 gap-6">
+                    <div className="bg-slate-900 border border-white/10 rounded-[2rem] sm:rounded-[3.5rem] w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-3xl relative animate-in fade-in slide-in-from-bottom-10 duration-700">
+                        <div className="p-6 sm:p-8 md:p-12 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-950/30 gap-6">
                             <div>
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                                     <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.4em]">Secure Access Point</span>
                                 </div>
-                                <h3 className="font-bold text-4xl text-white tracking-tighter">Bóveda Médica</h3>
+                                <h3 className="font-bold text-3xl sm:text-4xl text-white tracking-tighter">Bóveda Médica</h3>
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">ID_PACIENTE: {selectedPatientId.toUpperCase()}</p>
                             </div>
 
-                            <div className="flex p-1 bg-slate-950/50 rounded-2xl border border-white/5">
+                            <div className="flex flex-wrap p-1 bg-slate-950/50 rounded-2xl border border-white/5 w-full lg:w-auto gap-1">
                                 <button
                                     onClick={() => setHistoryView('records')}
-                                    className={`px-6 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${historyView === 'records' ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 hover:text-slate-300'}`}
+                                    className={`flex-1 lg:flex-initial px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${historyView === 'records' ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 hover:text-slate-300'}`}
                                 >
                                     <History size={14} /> Evoluciones
                                 </button>
                                 <button
                                     onClick={() => setHistoryView('documents')}
-                                    className={`px-6 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${historyView === 'documents' ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 hover:text-slate-300'}`}
+                                    className={`flex-1 lg:flex-initial px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${historyView === 'documents' ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 hover:text-slate-300'}`}
                                 >
-                                    <FolderOpen size={14} /> Estudios y Archivos
+                                    <FolderOpen size={14} /> Estudios
                                 </button>
                             </div>
 
-                            <button onClick={() => setSelectedPatientId(null)} className="w-14 h-14 flex items-center justify-center rounded-2xl bg-white/5 text-slate-400 hover:text-white hover:bg-red-500/20 hover:text-red-500 transition-all duration-500">
-                                <X size={28} />
+                            <button onClick={() => setSelectedPatientId(null)} className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-xl sm:rounded-2xl bg-white/5 text-slate-400 hover:text-white hover:bg-red-500/20 hover:text-red-500 transition-all duration-500 self-end lg:self-auto">
+                                <X size={24} className="sm:w-7 sm:h-7" />
                             </button>
                         </div>
                         
-                        <div className="overflow-y-auto p-12 space-y-10 custom-scrollbar flex-1">
+                        <div className="overflow-y-auto p-5 sm:p-8 md:p-12 space-y-10 custom-scrollbar flex-1">
                             {isFetchingPatientHistory ? (
                                 <div className="flex flex-col items-center justify-center py-24">
                                     <div className="w-16 h-16 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-8"></div>

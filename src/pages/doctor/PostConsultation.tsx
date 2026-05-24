@@ -25,7 +25,8 @@ import {
   ChevronLeft,
   Search,
   Plus,
-  Trash2
+  Trash2,
+  MessageSquare
 } from 'lucide-react';
 import { Doctor, Appointment, MedicalRecord, MedicalDocument } from '../../types';
 import { appointmentRepository } from '../../repositories/AppointmentRepository';
@@ -151,6 +152,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   const [error, setError] = useState<string | null>(null);
   const [appointmentData, setAppointmentData] = useState<any>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   const [addPrescription, setAddPrescription] = useState(false);
   const [medications, setMedications] = useState<{ name: string; instructions: string }[]>([]);
@@ -196,24 +198,77 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
           {closureStatus === 'success' && (
             <div className="space-y-8 animate-fade-in-up">
-              <div className="relative w-32 h-32 mx-auto">
+              <div className="relative w-28 h-28 mx-auto">
                 <div className="absolute inset-0 rounded-full bg-teal-500/20 animate-ping"></div>
                 <div className="absolute inset-0 rounded-full bg-teal-500/10 border border-teal-500/50 flex items-center justify-center">
-                  <CheckCircle2 className="w-16 h-16 text-teal-400 animate-scale-in" />
+                  <CheckCircle2 className="w-14 h-14 text-teal-400 animate-scale-in" />
                 </div>
               </div>
+              
               <div className="space-y-3">
-                <h3 className="text-3xl font-bold text-white tracking-tighter uppercase">¡Consulta Exitosa!</h3>
-                <p className="text-slate-400 leading-relaxed">
-                  La consulta ha sido cerrada y los documentos enviados al paciente. Redirigiendo a su panel central...
+                <h3 className="text-3xl font-bold text-white tracking-tighter uppercase">¡Consulta Finalizada!</h3>
+                <p className="text-slate-400 leading-relaxed text-sm">
+                  La consulta médica ha sido cerrada de forma segura y se generaron los documentos clínicos.
                 </p>
               </div>
-              <button 
-                onClick={() => navigate('/doctor')}
-                className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-2xl transition-all shadow-xl shadow-teal-500/20 uppercase tracking-widest text-xs"
-              >
-                Volver al Inicio Ahora
-              </button>
+
+              {pdfUrl && (
+                <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-6 text-left space-y-4 max-w-sm mx-auto shadow-2xl animate-fade-in">
+                  <div className="flex items-center gap-4 border-b border-white/5 pb-4">
+                    <div className="w-12 h-12 bg-red-500/10 text-red-400 rounded-xl flex items-center justify-center border border-red-500/20">
+                      <FileIcon size={24} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-white truncate">
+                        Receta_Digital_{appointmentData?.patientName?.replace(/\s+/g, '_') || 'Paciente'}.pdf
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Cifrado E2E Activo</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {/* Botón Descargar PDF */}
+                    <button 
+                      onClick={() => window.open(pdfUrl, '_blank')}
+                      className="w-full py-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-2xl transition-all shadow-lg shadow-teal-500/10 flex items-center justify-center gap-2 text-xs uppercase tracking-widest cursor-pointer active:scale-95 border-none"
+                    >
+                      <Download size={16} />
+                      Descargar Receta PDF
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Botón WhatsApp */}
+                      <a 
+                        href={`https://wa.me/?text=Hola%20${encodeURIComponent(appointmentData?.patientName || '')}!%20Te%20comparto%20la%20receta%20m%C3%A9dica%20generada%20durante%20nuestra%20consulta%20en%20MEDINEX:%20${encodeURIComponent(pdfUrl)}`}
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="py-3 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-2xl transition-all flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer active:scale-95"
+                      >
+                        <MessageSquare size={14} />
+                        WhatsApp
+                      </a>
+
+                      {/* Botón Email */}
+                      <a 
+                        href={`mailto:?subject=Receta%20M%C3%A9dica%20-%20MEDINEX&body=Hola%20${encodeURIComponent(appointmentData?.patientName || '')},%20te%20comparto%20la%20receta%20m%C3%A9dica%20y%20evoluci%C3%B3n%20generada%20durante%20tu%20consulta:%20${encodeURIComponent(pdfUrl)}`}
+                        className="py-3 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/20 rounded-2xl transition-all flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer active:scale-95"
+                      >
+                        <FileIcon size={14} />
+                        Email
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4">
+                <button 
+                  onClick={() => navigate('/doctor')}
+                  className="px-10 py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl transition-all text-xs uppercase tracking-widest cursor-pointer active:scale-95 border border-white/5"
+                >
+                  Volver al Panel
+                </button>
+              </div>
             </div>
           )}
 
@@ -349,13 +404,11 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       setClosureStatus('success');
       
       if (data?.pdfUrl) {
-        // Option to open in background or show button
+        setPdfUrl(data.pdfUrl);
         console.log("PDF Generated:", data.pdfUrl);
       }
       
-      setTimeout(() => {
-        navigate('/doctor', { state: { successMessage: 'Consulta finalizada exitosamente' } });
-      }, 3500);
+      setClosureStatus('success');
 
     } catch (err: any) {
       console.error('Error saving consultation data:', err);
@@ -536,6 +589,77 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 </div>
             </section>
 
+            {/* Diagnosis Card (Ancho Completo y con más espacio) */}
+            <section className="group bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl transition-all hover:border-blue-500/30">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white">Diagnóstico Principal</h2>
+                </div>
+                
+                <button 
+                  onClick={handleAiSuggestDiagnosis}
+                  disabled={isAnalyzing || !notes.trim()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:text-white transition-all hover:scale-105 disabled:opacity-50 shadow-lg shadow-emerald-500/5 cursor-pointer"
+                >
+                  <Sparkles className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                  <span className="text-xs font-bold uppercase tracking-wider">Sugerir con AI</span>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="relative">
+                  <textarea
+                    id="diagnosis"
+                    value={diagnosis}
+                    onChange={(e) => setDiagnosis(e.target.value)}
+                    rows={3}
+                    className={`w-full bg-slate-950/50 border rounded-2xl p-5 text-slate-200 focus:outline-none focus:ring-2 transition-all font-bold text-lg leading-relaxed ${
+                      isSubmitted && error && !diagnosis 
+                        ? 'border-red-500/50 ring-red-500/20 ring-4' 
+                        : 'border-slate-800 focus:ring-blue-500/50 focus:border-blue-500/50 shadow-inner'
+                    }`}
+                    placeholder="Escriba el diagnóstico principal del paciente en detalle (p. ej. Hipertensión Arterial Primaria)..."
+                  />
+                  {diagnosis && (
+                    <div className="absolute right-4 top-4">
+                      <CheckCircle2 className="w-6 h-6 text-teal-500" />
+                    </div>
+                  )}
+                </div>
+
+                {suggestions.length > 0 && (
+                  <div className="space-y-3 animate-in slide-in-from-top duration-300 bg-slate-950/30 p-5 rounded-2xl border border-white/5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                      <Lightbulb size={12} className="text-amber-400" />
+                      Codificación Sugerida (CIE-10 / AI)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setDiagnosis(s)}
+                          className="px-3 py-2 bg-slate-900 border border-white/5 hover:border-emerald-500/40 rounded-xl text-[11px] text-slate-300 font-bold transition-all text-left hover:scale-[1.02] active:scale-95 cursor-pointer"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {isSubmitted && error && !diagnosis && (
+                  <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm animate-in fade-in zoom-in duration-200">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <p className="font-medium">{error}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+
             {/* Prescription Section */}
             <section className={`transition-all duration-500 ${addPrescription ? 'opacity-100 scale-100' : 'opacity-90 scale-[0.98]'}`}>
               <div className={`bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl overflow-hidden shadow-2xl transition-all ${addPrescription ? 'border-blue-500/30 ring-1 ring-blue-500/20' : ''}`}>
@@ -606,73 +730,8 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
             </section>
           </div>
 
-          {/* Sidebar Area (Diagnosis & Actions) */}
+          {/* Sidebar Area (Actions only - Diagnosis moved to center) */}
           <div className={`${showHistory ? 'xl:col-span-3' : 'lg:col-span-1'} space-y-8`}>
-            {/* Diagnosis Card */}
-            <section className="bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <h2 className="text-xl font-bold text-white">Diagnóstico</h2>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="relative">
-                  <input
-                    id="diagnosis"
-                    type="text"
-                    value={diagnosis}
-                    onChange={(e) => setDiagnosis(e.target.value)}
-                    className={`w-full bg-slate-950/50 border rounded-2xl p-4 text-slate-200 focus:outline-none focus:ring-2 transition-all font-bold text-lg ${
-                      isSubmitted && error && !diagnosis ? 'border-red-500/50 ring-red-500/20 ring-4' : 'border-slate-800 focus:ring-blue-500/50 focus:border-blue-500/50'
-                    }`}
-                    placeholder="Diagnóstico Principal"
-                  />
-                  {diagnosis && (
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      <CheckCircle2 className="w-6 h-6 text-teal-500" />
-                    </div>
-                  )}
-                </div>
-
-                <button 
-                  onClick={handleAiSuggestDiagnosis}
-                  disabled={isAnalyzing || !notes.trim()}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-50"
-                >
-                  <Sparkles size={14} className={isAnalyzing ? 'animate-spin' : ''} />
-                  {isAnalyzing ? 'Analizando Cuadro...' : 'Sugerir con Inteligencia Artificial'}
-                </button>
-
-                {suggestions.length > 0 && (
-                  <div className="space-y-2 animate-in slide-in-from-top duration-300">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
-                      <Lightbulb size={10} />
-                      Posibles diagnósticos (CIE-10)
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestions.map((s, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setDiagnosis(s)}
-                          className="px-3 py-2 bg-slate-900 border border-white/5 hover:border-emerald-500/40 rounded-xl text-[11px] text-slate-300 font-bold transition-all text-left"
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {isSubmitted && error && (
-                  <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm animate-in fade-in zoom-in duration-200">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <p className="font-medium">{error}</p>
-                  </div>
-                )}
-              </div>
-            </section>
 
             {/* Action Card */}
             <section className="bg-gradient-to-br from-slate-900 to-slate-950 border border-white/5 rounded-3xl p-8 shadow-2xl">

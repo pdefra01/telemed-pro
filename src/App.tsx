@@ -17,6 +17,7 @@ import Agreements from './pages/admin/Agreements';
 import OCCBilling from './pages/admin/OCCBilling';
 import OCCSettings from './pages/admin/OCCSettings';
 import OCCReports from './pages/admin/OCCReports';
+import Profile from './pages/patient/Profile';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
@@ -180,6 +181,14 @@ const App: React.FC = () => {
         element={
           <ProtectedRoute user={user} allowedRoles={['patient']}>
             <Payments user={user as Patient} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['patient']}>
+            <Profile user={user as Patient} onLogin={handleLogin} />
           </ProtectedRoute>
         }
       />

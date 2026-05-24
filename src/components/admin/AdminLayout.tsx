@@ -38,7 +38,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
   ];
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30">
+    <div className="h-screen overflow-hidden bg-[#020617] text-slate-200 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30">
       {/* Dynamic Ambient Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-500/10 blur-[120px] rounded-full animate-pulse"></div>
@@ -46,9 +46,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden bg-[#0f172a]/80 backdrop-blur-md border-b border-white/5 p-4 flex justify-between items-center sticky top-0 z-50">
+      <div className="md:hidden bg-[#0f172a]/80 backdrop-blur-md border-b border-white/5 p-4 flex justify-between items-center sticky top-0 z-50 flex-shrink-0">
         <div className="flex items-center space-x-2 font-bold text-emerald-400 text-xl tracking-tight">
-          <img src={logoMedinex} alt="Medinex Logo" className="w-10 h-10 object-contain rounded-lg border border-white/10" />
+          <img src={logoMedinex} alt="Medinex Logo" className="w-10 h-10 object-contain rounded-lg border border-white/10 flex-shrink-0" />
           <span>MEDINEX <span className="text-slate-400 font-light text-sm">v2.0</span></span>
         </div>
         <button
@@ -129,7 +129,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 relative z-10 h-screen overflow-y-auto overflow-x-hidden custom-scrollbar">
+      <main className="flex-1 relative z-10 h-[calc(100vh-73px)] md:h-screen overflow-y-auto overflow-x-hidden custom-scrollbar">
         <div className="p-4 md:p-10 max-w-7xl mx-auto">
           {children}
         </div>
