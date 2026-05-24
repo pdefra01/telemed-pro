@@ -82,7 +82,7 @@ const MedicationCard: React.FC<MedicationCardProps> = ({
             type="text"
             value={med.name}
             onFocus={() => setShowSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            onBlur={() => setShowSuggestions(false)}
             onChange={(e) => onChange(index, 'name', e.target.value)}
             className="w-full bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all pl-12 text-sm"
             placeholder="Ej. Amoxicilina 500mg"
@@ -94,7 +94,11 @@ const MedicationCard: React.FC<MedicationCardProps> = ({
               {filteredMeds.map((m, i) => (
                 <button
                   key={i}
-                  onMouseDown={() => onChange(index, 'name', m)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(index, 'name', m);
+                    setShowSuggestions(false);
+                  }}
                   className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-blue-600 hover:text-white transition-colors"
                 >
                   {m}
@@ -279,7 +283,10 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
         body: { action: 'suggest_diagnosis', notes }
       });
       if (error) throw error;
-      const result = typeof data.result === 'string' ? data.result.split('\n').filter((s: string) => s.trim()) : data.result;
+      const rawResult = data?.result;
+      const result = typeof rawResult === 'string'
+        ? rawResult.split('\n').filter((s: string) => s.trim())
+        : (Array.isArray(rawResult) ? rawResult : []);
       setSuggestions(result);
     } catch (err) {
       console.error("AI Error:", err);
@@ -423,7 +430,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 <ShieldCheck className="w-4 h-4" />
                 Fase de Finalización
               </div>
-              <h1 className="text-4xl font-extrabold text-white tracking-tight">
+              <h1 className="text-4xl font-bold text-white tracking-tight">
                 Documentación <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">Clínica</span>
               </h1>
             </div>
