@@ -34,8 +34,13 @@ if (!apiKey || !apiSecret) {
 }
 
 // --- Supabase Admin Client (uses service role key, NEVER exposed to frontend) ---
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
+// VITE_SUPABASE_URL is a Docker build arg and not available at runtime.
+// The project URL is not sensitive so we use it directly.
+const supabaseUrl = process.env.SUPABASE_URL || 'https://fevdxgmtrhvwiuulopcf.supabase.co';
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+console.log(`[Supabase] URL: ${supabaseUrl}`);
+console.log(`[Supabase] Service role key present: ${!!serviceRoleKey}`);
 
 let supabaseAdmin = null;
 if (supabaseUrl && serviceRoleKey) {
@@ -44,7 +49,7 @@ if (supabaseUrl && serviceRoleKey) {
   });
   console.log("✅ Supabase Admin client initialized.");
 } else {
-  console.warn("⚠️ WARNING: Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Staff creation endpoint will fail.");
+  console.warn("⚠️ WARNING: Missing SUPABASE_SERVICE_ROLE_KEY. Staff creation endpoint will fail.");
 }
 
 // Rechazar métodos distintos a POST explícitamente
