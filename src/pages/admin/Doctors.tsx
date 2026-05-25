@@ -26,7 +26,8 @@ const Doctors: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    specialty: 'Clínica Médica'
+    specialty: 'Clínica Médica',
+    password: ''
   });
 
   useEffect(() => {
@@ -50,7 +51,8 @@ const Doctors: React.FC = () => {
     setFormData({
       name: '',
       email: '',
-      specialty: 'Clínica Médica'
+      specialty: 'Clínica Médica',
+      password: ''
     });
     setShowModal(true);
   };
@@ -271,6 +273,23 @@ const Doctors: React.FC = () => {
                   <option value="Ginecología" className="bg-[#0f172a]">Ginecología</option>
                 </select>
               </div>
+
+              {/* Contraseña solo al crear, no al editar */}
+              {!editId && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Contraseña Temporal</label>
+                  <input
+                    type="password"
+                    required={!editId}
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder-slate-600"
+                    value={formData.password}
+                    onChange={e => setFormData({ ...formData, password: e.target.value })}
+                  />
+                  <p className="text-[10px] text-slate-500 ml-1">El médico la usará para ingresar por primera vez.</p>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-4 pt-4">
                 <button 

@@ -64,31 +64,51 @@ export class DoctorRepository {
   }
 
   /**
-   * Crea un nuevo médico en la base de datos
+   * Crea un nuevo médico vía el endpoint de admin del servidor.
+   * Esto crea el usuario en auth.users con contraseña y el trigger
+   * handle_new_user crea automáticamente el perfil en public.profiles.
    */
-  async createDoctor(data: Partial<Doctor>): Promise<Doctor> {
-    const profileData = {
-      id: generateUUID(),
-      role: 'doctor',
-      full_name: data.name,
-      email: data.email,
-      specialty: data.specialty,
-      availability: data.availability || [],
-      is_active: true
-    };
+  async createDoctor(data: Partial<Doctor> & { password: string }): Promise<Doctor> {
+    const response = await fetch('/api/create-staff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: data.email,
+        password: data.password,
+        full_name: data.name,
+        role: 'doctor',
+        specialty: data.specialty,
+      }),
+    });
 
-    const { data: result, error } = await supabase
-      .from('profiles')
-      .insert([profileData])
-      .select()
-      .single();
+    const json = await response.json();
 
-    if (error) {
-      console.error("Error creando médico:", error);
-      throw error;
+    if (!response.ok) {
+      throw new Error(json.error || 'Error al crear el médico');
     }
 
-    return this.mapProfileToDoctor(result);
+    // El trigger ya insertó el perfil; lo buscamos para devolverlo mapeado
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', json.id)
+      .single();
+
+    if (error || !profile) {
+      throw new Error('Médico creado en Auth pero no se pudo obtener su perfil');
+    }
+
+    // Si el trigger no copió la specialty aún, la actualizamos
+    if (data.specialty && !profile.specialty) {
+      await supabase
+        .from('profiles')
+        .update({ specialty: data.specialty, availability: [] })
+        .eq('id', json.id);
+      profile.specialty = data.specialty;
+      profile.availability = [];
+    }
+
+    return this.mapProfileToDoctor(profile);
   }
 
   /**

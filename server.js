@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { AccessToken } from 'livekit-server-sdk';
+import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve, join } from 'path';
@@ -30,6 +31,20 @@ const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
 
 if (!apiKey || !apiSecret) {
   console.warn("⚠️ WARNING: Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment. Video tokens will fail.");
+}
+
+// --- Supabase Admin Client (uses service role key, NEVER exposed to frontend) ---
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+let supabaseAdmin = null;
+if (supabaseUrl && serviceRoleKey) {
+  supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+  console.log("✅ Supabase Admin client initialized.");
+} else {
+  console.warn("⚠️ WARNING: Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Staff creation endpoint will fail.");
 }
 
 // Rechazar métodos distintos a POST explícitamente
@@ -74,6 +89,57 @@ app.post('/api/livekit-token', async (req, res) => {
   } catch (error) {
     console.error("Token generation error:", error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/create-staff
+ * Crea un nuevo usuario de staff (médico o admin) en Supabase Auth.
+ * El trigger handle_new_user crea automáticamente el perfil en public.profiles.
+ * 
+ * Body: { email, password, full_name, role, specialty? }
+ */
+app.post('/api/create-staff', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { email, password, full_name, role, specialty } = req.body;
+
+  // Validaciones básicas
+  if (!email || !password || !full_name || !role) {
+    return res.status(400).json({ error: 'Campos requeridos: email, password, full_name, role.' });
+  }
+
+  if (!['doctor', 'admin'].includes(role)) {
+    return res.status(400).json({ error: 'Rol inválido. Debe ser "doctor" o "admin".' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  try {
+    const metadata = { full_name, role };
+    if (specialty) metadata.specialty = specialty;
+
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Auto-confirma el email para que el médico pueda ingresar de inmediato
+      user_metadata: metadata,
+    });
+
+    if (error) {
+      console.error('[create-staff] Supabase error:', error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.log(`[create-staff] Usuario ${role} creado: ${email} (${data.user.id})`);
+    res.status(201).json({ id: data.user.id, email: data.user.email });
+  } catch (err) {
+    console.error('[create-staff] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno del servidor.' });
   }
 });
 
