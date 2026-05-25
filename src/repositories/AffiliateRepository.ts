@@ -56,62 +56,122 @@ export class AffiliateRepository {
    * Crea un nuevo afiliado
    */
   async createAffiliate(data: Partial<Patient>): Promise<Patient> {
-    const profileData = {
-      id: generateUUID(),
-      role: 'patient',
-      full_name: data.name,
-      email: data.email,
-      dni: data.dni,
-      plan_name: data.planName,
-      plan_status: data.planStatus || 'active',
-      address: data.address,
-      phone: data.phone,
-      is_active: true
-    };
+    const response = await fetch('/api/create-patient', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        full_name: data.name,
+        dni: data.dni,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        password: data.dni, // Se usa el DNI como password temporal por defecto
+      }),
+    });
 
-    const { data: result, error } = await supabase
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al registrar afiliado en el servidor.');
+    }
+
+    const result = await response.json();
+    
+    // Obtener los datos del perfil que el trigger handle_new_user acaba de crear
+    const { data: profile, error } = await supabase
       .from('profiles')
-      .insert([profileData])
-      .select()
+      .select('*')
+      .eq('id', result.id)
       .single();
 
     if (error) {
-      console.error("Error creando afiliado:", error);
-      throw error;
+      console.warn("Trigger tardó en sincronizar, retornando datos simulados...", error);
+      return {
+        id: result.id,
+        name: data.name || '',
+        email: result.email,
+        role: 'patient',
+        dni: data.dni,
+        planName: data.planName || 'Plan Base',
+        planStatus: data.planStatus || 'active',
+        address: data.address,
+        phone: data.phone,
+        paymentStatus: 'paid',
+        currentPeriodQuotaUsed: 0
+      };
     }
 
-    return this.mapProfileToPatient(result);
+    return this.mapProfileToPatient(profile);
   }
 
   /**
    * Crea múltiples afiliados en una sola operación
    */
   async createBulk(affiliates: Partial<Patient>[]): Promise<Patient[]> {
-    const profilesData = affiliates.map(data => ({
-      id: generateUUID(),
-      role: 'patient',
-      full_name: data.name,
+    const patientsPayload = affiliates.map(data => ({
+      name: data.name,
       email: data.email,
       dni: data.dni,
-      plan_name: data.planName,
-      plan_status: data.planStatus || 'active',
-      address: data.address,
       phone: data.phone,
-      agreement_id: data.agreementId,
-      is_active: true
+      address: data.address,
+      password: data.dni, // Password por defecto es su DNI
     }));
 
-    const { data: results, error } = await supabase
-      .from('profiles')
-      .insert(profilesData)
-      .select();
+    const response = await fetch('/api/create-patient-bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(patientsPayload),
+    });
 
-    if (error) {
-      console.error("Error en creación masiva:", error);
-      throw error;
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al procesar la importación masiva.');
     }
 
-    return (results || []).map(row => this.mapProfileToPatient(row));
+    const results = await response.json();
+    
+    // Si fallaron todos los registros del batch
+    if (results.summary.success === 0 && results.summary.failed > 0) {
+      const firstError = results.failures[0]?.error || 'Error de autenticación.';
+      throw new Error(`Error en la importación masiva: ${firstError}`);
+    }
+
+    const successfulIds = results.successful.map((s: any) => s.id);
+    if (successfulIds.length === 0) return [];
+
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', successfulIds);
+
+    if (error) {
+      console.warn("Error al recuperar perfiles del bulk import, retornando simulados...", error);
+      return results.successful.map((s: any) => {
+        const source = affiliates.find(a => a.dni === s.dni) || {};
+        return {
+          id: s.id,
+          name: source.name || '',
+          email: source.email || '',
+          role: 'patient',
+          dni: s.dni,
+          planName: source.planName || 'Plan Base',
+          planStatus: source.planStatus || 'active',
+          address: source.address,
+          phone: source.phone,
+          paymentStatus: 'paid',
+          currentPeriodQuotaUsed: 0
+        };
+      });
+    }
+
+    if (results.summary.failed > 0) {
+      console.warn(`${results.summary.failed} registros fallaron en la importación masiva:`, results.failures);
+    }
+
+    return (profiles || []).map(row => this.mapProfileToPatient(row));
   }
 
   /**

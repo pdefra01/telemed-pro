@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Edit2, Trash2, Search, Filter, 
   Activity, Star, Clock, AlertCircle, 
-  User as UserIcon, ShieldCheck, Stethoscope
+  User as UserIcon, ShieldCheck, Stethoscope,
+  Key
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { doctorRepository } from '../../repositories/DoctorRepository';
 import { Doctor } from '../../types';
+import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 
 // Glass Card for Table Container
 const GlassTableContainer: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -23,6 +25,7 @@ const Doctors: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [resetPasswordDoc, setResetPasswordDoc] = useState<Doctor | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -206,6 +209,13 @@ const Doctors: React.FC = () => {
                   <td className="px-8 py-5 text-right">
                     <div className="flex justify-end space-x-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       <button 
+                        onClick={() => setResetPasswordDoc(doc)} 
+                        className="p-2 bg-white/5 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors border border-white/5"
+                        title="Restablecer Contraseña"
+                      >
+                        <Key size={16} />
+                      </button>
+                      <button 
                         onClick={() => handleEdit(doc)} 
                         className="p-2 bg-white/5 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-colors border border-white/5"
                         title="Editar Perfil"
@@ -338,6 +348,16 @@ const Doctors: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPasswordDoc && (
+        <ResetPasswordModal
+          userId={resetPasswordDoc.id}
+          userName={resetPasswordDoc.name}
+          userRole="doctor"
+          onClose={() => setResetPasswordDoc(null)}
+        />
       )}
     </div>
   );

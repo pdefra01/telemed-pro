@@ -148,13 +148,212 @@ app.post('/api/create-staff', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/create-patient
+ * Crea un nuevo usuario paciente en Supabase Auth.
+ * Si el email no se proporciona, autogenera uno basado en el DNI ([DNI]@medinex-paciente.com).
+ * El trigger handle_new_user crea automáticamente el perfil en public.profiles.
+ */
+app.post('/api/create-patient', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { email, password, full_name, dni, phone, address } = req.body;
+
+  if (!full_name || !dni || !password) {
+    return res.status(400).json({ error: 'Campos requeridos: full_name, dni, password.' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  try {
+    const targetEmail = email || `${dni.trim()}@medinex-paciente.com`;
+    
+    const metadata = { 
+      full_name, 
+      role: 'patient',
+      dni: dni.trim()
+    };
+    if (phone) metadata.phone = phone;
+    if (address) metadata.address = address;
+
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: targetEmail,
+      password,
+      email_confirm: true,
+      user_metadata: metadata,
+    });
+
+    if (error) {
+      console.error('[create-patient] Supabase error:', error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.log(`[create-patient] Paciente creado: ${targetEmail} (${data.user.id})`);
+    res.status(201).json({ id: data.user.id, email: data.user.email, dni: dni.trim() });
+  } catch (err) {
+    console.error('[create-patient] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno del servidor.' });
+  }
+});
+
+/**
+ * POST /api/create-patient-bulk
+ * Crea múltiples pacientes en Supabase Auth a partir de un array de JSON.
+ * Procesa en lotes secuenciales de a 5 para evitar rate limits de la API de autenticación.
+ */
+app.post('/api/create-patient-bulk', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const patients = req.body;
+
+  if (!Array.isArray(patients)) {
+    return res.status(400).json({ error: 'El cuerpo de la petición debe ser un array de pacientes.' });
+  }
+
+  console.log(`[create-patient-bulk] Iniciando importación masiva de ${patients.length} pacientes...`);
+
+  const results = {
+    summary: { total: patients.length, success: 0, failed: 0 },
+    successful: [],
+    failures: []
+  };
+
+  const createSinglePatient = async (patient, index) => {
+    const { name, email, dni, phone, address, password } = patient;
+
+    if (!name || !dni) {
+      results.failures.push({
+        index,
+        dni: dni || 'S/D',
+        name: name || 'S/N',
+        error: 'Campos obligatorios faltantes: name o dni.'
+      });
+      results.summary.failed++;
+      return;
+    }
+
+    const targetPassword = password || dni.trim();
+    if (targetPassword.length < 6) {
+      results.failures.push({
+        index,
+        dni: dni.trim(),
+        name,
+        error: 'La contraseña (o DNI fallback) debe tener al menos 6 caracteres.'
+      });
+      results.summary.failed++;
+      return;
+    }
+
+    const targetEmail = email || `${dni.trim()}@medinex-paciente.com`;
+
+    try {
+      const metadata = {
+        full_name: name,
+        role: 'patient',
+        dni: dni.trim()
+      };
+      if (phone) metadata.phone = phone;
+      if (address) metadata.address = address;
+
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email: targetEmail,
+        password: targetPassword,
+        email_confirm: true,
+        user_metadata: metadata
+      });
+
+      if (error) {
+        results.failures.push({
+          index,
+          dni: dni.trim(),
+          name,
+          error: error.message
+        });
+        results.summary.failed++;
+      } else {
+        results.successful.push({
+          dni: dni.trim(),
+          id: data.user.id
+        });
+        results.summary.success++;
+      }
+    } catch (err) {
+      results.failures.push({
+        index,
+        dni: dni.trim(),
+        name,
+        error: err.message || 'Error inesperado.'
+      });
+      results.summary.failed++;
+    }
+  };
+
+  try {
+    const batchSize = 5;
+    for (let i = 0; i < patients.length; i += batchSize) {
+      const batch = patients.slice(i, i + batchSize);
+      await Promise.all(batch.map((p, idx) => createSinglePatient(p, i + idx)));
+    }
+
+    console.log(`[create-patient-bulk] Importación finalizada. Éxito: ${results.summary.success}, Fallidos: ${results.summary.failed}`);
+    res.status(207).json(results);
+  } catch (err) {
+    console.error('[create-patient-bulk] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno del servidor al procesar el lote.' });
+  }
+});
+
+/**
+ * POST /api/reset-user-password
+ * Restablece la contraseña de cualquier usuario (médico o paciente) en Supabase Auth de forma administrativa.
+ */
+app.post('/api/reset-user-password', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { userId, newPassword } = req.body;
+
+  if (!userId || !newPassword) {
+    return res.status(400).json({ error: 'Campos requeridos: userId, newPassword.' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password: newPassword }
+    );
+
+    if (error) {
+      console.error('[reset-user-password] Supabase error:', error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.log(`[reset-user-password] Contraseña restablecida exitosamente para usuario ID: ${userId}`);
+    res.status(200).json({ message: 'Contraseña actualizada exitosamente' });
+  } catch (err) {
+    console.error('[reset-user-password] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno del servidor.' });
+  }
+});
+
 // Catch-all middleware to serve index.html for SPA routing
 // This is the most compatible way for Express 5
 app.use((req, res) => {
   res.sendFile(join(distPath, 'index.html'));
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3001);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 TeleMed Pro corriendo en puerto ${PORT}`);
   console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);

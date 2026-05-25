@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Building2, Plus, Search, Edit2, Trash2, 
   ChevronRight, Filter, Briefcase, Users, 
-  Calendar, CheckCircle2, XCircle
+  Calendar, CheckCircle2, XCircle, Loader2
 } from 'lucide-react';
 import { AgreementRepository } from '../../repositories/AgreementRepository';
 import { PlanRepository } from '../../repositories/PlanRepository';
@@ -252,6 +252,21 @@ const Agreements: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Bulk Import Loader Overlay */}
+      {isImporting && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#020617]/90 backdrop-blur-md p-6 animate-in fade-in duration-300">
+          <div className="bg-[#0f172a]/80 border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full text-center backdrop-blur-md shadow-2xl flex flex-col items-center">
+            <div className="p-4 rounded-3xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-6">
+              <Loader2 size={32} className="animate-spin text-indigo-400" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Importando Padrón</h3>
+            <p className="text-sm text-slate-400 leading-relaxed font-medium">
+              Procesando el archivo, creando accesos de autenticación de forma segura batch por batch. Aguardá unos instantes...
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

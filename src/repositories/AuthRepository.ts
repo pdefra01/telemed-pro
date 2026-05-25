@@ -109,6 +109,21 @@ export class AuthRepository {
     } as any;
   }
 
+  async resetPasswordFromAdmin(userId: string, newPassword: string): Promise<void> {
+    const response = await fetch('/api/reset-user-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId, newPassword }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al restablecer la contraseña en el servidor.');
+    }
+  }
+
   async logout(): Promise<void> {
     await supabase.auth.signOut();
   }
