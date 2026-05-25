@@ -318,7 +318,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </Button>
             </form>
 
-            {role === 'patient' && (
+            {(role === 'patient' || role === 'admin') && (
               <div className="mt-8 text-center animate-fade-in">
                 <p className="text-gray-600">
                   {isRegistering ? '¿Ya tenés cuenta?' : '¿Sos nuevo?'}
