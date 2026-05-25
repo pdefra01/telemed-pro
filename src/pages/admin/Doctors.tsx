@@ -68,7 +68,8 @@ const Doctors: React.FC = () => {
       }
       setShowModal(false);
       loadDoctors();
-    } catch (error) {
+    } catch (error: any) {
+      console.error("[Doctors] Error al guardar médico:", error?.message, error?.code, error?.details, error?.hint);
       toast("Error al guardar médico", "error");
     } finally {
       setIsSubmitting(false);
