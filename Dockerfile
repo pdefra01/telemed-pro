@@ -21,6 +21,9 @@ RUN npm install
 # Copy all files
 COPY . .
 
+# Remove local environment files to prevent them from overriding Coolify's build variables in Vite
+RUN rm -f .env .env.local
+
 # Build the frontend
 RUN npm run build
 
