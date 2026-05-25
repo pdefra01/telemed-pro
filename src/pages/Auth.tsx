@@ -30,6 +30,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setError('');
     setInputValue('');
     setPatientDni('');
+    setIsRegistering(false); // Force login-only mode for doctors and admins
     if (newRole === 'patient') {
       setMethod('dni'); // Default to DNI for patients
     } else {
@@ -317,18 +318,20 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </Button>
             </form>
 
-            <div className="mt-8 text-center">
-              <p className="text-gray-600">
-                {isRegistering ? '¿Ya tenés cuenta?' : '¿Sos nuevo?'}
-                <button
-                  type="button"
-                  onClick={() => setIsRegistering(!isRegistering)}
-                  className="ml-2 text-teal-600 font-bold hover:underline"
-                >
-                  {isRegistering ? 'Iniciá sesión' : 'Registrate'}
-                </button>
-              </p>
-            </div>
+            {role === 'patient' && (
+              <div className="mt-8 text-center animate-fade-in">
+                <p className="text-gray-600">
+                  {isRegistering ? '¿Ya tenés cuenta?' : '¿Sos nuevo?'}
+                  <button
+                    type="button"
+                    onClick={() => setIsRegistering(!isRegistering)}
+                    className="ml-2 text-teal-600 font-bold hover:underline"
+                  >
+                    {isRegistering ? 'Iniciá sesión' : 'Registrate'}
+                  </button>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
