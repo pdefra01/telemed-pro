@@ -1,5 +1,6 @@
 import { supabase } from '../services/supabase';
 import { Appointment } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export class AppointmentRepository {
   /**
@@ -133,7 +134,7 @@ export class AppointmentRepository {
     let doctorId;
     if (!doctors || doctors.length === 0) {
       // Crear medico falso para pruebas
-      const newDoctorId = crypto.randomUUID();
+      const newDoctorId = generateUUID();
       // Need to use auth.admin to create user if we wanted a real auth user, 
       // but for this MVP we can just insert into profiles if RLS allows or temporarily bypass it.
       // Wait, RLS on profiles only allows inserting IF auth.uid() == id. 

@@ -1,5 +1,6 @@
 import { supabase } from '../services/supabase';
 import { Doctor } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export class DoctorRepository {
   /**
@@ -67,7 +68,7 @@ export class DoctorRepository {
    */
   async createDoctor(data: Partial<Doctor>): Promise<Doctor> {
     const profileData = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       role: 'doctor',
       full_name: data.name,
       email: data.email,

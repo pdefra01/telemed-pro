@@ -1,5 +1,6 @@
 import { supabase } from '../services/supabase';
 import { Patient } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export class AffiliateRepository {
   /**
@@ -56,7 +57,7 @@ export class AffiliateRepository {
    */
   async createAffiliate(data: Partial<Patient>): Promise<Patient> {
     const profileData = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       role: 'patient',
       full_name: data.name,
       email: data.email,
@@ -87,7 +88,7 @@ export class AffiliateRepository {
    */
   async createBulk(affiliates: Partial<Patient>[]): Promise<Patient[]> {
     const profilesData = affiliates.map(data => ({
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       role: 'patient',
       full_name: data.name,
       email: data.email,
