@@ -5,7 +5,7 @@ export class AuthRepository {
   /**
    * Registra un nuevo paciente utilizando un email falso basado en su DNI/Teléfono
    */
-  async registerPatient(authEmail: string, password: string, fullName: string, role: Role): Promise<User> {
+  async registerPatient(authEmail: string, password: string, fullName: string, role: Role, dni?: string): Promise<User> {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: authEmail,
       password: password,
@@ -13,6 +13,7 @@ export class AuthRepository {
         data: {
           full_name: fullName,
           role: role,
+          dni: dni,
         }
       }
     });
@@ -26,8 +27,8 @@ export class AuthRepository {
     if (!data.user) throw new Error("Error desconocido al crear el usuario.");
 
     // Extraer DNI para devolver el objeto completo
-    let extractedDni = '';
-    if (authEmail.endsWith('@medinex-paciente.com')) {
+    let extractedDni = dni || '';
+    if (!extractedDni && authEmail.endsWith('@medinex-paciente.com')) {
       extractedDni = authEmail.split('@')[0];
     }
 
