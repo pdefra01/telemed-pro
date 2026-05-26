@@ -92,6 +92,10 @@ export class AuthRepository {
       } as any;
     }
 
+    if (profileData.is_active === false) {
+      throw new Error("Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.");
+    }
+
     return {
       id: data.user.id,
       name: profileData.full_name || 'Paciente',

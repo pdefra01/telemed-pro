@@ -8,6 +8,7 @@ export interface User {
   avatarUrl?: string;
   phone?: string;
   dni?: string;
+  isActive?: boolean;
 }
 
 export interface FamilyMember {

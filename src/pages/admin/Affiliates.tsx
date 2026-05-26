@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, AlertCircle, Shield, User as UserIcon, Building2, Filter, Key } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, AlertCircle, Shield, User as UserIcon, Building2, Filter, Key, ShieldCheck } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { Patient } from '../../types';
@@ -103,6 +103,19 @@ const Affiliates: React.FC = () => {
     }
   };
 
+  const handleActivate = async (id: string) => {
+    setIsSubmitting(true);
+    try {
+      await affiliateRepository.activateAffiliate(id);
+      toast("Afiliado aprobado y activado con éxito", "success");
+      loadAffiliates();
+    } catch (error) {
+      toast("Error al aprobar afiliado", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Header & Search */}
@@ -138,26 +151,30 @@ const Affiliates: React.FC = () => {
             <UserIcon size={20} />
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total Individuos</p>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total Pacientes</p>
             <h4 className="text-xl font-bold text-white">{affiliates.length}</h4>
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 p-5 rounded-3xl flex items-center space-x-4">
-          <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-400">
-            <Building2 size={20} />
+          <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400">
+            <ShieldCheck size={20} />
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Altas del Mes</p>
-            <h4 className="text-xl font-bold text-white">42</h4>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Afiliados Activos</p>
+            <h4 className="text-xl font-bold text-white">
+              {affiliates.filter(p => p.isActive).length}
+            </h4>
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 p-5 rounded-3xl flex items-center space-x-4">
-          <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400">
-            <Shield size={20} />
+          <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400">
+            <AlertCircle size={20} />
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Estado Cartera</p>
-            <h4 className="text-xl font-bold text-emerald-400">98.2% Saludable</h4>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Pendientes de Aprobación</p>
+            <h4 className="text-xl font-bold text-amber-400">
+              {affiliates.filter(p => !p.isActive && p.planStatus !== 'suspended').length}
+            </h4>
           </div>
         </div>
       </div>
@@ -169,7 +186,7 @@ const Affiliates: React.FC = () => {
               <tr className="bg-white/5 text-slate-500 text-[10px] uppercase tracking-widest font-bold">
                 <th className="px-8 py-5">Identidad</th>
                 <th className="px-6 py-5">Plan / Cobertura</th>
-                <th className="px-6 py-5 text-center">Estado de Pago</th>
+                <th className="px-6 py-5 text-center">Estado de Cuenta</th>
                 <th className="px-8 py-5 text-right">Gestión</th>
               </tr>
             </thead>
@@ -200,15 +217,39 @@ const Affiliates: React.FC = () => {
                   </td>
                   <td className="px-6 py-5 text-center">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest
-                      ${patient.planStatus === 'active' 
-                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
-                        : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full mr-2 ${patient.planStatus === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
-                      {patient.planStatus === 'active' ? 'Al Día' : 'En Mora'}
+                      ${patient.isActive
+                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                        : patient.planStatus === 'suspended'
+                          ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                          : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                      }`}>
+                      <div className={`w-1.5 h-1.5 rounded-full mr-2 
+                        ${patient.isActive 
+                          ? 'bg-emerald-500 animate-pulse' 
+                          : patient.planStatus === 'suspended'
+                            ? 'bg-rose-500'
+                            : 'bg-amber-500 animate-bounce'
+                        }`}
+                      ></div>
+                      {patient.isActive 
+                        ? 'Activo' 
+                        : patient.planStatus === 'suspended'
+                          ? 'Suspendido'
+                          : 'Pendiente'
+                      }
                     </span>
                   </td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex justify-end space-x-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      {!patient.isActive && patient.planStatus !== 'suspended' && (
+                        <button 
+                          onClick={() => handleActivate(patient.id)} 
+                          className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5"
+                          title="Aprobar Afiliado"
+                        >
+                          <ShieldCheck size={16} />
+                        </button>
+                      )}
                       <button 
                         onClick={() => setResetPasswordPatient(patient)} 
                         className="p-2 bg-white/5 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors border border-white/5"
@@ -223,13 +264,15 @@ const Affiliates: React.FC = () => {
                       >
                         <Edit2 size={16} />
                       </button>
-                      <button 
-                        onClick={() => setDeleteConfirmId(patient.id)} 
-                        className="p-2 bg-white/5 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-colors border border-white/5"
-                        title="Suspender"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {patient.isActive && (
+                        <button 
+                          onClick={() => setDeleteConfirmId(patient.id)} 
+                          className="p-2 bg-white/5 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-colors border border-white/5"
+                          title="Suspender"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

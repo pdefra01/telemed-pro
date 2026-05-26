@@ -131,4 +131,28 @@ describe('AffiliateRepository', () => {
     expect(result[0].name).toBe('Patient 1');
     expect(result[1].name).toBe('Patient 2');
   });
+
+  it('should update profile to active when calling activateAffiliate', async () => {
+    const eqMock = vi.fn().mockResolvedValue({ error: null });
+    const updateMock = vi.fn().mockReturnValue({ eq: eqMock });
+    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+
+    await affiliateRepository.activateAffiliate('test-id');
+
+    expect(supabase.from).toHaveBeenCalledWith('profiles');
+    expect(updateMock).toHaveBeenCalledWith({ is_active: true, plan_status: 'active' });
+    expect(eqMock).toHaveBeenCalledWith('id', 'test-id');
+  });
+
+  it('should update profile to suspended when calling deactivateAffiliate', async () => {
+    const eqMock = vi.fn().mockResolvedValue({ error: null });
+    const updateMock = vi.fn().mockReturnValue({ eq: eqMock });
+    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+
+    await affiliateRepository.deactivateAffiliate('test-id');
+
+    expect(supabase.from).toHaveBeenCalledWith('profiles');
+    expect(updateMock).toHaveBeenCalledWith({ is_active: false, plan_status: 'suspended' });
+    expect(eqMock).toHaveBeenCalledWith('id', 'test-id');
+  });
 });

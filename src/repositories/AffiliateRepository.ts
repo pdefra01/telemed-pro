@@ -11,7 +11,6 @@ export class AffiliateRepository {
       .from('profiles')
       .select('*')
       .eq('role', 'patient')
-      .eq('is_active', true)
       .order('full_name', { ascending: true });
 
     if (error) {
@@ -30,8 +29,7 @@ export class AffiliateRepository {
       .from('profiles')
       .select('*')
       .eq('role', 'patient')
-      .eq('agreement_id', agreementId)
-      .eq('is_active', true);
+      .eq('agreement_id', agreementId);
 
     if (error) throw error;
     return (data || []).map(row => this.mapProfileToPatient(row));
@@ -45,8 +43,7 @@ export class AffiliateRepository {
       .from('profiles')
       .select('*')
       .eq('role', 'patient')
-      .is('agreement_id', null)
-      .eq('is_active', true);
+      .is('agreement_id', null);
 
     if (error) throw error;
     return (data || []).map(row => this.mapProfileToPatient(row));
@@ -219,12 +216,27 @@ export class AffiliateRepository {
   }
 
   /**
-   * Desactiva a un afiliado (Soft Delete)
+   * Activa/Aprueba a un afiliado
+   */
+  async activateAffiliate(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active: true, plan_status: 'active' })
+      .eq('id', id);
+
+    if (error) {
+      console.error(`Error activando afiliado ${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Desactiva a un afiliado (Soft Delete / Suspensión)
    */
   async deactivateAffiliate(id: string): Promise<void> {
     const { error } = await supabase
       .from('profiles')
-      .update({ is_active: false })
+      .update({ is_active: false, plan_status: 'suspended' })
       .eq('id', id);
 
     if (error) {
@@ -247,7 +259,8 @@ export class AffiliateRepository {
       phone: row.phone,
       agreementId: row.agreement_id,
       paymentStatus: row.payment_status || 'paid',
-      currentPeriodQuotaUsed: row.current_period_quota_used || 0
+      currentPeriodQuotaUsed: row.current_period_quota_used || 0,
+      isActive: row.is_active
     };
   }
 }

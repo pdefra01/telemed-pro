@@ -175,7 +175,8 @@ app.post('/api/create-patient', async (req, res) => {
     const metadata = { 
       full_name, 
       role: 'patient',
-      dni: dni.trim()
+      dni: dni.trim(),
+      is_active: true
     };
     if (phone) metadata.phone = phone;
     if (address) metadata.address = address;
@@ -256,7 +257,8 @@ app.post('/api/create-patient-bulk', async (req, res) => {
       const metadata = {
         full_name: name,
         role: 'patient',
-        dni: dni.trim()
+        dni: dni.trim(),
+        is_active: true
       };
       if (phone) metadata.phone = phone;
       if (address) metadata.address = address;
