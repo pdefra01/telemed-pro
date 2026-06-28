@@ -182,6 +182,56 @@ export class PharmacyOrderRepository {
       }))
     };
   }
+
+  /**
+   * Obtiene todas las órdenes de la plataforma (Admin)
+   */
+  async getAllOrders(): Promise<(PharmacyOrder & { patientName?: string; deliveryStatus?: string; courierName?: string; otpCode?: string })[]> {
+    const { data, error } = await supabase
+      .from('pharmacy_orders')
+      .select(`
+        *,
+        patient:profiles!patient_id(full_name),
+        delivery:pharmacy_deliveries!order_id(tracking_status, courier_name, otp_code),
+        items:pharmacy_order_items(
+          id, product_id, quantity, unit_price,
+          product:pharmacy_products(name)
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error obteniendo todas las órdenes:", error);
+      throw error;
+    }
+
+    return (data || []).map(row => {
+      const deliv = Array.isArray(row.delivery) ? row.delivery[0] : row.delivery;
+      return {
+        id: row.id,
+        patientId: row.patient_id,
+        patientName: row.patient?.full_name || 'Paciente MEDINEX',
+        prescriptionId: row.prescription_id,
+        status: row.status,
+        subtotal: Number(row.subtotal),
+        coverageDiscount: Number(row.coverage_discount),
+        total: Number(row.total),
+        deliveryAddress: row.delivery_address,
+        createdAt: row.created_at,
+        deliveryStatus: deliv?.tracking_status || 'assigned',
+        courierName: deliv?.courier_name || 'Cadete Asignado',
+        otpCode: deliv?.otp_code || '0000',
+        items: (row.items || []).map((i: any) => ({
+          id: i.id,
+          productId: i.product_id,
+          productName: i.product?.name || 'Producto',
+          quantity: i.quantity,
+          unitPrice: Number(i.unit_price)
+        }))
+      };
+    });
+  }
 }
 
 export const pharmacyOrderRepository = new PharmacyOrderRepository();
+

@@ -15,7 +15,8 @@ import {
   Building2,
   FileText,
   Megaphone,
-  Package
+  Package,
+  ShoppingCart
 } from 'lucide-react';
 import { User } from '../../types';
 import logoMedinex from '../../logo_medinex.jpeg';
@@ -35,6 +36,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
     { name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors' },
     { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
     { name: 'Convenios', icon: <Building2 size={20} />, path: '/agreements' },
+    { name: 'Ventas y Cadetería', icon: <ShoppingCart size={20} />, path: '/admin/pharmacy-sales' },
     { name: 'Inventario Farmacia', icon: <Package size={20} />, path: '/admin/pharmacy-inventory' },
     { name: 'Encuestas', icon: <FileText size={20} />, path: '/survey-builder' },
     { name: 'Campañas', icon: <Megaphone size={20} />, path: '/campaigns' },

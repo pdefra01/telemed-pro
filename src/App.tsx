@@ -24,6 +24,7 @@ import PatientSurveys from './pages/patient/PatientSurveys';
 import { PharmacyCatalog } from './pages/patient/PharmacyCatalog';
 import { PatientOrderTracking } from './pages/patient/PatientOrderTracking';
 import { PharmacyInventoryAdmin } from './pages/admin/PharmacyInventoryAdmin';
+import { PharmacySalesAdmin } from './pages/admin/PharmacySalesAdmin';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
@@ -247,6 +248,14 @@ const App: React.FC = () => {
         element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
             <PharmacyInventoryAdmin />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/pharmacy-sales"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <PharmacySalesAdmin />
           </ProtectedRoute>
         }
       />
