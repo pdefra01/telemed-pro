@@ -19,7 +19,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     const body = await req.json()
-    const { appointmentId, diagnosis, notes, prescription } = body
+    const { appointmentId, diagnosis, notes, prescription, digitalSignature, signaturePublicKey } = body
     const medications = body.medications || prescription?.medications || [];
 
     // 1. Get Appointment Info
@@ -36,7 +36,7 @@ serve(async (req) => {
     // 2. Get Doctor Info (for the records)
     const { data: doctor, error: docError } = await supabase
       .from('profiles')
-      .select('full_name, specialty')
+      .select('full_name, specialty, license_number')
       .eq('id', appointment.doctor_id)
       .single()
 
@@ -83,8 +83,8 @@ serve(async (req) => {
       })
 
       // Logo/Brand text
-      page.drawText('TeleMed Pro', { x: 40, y: height - 50, size: 24, font: helveticaBold, color: rgb(1, 1, 1) })
-      page.drawText('RECETA MÉDICA DIGITAL', { x: 40, y: height - 75, size: 10, font: helveticaBold, color: rgb(1, 1, 1) })
+      page.drawText('MEDINEX', { x: 40, y: height - 50, size: 24, font: helveticaBold, color: rgb(1, 1, 1) })
+      page.drawText('RECETA ELECTRÓNICA OFICIAL', { x: 40, y: height - 75, size: 10, font: helveticaBold, color: rgb(1, 1, 1) })
 
       // Info box background
       page.drawRectangle({
@@ -145,7 +145,7 @@ serve(async (req) => {
       page.drawText(`Dx: ${diagnosis}`, { x: 40, y: currentY, size: 9, font: helveticaFont, color: rgb(0.5, 0.5, 0.5) })
 
       // Footer / Signature area
-      const signature = `AUTH-${appointment.doctor_id.substring(0, 8)}-${Date.now()}`
+      const signature = digitalSignature || `AUTH-${appointment.doctor_id.substring(0, 8)}-${Date.now()}`
       
       // Line for signature
       page.drawLine({
@@ -164,8 +164,12 @@ serve(async (req) => {
         height: 40,
         color: lightGray,
       })
-      page.drawText('Documento validado digitalmente por TeleMed Pro. La autenticidad puede verificarse mediante el código ID.', { x: 55, y: 65, size: 7, font: helveticaFont, color: rgb(0.5, 0.5, 0.5) })
-      page.drawText(`CÓDIGO DE VALIDACIÓN: ${signature}`, { x: 55, y: 53, size: 8, font: helveticaBold, color: primaryColor })
+      // Footer validation block — uses first 20 chars of the ECDSA signature as auth code
+      const authCode = digitalSignature
+        ? `ECDSA-${digitalSignature.substring(0, 20).toUpperCase()}` 
+        : `AUTH-${appointment.doctor_id.substring(0, 8)}-${Date.now()}`
+      page.drawText('Documento validado digitalmente por MEDINEX. La autenticidad puede verificarse mediante el código ID.', { x: 55, y: 65, size: 7, font: helveticaFont, color: rgb(0.5, 0.5, 0.5) })
+      page.drawText(`CÓDIGO DE AUTENTICIDAD CRIPTOGRÁFICA: ${authCode}`, { x: 55, y: 53, size: 8, font: helveticaBold, color: primaryColor })
 
       const pdfBytes = await pdfDoc.save()
 
@@ -203,6 +207,7 @@ serve(async (req) => {
           doctor_name: doctor.full_name,
           expiration_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           digital_signature: signature,
+          signature_public_key: signaturePublicKey || null,
           medications: medications.map((m: any) => ({
             name: m.name,
             instructions: m.instructions,

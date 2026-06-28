@@ -10,6 +10,7 @@ import { appointmentRepository } from '../../repositories/AppointmentRepository'
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
+import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { NotificationListener } from '../../components/dashboard/NotificationListener';
 import { notificationRepository } from '../../repositories/NotificationRepository';
@@ -32,6 +33,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
     const [recentPrescriptions, setRecentPrescriptions] = useState<Prescription[]>([]);
     const [isLoadingPrescriptions, setIsLoadingPrescriptions] = useState(true);
+    const [quotaStatus, setQuotaStatus] = useState<{ quotaUsed: number; totalBonified: number; isOverQuota: boolean; remaining: number; planName: string } | null>(null);
 
     useEffect(() => {
         const fetchAppointments = async () => {
@@ -69,9 +71,19 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
             }
         };
 
+        const fetchQuotaStatus = async () => {
+            try {
+                const status = await affiliateRepository.getConsultationQuotaStatus(user.id);
+                setQuotaStatus(status);
+            } catch (error) {
+                console.error("Error cargando cupo:", error);
+            }
+        };
+
         fetchAppointments();
         fetchRecentRecords();
         fetchRecentPrescriptions();
+        fetchQuotaStatus();
     }, [user.id, refreshKey]);
 
     // Real-time Sync Hook
@@ -210,8 +222,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <UserIcon size={20} className="text-slate-400" />
                         </div>
                         <div className="hidden md:block pr-2">
-                            <p className="text-xs font-bold text-white leading-none mb-1">{(user.name || 'Paciente').split(' ')[0]}</p>
-                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Mi Perfil</p>
+                            <p className="text-sm font-bold text-white leading-none mb-1">{(user.name || 'Paciente').split(' ')[0]}</p>
+                            <p className="text-xs font-medium text-slate-400">Mi Perfil</p>
                         </div>
                     </Link>
                 </div>
@@ -225,41 +237,50 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                 <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-10">
                     <div className="text-center md:text-left">
                         <div className="flex flex-wrap items-center gap-3 mb-6">
-                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-[0.3em]">Sistema Operativo</span>
+                                <span className="text-xs font-semibold text-emerald-400">Sistema Operativo</span>
                             </div>
-                            <div className="hidden sm:inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-                                <Shield size={12} className="text-blue-400" />
-                                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-[0.3em]">Multi-Node Robustness Active</span>
-                            </div>
+                            {quotaStatus && (
+                                <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border shadow-sm ${
+                                    quotaStatus.isOverQuota
+                                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                        : 'bg-teal-500/10 border-teal-500/30 text-teal-300'
+                                }`}>
+                                    <span className="text-xs font-semibold">
+                                        {quotaStatus.isOverQuota
+                                            ? `⚠️ Cupo Mensual Cubierto (${quotaStatus.quotaUsed}/${quotaStatus.totalBonified})`
+                                            : `Consultas Bonificadas: ${quotaStatus.quotaUsed}/${quotaStatus.totalBonified}`}
+                                    </span>
+                                </div>
+                            )}
                         </div>
-                        <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white mb-4 leading-none">
+                        <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight text-white mb-4 leading-tight">
                             Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 bg-[length:200%_auto] animate-gradient-x">{(user.name || 'Paciente').split(' ')[0]}</span>
                         </h1>
-                        <p className="text-xl text-slate-400 font-medium max-w-xl leading-relaxed">
-                            Tu ecosistema de salud está <span className="text-white font-bold">sincronizado</span>. Tenemos todo listo para tu próxima atención.
+                        <p className="text-base sm:text-xl text-slate-300 font-normal max-w-xl leading-relaxed">
+                            Tu ecosistema de salud está <span className="text-white font-semibold">sincronizado</span>. Tenemos todo listo para tu próxima atención.
                         </p>
                     </div>
-                    <div className="flex flex-col sm:flex-row justify-center gap-5 w-full md:w-auto">
+                    <div className="flex flex-col sm:flex-row justify-center gap-4 w-full md:w-auto">
                         <Button
                             variant="primary"
                             size="lg"
                             onClick={() => setShowAppointmentModal(true)}
-                            className="bg-emerald-500 hover:bg-emerald-400 text-white border-none shadow-[0_0_40px_rgba(16,185,129,0.3)] px-10 py-8 rounded-3xl group relative overflow-hidden h-20"
+                            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold border-none shadow-[0_10px_30px_rgba(16,185,129,0.25)] px-8 py-5 rounded-2xl group relative overflow-hidden h-16 w-full sm:w-auto text-base"
                         >
                             <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-                            <Video size={24} className="mr-4 transition-transform group-hover:scale-110 group-hover:rotate-12" /> 
-                            <span className="text-xl font-bold uppercase tracking-widest">Nuevo Turno</span>
+                            <Video size={20} className="mr-3 transition-transform group-hover:scale-110 group-hover:rotate-12" /> 
+                            <span>Nuevo Turno</span>
                         </Button>
                         <Button
                             variant="outline"
                             size="lg"
                             onClick={() => setShowUploadModal(true)}
-                            className="bg-white/5 border-white/10 hover:bg-white/10 text-white px-10 py-8 rounded-3xl group h-20"
+                            className="bg-white/5 border-white/10 hover:bg-white/10 text-white px-8 py-5 rounded-2xl group h-16 w-full sm:w-auto text-base font-semibold"
                         >
-                            <Upload size={24} className="mr-4 transition-transform group-hover:-translate-y-2" /> 
-                            <span className="text-xl font-bold uppercase tracking-widest">Subir Estudio</span>
+                            <Upload size={20} className="mr-3 transition-transform group-hover:-translate-y-1" /> 
+                            <span>Subir Estudio</span>
                         </Button>
                     </div>
                 </div>
@@ -279,7 +300,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <button
                                 type="button"
                                 onClick={() => setShowAppointmentModal(true)}
-                                className="text-xs text-emerald-400 font-bold cursor-pointer hover:text-emerald-300 transition-all uppercase tracking-[0.3em] bg-emerald-500/5 px-4 py-2 rounded-full border border-emerald-500/10"
+                                className="text-xs text-emerald-400 font-semibold cursor-pointer hover:text-emerald-300 transition-all bg-emerald-500/10 px-3.5 py-1.5 rounded-full border border-emerald-500/20"
                             >
                                 Gestionar Agenda
                             </button>
@@ -302,29 +323,29 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 </div>
                                 <div className="flex-1 text-center sm:text-left relative">
                                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-3">
-                                        <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full uppercase tracking-[0.2em]">Live Session</span>
-                                        <span className="text-[9px] font-bold bg-white/5 text-slate-500 px-3 py-1 rounded-full uppercase tracking-[0.2em]">ID: {nextAppointment.id.slice(0, 8)}</span>
+                                        <span className="text-xs font-semibold bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full">Consulta en vivo</span>
+                                        <span className="text-xs font-mono text-slate-400 bg-white/5 px-3 py-1 rounded-full">ID: {nextAppointment.id.slice(0, 8)}</span>
                                     </div>
-                                    <p className="font-bold text-3xl text-white mb-2 tracking-tight group-hover/card:text-emerald-400 transition-colors">{nextAppointment.doctorName}</p>
-                                    <p className="text-slate-400 font-bold text-lg flex items-center justify-center sm:justify-start">
+                                    <p className="font-bold text-2xl sm:text-3xl text-white mb-2 tracking-tight group-hover/card:text-emerald-400 transition-colors">{nextAppointment.doctorName}</p>
+                                    <p className="text-slate-400 font-semibold text-base sm:text-lg flex items-center justify-center sm:justify-start">
                                         <Video size={18} className="mr-3 text-emerald-500" /> 
                                         {nextAppointment.time} <span className="mx-2 opacity-30">|</span> 
-                                        <span className="text-sm font-medium">Virtual Waiting Room</span>
+                                        <span className="text-sm font-normal text-slate-300">Sala de Espera Virtual</span>
                                     </p>
                                 </div>
-                                <div className="mt-8 sm:mt-0 relative">
+                                <div className="mt-6 sm:mt-0 relative w-full sm:w-auto">
                                     {nextAppointment.status === 'confirmed' ? (
                                         <Link
                                             to={`/room/${nextAppointment.id}`}
-                                            className="group/btn relative bg-emerald-500 hover:bg-emerald-400 text-white px-10 py-5 rounded-2xl font-bold transition-all inline-block text-center shadow-[0_10px_40px_rgba(16,185,129,0.2)] overflow-hidden"
+                                            className="group/btn relative bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-8 py-4 rounded-2xl font-bold transition-all block text-center shadow-lg shadow-emerald-500/20 overflow-hidden text-base"
                                         >
                                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform"></div>
-                                            <span className="relative z-10 text-lg tracking-widest">INGRESAR</span>
+                                            <span className="relative z-10">Ingresar a la Consulta</span>
                                         </Link>
                                     ) : (
-                                        <div className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-[0.3em] flex items-center gap-3">
-                                            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                                            Pendiente
+                                        <div className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-5 py-2.5 rounded-2xl text-xs font-semibold flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                                            Pendiente de Confirmación
                                         </div>
                                     )}
                                 </div>
@@ -339,7 +360,11 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     variant="outline"
                                     onClick={async () => {
                                         try {
-                                            toast('Generando turno demo...', 'info');
+                                            if (quotaStatus?.isOverQuota) {
+                                                toast('⚠️ Atención: Has alcanzado el límite de consultas bonificadas de tu plan. Este turno se registrará como sobre-cupo.', 'warning');
+                                            } else {
+                                                toast('Generando turno demo...', 'info');
+                                            }
                                             await appointmentRepository.createDemoAppointment(user.id);
                                             window.location.reload();
                                         } catch (error: any) {

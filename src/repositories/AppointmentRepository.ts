@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import { Appointment } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { affiliateRepository } from './AffiliateRepository';
 
 export class AppointmentRepository {
   /**
@@ -120,6 +121,13 @@ export class AppointmentRepository {
       throw error;
     }
 
+    // Increment patient's consultation quota counter
+    try {
+      await affiliateRepository.incrementQuotaUsed(data.patient_id);
+    } catch (qErr) {
+      console.error("Error incrementando cupo:", qErr);
+    }
+
     return insertedData;
   }
 
@@ -158,6 +166,13 @@ export class AppointmentRepository {
     if (error) {
       console.error("Error creando turno demo:", error);
       throw error;
+    }
+
+    // Increment patient's consultation quota counter
+    try {
+      await affiliateRepository.incrementQuotaUsed(patientId);
+    } catch (qErr) {
+      console.error("Error incrementando cupo en turno demo:", qErr);
     }
   }
 

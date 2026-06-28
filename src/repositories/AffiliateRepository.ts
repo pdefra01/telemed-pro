@@ -183,6 +183,8 @@ export class AffiliateRepository {
     if (data.planStatus !== undefined) profileData.plan_status = data.planStatus;
     if (data.address !== undefined) profileData.address = data.address;
     if (data.phone !== undefined) profileData.phone = data.phone;
+    if (data.bloodType !== undefined) profileData.blood_type = data.bloodType || null;
+    if (data.birthDate !== undefined) profileData.birth_date = data.birthDate || null;
 
     const { data: result, error } = await supabase
       .from('profiles')
@@ -245,6 +247,80 @@ export class AffiliateRepository {
     }
   }
 
+  /**
+   * Obtiene el estado del cupo de consultas bonificadas del paciente y su grupo familiar
+   */
+  async getConsultationQuotaStatus(patientId: string): Promise<{
+    quotaUsed: number;
+    totalBonified: number;
+    isOverQuota: boolean;
+    remaining: number;
+    planName: string;
+  }> {
+    const { data: profile, error: pErr } = await supabase
+      .from('profiles')
+      .select('plan_id, plan_name, current_period_quota_used, family_group_id')
+      .eq('id', patientId)
+      .single();
+
+    if (pErr || !profile) {
+      return { quotaUsed: 0, totalBonified: 4, isOverQuota: false, remaining: 4, planName: 'Plan Base' };
+    }
+
+    let totalBonified = 4; // Default bonified consultations
+    if (profile.plan_id) {
+      const { data: plan } = await supabase
+        .from('plans')
+        .select('bonified_consultations')
+        .eq('id', profile.plan_id)
+        .single();
+      if (plan && typeof plan.bonified_consultations === 'number') {
+        totalBonified = plan.bonified_consultations;
+      }
+    }
+
+    let quotaUsed = profile.current_period_quota_used || 0;
+
+    // Si tiene grupo familiar, sumar el consumo de todos los integrantes
+    if (profile.family_group_id) {
+      const { data: familyProfiles } = await supabase
+        .from('profiles')
+        .select('current_period_quota_used')
+        .eq('family_group_id', profile.family_group_id);
+      if (familyProfiles) {
+        quotaUsed = familyProfiles.reduce((acc, curr) => acc + (curr.current_period_quota_used || 0), 0);
+      }
+    }
+
+    const remaining = Math.max(0, totalBonified - quotaUsed);
+    const isOverQuota = quotaUsed >= totalBonified;
+
+    return {
+      quotaUsed,
+      totalBonified,
+      isOverQuota,
+      remaining,
+      planName: profile.plan_name || 'Plan Base'
+    };
+  }
+
+  /**
+   * Incrementa el contador de consultas consumidas para el paciente
+   */
+  async incrementQuotaUsed(patientId: string): Promise<void> {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('current_period_quota_used')
+      .eq('id', patientId)
+      .single();
+
+    const current = profile?.current_period_quota_used || 0;
+    await supabase
+      .from('profiles')
+      .update({ current_period_quota_used: current + 1 })
+      .eq('id', patientId);
+  }
+
   private mapProfileToPatient(row: any): Patient {
     return {
       id: row.id,
@@ -257,7 +333,10 @@ export class AffiliateRepository {
       avatarUrl: row.avatar_url,
       address: row.address,
       phone: row.phone,
+      birthDate: row.birth_date ?? undefined,
+      bloodType: row.blood_type ?? undefined,
       agreementId: row.agreement_id,
+      familyGroupId: row.family_group_id ?? undefined,
       paymentStatus: row.payment_status || 'paid',
       currentPeriodQuotaUsed: row.current_period_quota_used || 0,
       isActive: row.is_active

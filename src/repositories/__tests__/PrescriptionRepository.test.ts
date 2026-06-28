@@ -56,6 +56,8 @@ describe('PrescriptionRepository (TDD)', () => {
         doctorId: 'd1',
         doctorName: 'Dr. Smith',
         medications: [{ name: 'Amoxicillin', instructions: '1 capsule every 8 hours', quantity: 1 }],
+        digitalSignature: 'SIG-MOCK-12345678',
+        signaturePublicKey: 'PUB-MOCK-12345678'
       };
 
       const mockInserted = { 

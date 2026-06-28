@@ -17,7 +17,10 @@ import Agreements from './pages/admin/Agreements';
 import OCCBilling from './pages/admin/OCCBilling';
 import OCCSettings from './pages/admin/OCCSettings';
 import OCCReports from './pages/admin/OCCReports';
+import SurveyBuilder from './pages/admin/SurveyBuilder';
+import Campaigns from './pages/admin/Campaigns';
 import Profile from './pages/patient/Profile';
+import PatientSurveys from './pages/patient/PatientSurveys';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
@@ -166,6 +169,22 @@ const App: React.FC = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/survey-builder"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <SurveyBuilder />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/campaigns"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <Campaigns />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Patient Routes */}
       <Route
@@ -189,6 +208,14 @@ const App: React.FC = () => {
         element={
           <ProtectedRoute user={user} allowedRoles={['patient']}>
             <Profile user={user as Patient} onLogin={handleLogin} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patient-surveys"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['patient']}>
+            <PatientSurveys user={user as Patient} />
           </ProtectedRoute>
         }
       />

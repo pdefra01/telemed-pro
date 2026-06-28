@@ -2,14 +2,10 @@ import { supabase } from '../services/supabase';
 import { Prescription } from '../types';
 
 export class PrescriptionRepository {
-  async createPrescription(recordData: Omit<Prescription, 'id' | 'date' | 'status' | 'digitalSignature' | 'expirationDate'>): Promise<Prescription> {
+  async createPrescription(recordData: Omit<Prescription, 'id' | 'date' | 'status' | 'expirationDate'>): Promise<Prescription> {
     const today = new Date();
     const expDate = new Date(today);
     expDate.setDate(today.getDate() + 30); // 30 days expiration
-
-    // Cryptographic signature simulation for MVP (should be a real PKI signature in production)
-    const signaturePayload = `${recordData.appointmentId}-${recordData.patientId}-${Date.now()}`;
-    const digitalSignature = `SIG-${btoa(signaturePayload).substring(0, 16).toUpperCase()}`;
 
     const { data, error } = await supabase
       .from('prescriptions')
@@ -19,7 +15,8 @@ export class PrescriptionRepository {
         doctor_id: recordData.doctorId,
         doctor_name: recordData.doctorName,
         status: 'active',
-        digital_signature: digitalSignature,
+        digital_signature: recordData.digitalSignature,
+        signature_public_key: recordData.signaturePublicKey,
         expiration_date: expDate.toISOString().split('T')[0],
         medications: recordData.medications,
         notes: recordData.notes
@@ -38,6 +35,7 @@ export class PrescriptionRepository {
       date: data.date,
       status: data.status,
       digitalSignature: data.digital_signature,
+      signaturePublicKey: data.signature_public_key,
       expirationDate: data.expiration_date,
       medications: data.medications,
       pdfUrl: data.pdf_url,
@@ -63,6 +61,7 @@ export class PrescriptionRepository {
       date: item.date,
       status: item.status,
       digitalSignature: item.digital_signature,
+      signaturePublicKey: item.signature_public_key,
       expirationDate: item.expiration_date,
       medications: item.medications,
       pdfUrl: item.pdf_url,
@@ -89,6 +88,7 @@ export class PrescriptionRepository {
       date: data.date,
       status: data.status,
       digitalSignature: data.digital_signature,
+      signaturePublicKey: data.signature_public_key,
       expirationDate: data.expiration_date,
       medications: data.medications,
       pdfUrl: data.pdf_url,

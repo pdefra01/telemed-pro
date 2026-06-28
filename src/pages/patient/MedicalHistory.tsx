@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
     FileText, Pill, File, Download, Search, CheckCircle, 
     AlertCircle, Loader2, Calendar, User, ExternalLink, 
-    FileArchive, ChevronRight, Hash, Clock, FlaskConical, Activity
+    FileArchive, ChevronRight, Hash, Clock, FlaskConical, Activity,
+    ShieldCheck, ShieldX, Shield
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +11,7 @@ import { Patient, MedicalRecord, Prescription } from '../../types';
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
+import { verifyPrescription } from '../../utils/crypto';
 
 interface Props {
     user: Patient;
@@ -24,6 +26,8 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
     const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
     const [documents, setDocuments] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    // verifiedMap: null = verifying, true = valid, false = invalid/tampered, 'unsigned' = no crypto sig
+    const [verifiedMap, setVerifiedMap] = useState<Record<string, boolean | 'unsigned' | null>>({});
 
     useEffect(() => {
         const fetchData = async () => {
@@ -37,6 +41,32 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                 setRecords(recs);
                 setPrescriptions(prescs);
                 setDocuments(docs);
+
+                // Verify signatures client-side after loading
+                const initialMap: Record<string, boolean | 'unsigned' | null> = {};
+                prescs.forEach(p => { initialMap[p.id] = null; }); // null = verifying
+                setVerifiedMap(initialMap);
+
+                // Run async verification for each prescription
+                prescs.forEach(async (p) => {
+                    if (!p.signaturePublicKey || !p.digitalSignature || !p.appointmentId) {
+                        setVerifiedMap(prev => ({ ...prev, [p.id]: 'unsigned' }));
+                        return;
+                    }
+                    try {
+                        const valid = await verifyPrescription(
+                            p.appointmentId,
+                            p.patientId,
+                            p.medications,
+                            p.notes,
+                            p.digitalSignature,
+                            p.signaturePublicKey
+                        );
+                        setVerifiedMap(prev => ({ ...prev, [p.id]: valid }));
+                    } catch {
+                        setVerifiedMap(prev => ({ ...prev, [p.id]: false }));
+                    }
+                });
             } catch (error) {
                 console.error("Error cargando historia clínica:", error);
                 toast('Error al cargar tu historia clínica', 'error');
@@ -308,13 +338,12 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 )}
                                             </div>
                                             
-                                            {/* Signature bar */}
+                                            {/* Signature verification badge */}
                                             <div className="bg-slate-900/80 py-2.5 px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-t border-white/5">
-                                                <div className="flex items-center gap-2">
-                                                    <CheckCircle size={10} className="text-emerald-500 flex-shrink-0" />
-                                                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Validación Blockchain Digital</p>
-                                                </div>
-                                                <p className="text-[9px] sm:text-[10px] font-mono text-emerald-500 font-bold truncate max-w-full">{presc.digitalSignature}</p>
+                                                <SignatureBadge status={verifiedMap[presc.id]} />
+                                                {(verifiedMap[presc.id] === true || verifiedMap[presc.id] === null) && presc.digitalSignature && (
+                                                    <p className="text-[9px] sm:text-[10px] font-mono text-slate-600 truncate max-w-full">{presc.digitalSignature.substring(0, 32)}...</p>
+                                                )}
                                             </div>
                                         </div>
                                     ))
@@ -397,5 +426,41 @@ const EmptyState: React.FC<{ message: string }> = ({ message }) => (
         </p>
     </div>
 );
+
+type SignatureStatus = boolean | 'unsigned' | null;
+
+const SignatureBadge: React.FC<{ status: SignatureStatus }> = ({ status }) => {
+    if (status === null) {
+        return (
+            <div className="flex items-center gap-2">
+                <div className="w-3 h-3 border-2 border-slate-500/30 border-t-slate-400 rounded-full animate-spin" />
+                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Verificando firma...</p>
+            </div>
+        );
+    }
+    if (status === 'unsigned') {
+        return (
+            <div className="flex items-center gap-2">
+                <Shield size={12} className="text-slate-600 flex-shrink-0" />
+                <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Sin Firma Criptográfica</p>
+            </div>
+        );
+    }
+    if (status === true) {
+        return (
+            <div className="flex items-center gap-2">
+                <ShieldCheck size={12} className="text-emerald-500 flex-shrink-0" />
+                <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Firma ECDSA Verificada</p>
+            </div>
+        );
+    }
+    // status === false
+    return (
+        <div className="flex items-center gap-2">
+            <ShieldX size={12} className="text-red-500 flex-shrink-0" />
+            <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest">Firma Inválida — Documento Alterado</p>
+        </div>
+    );
+};
 
 export default MedicalHistory;

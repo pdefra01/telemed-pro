@@ -41,6 +41,8 @@ describe('PrescriptionRepository', () => {
           quantity: 1
         }
       ],
+      digitalSignature: 'SIG-MOCK-123',
+      signaturePublicKey: 'PUB-MOCK-123'
     };
 
     const mockInserted = {

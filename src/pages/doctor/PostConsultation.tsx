@@ -35,6 +35,13 @@ import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRep
 import { supabase } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
 import '../../styles/animations.css';
+import {
+  generateKeyPair,
+  exportPublicKey,
+  encryptPrivateKey,
+  decryptPrivateKey,
+  signPrescription
+} from '../../utils/crypto';
 
 const COMMON_MEDS = [
   "Amoxicilina 500mg",
@@ -159,6 +166,74 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  // PIN & Cryptographic Signatures State
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isCryptedSigning, setIsCryptedSigning] = useState(false);
+  const [hasDigitalSignature, setHasDigitalSignature] = useState(false);
+  const [digitalSigValue, setDigitalSigValue] = useState('');
+  const [sigPublicKeyVal, setSigPublicKeyVal] = useState('');
+  
+  const pinInputsRef = React.useRef<(HTMLInputElement | null)[]>([]);
+
+  const handlePinChange = (index: number, value: string) => {
+    const numValue = value.replace(/\D/g, '');
+    const char = numValue[numValue.length - 1] || '';
+
+    const pinArray = pin.split('');
+    while (pinArray.length < 6) pinArray.push('');
+    pinArray[index] = char;
+    
+    const newPin = pinArray.slice(0, 6).join('');
+    setPin(newPin);
+
+    // Mover al siguiente input si hay un carácter tipeado
+    if (char && index < 5) {
+      pinInputsRef.current[index + 1]?.focus();
+    }
+  };
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      const pinArray = pin.split('');
+      while (pinArray.length < 6) pinArray.push('');
+      
+      if (!pinArray[index] && index > 0) {
+        // Borrar el anterior y enfocarlo
+        pinArray[index - 1] = '';
+        setPin(pinArray.slice(0, 6).join(''));
+        pinInputsRef.current[index - 1]?.focus();
+      } else {
+        // Borrar el actual
+        pinArray[index] = '';
+        setPin(pinArray.slice(0, 6).join(''));
+      }
+    }
+  };
+
+  const handlePinPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    setPin(pasteData);
+    
+    // Enfocar el último input correspondiente al largo del pegado
+    const nextFocusIndex = Math.min(pasteData.length, 5);
+    pinInputsRef.current[nextFocusIndex]?.focus();
+  };
+
+  useEffect(() => {
+    if (showPinModal) {
+      setTimeout(() => {
+        pinInputsRef.current[0]?.focus();
+      }, 150);
+    }
+  }, [showPinModal]);
+  
+  // Local cache of user's key status so it updates immediately in UI
+  const [localUserPublicKey, setLocalUserPublicKey] = useState<string | undefined>(user.digitalPublicKey);
+  const [localUserEncryptedPrivateKey, setLocalUserEncryptedPrivateKey] = useState<string | undefined>(user.encryptedPrivateKey);
 
   // History Sidebar State
   const [patientRecords, setPatientRecords] = useState<MedicalRecord[]>([]);
@@ -365,26 +440,10 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     setMedications(newMedications);
   };
 
-  const handleSaveAndFinish = async () => {
-    setIsSubmitted(true);
-    setError(null);
-    if (!diagnosis.trim()) {
-      setError('El diagnóstico es obligatorio para cerrar la consulta');
-      return;
-    }
-    
-    if (addPrescription && medications.some(m => !m.name.trim())) {
-      setError('Todos los medicamentos deben tener un nombre');
-      return;
-    }
-
-    if (!appointmentData) {
-      setError('Error: No se pudo recuperar la información del turno.');
-      return;
-    }
-
+  const submitFinalization = async (sig?: string, pubKey?: string) => {
     setSaving(true);
     setClosureStatus('processing');
+    setError(null);
     
     try {
       const { data, error: functionError } = await supabase.functions.invoke('finalize-consultation', {
@@ -392,7 +451,9 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
           appointmentId: appointmentData.id,
           diagnosis,
           notes,
-          medications: addPrescription ? medications : []
+          medications: addPrescription ? medications : [],
+          digitalSignature: sig || null,
+          signaturePublicKey: pubKey || null
         }
       });
 
@@ -400,8 +461,6 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
       // Artificial delay for premium feel of the steps
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setClosureStatus('success');
       
       if (data?.pdfUrl) {
         setPdfUrl(data.pdfUrl);
@@ -412,10 +471,131 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
     } catch (err: any) {
       console.error('Error saving consultation data:', err);
-      setError('Ocurrió un error al procesar la consulta. Verifique su conexión.');
+      setError('Ocurrió un error al procesar la consulta: ' + (err.message || 'Verifique su conexión.'));
       setSaving(false);
       setClosureStatus('error');
     }
+  };
+
+  const handleVerifyPinAndSign = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setPinError(null);
+
+    if (pin.length !== 6 || !/^\d+$/.test(pin)) {
+      setPinError('El PIN debe tener exactamente 6 dígitos numéricos.');
+      return;
+    }
+
+    setIsCryptedSigning(true);
+    try {
+      let finalSignature = '';
+      let finalPublicKey = '';
+
+      if (!localUserPublicKey || !localUserEncryptedPrivateKey) {
+        // Primera vez: Generar par de claves y cifrar con el PIN
+        const keyPair = await generateKeyPair();
+        const exportedPub = await exportPublicKey(keyPair.publicKey);
+        const encryptedPriv = await encryptPrivateKey(keyPair.privateKey, pin, user.id);
+
+        // Guardar en Supabase profiles
+        const { error: updateProfileError } = await supabase
+          .from('profiles')
+          .update({
+            digital_public_key: exportedPub,
+            encrypted_private_key: encryptedPriv
+          })
+          .eq('id', user.id);
+
+        if (updateProfileError) {
+          throw new Error('Error al inicializar tus claves digitales de firma: ' + updateProfileError.message);
+        }
+
+        // Actualizar caché local de claves
+        setLocalUserPublicKey(exportedPub);
+        setLocalUserEncryptedPrivateKey(encryptedPriv);
+
+        finalPublicKey = exportedPub;
+        
+        // Firmar
+        finalSignature = await signPrescription(
+          appointmentData.id,
+          appointmentData.patientId,
+          medications,
+          notes,
+          keyPair.privateKey
+        );
+      } else {
+        // Médico recurrente: Descifrar clave privada usando el PIN
+        let privKey;
+        try {
+          privKey = await decryptPrivateKey(localUserEncryptedPrivateKey, pin);
+        } catch (decryptionErr) {
+          throw new Error('PIN incorrecto. No se pudo descifrar la clave de firma.');
+        }
+
+        finalPublicKey = localUserPublicKey;
+
+        // Firmar
+        finalSignature = await signPrescription(
+          appointmentData.id,
+          appointmentData.patientId,
+          medications,
+          notes,
+          privKey
+        );
+      }
+
+      // Guardar firma generada temporalmente y cerrar el modal del PIN
+      setDigitalSigValue(finalSignature);
+      setSigPublicKeyVal(finalPublicKey);
+      setHasDigitalSignature(true);
+      setShowPinModal(false);
+      
+      // Lanzar directamente la finalización con la firma criptográfica activa
+      await submitFinalization(finalSignature, finalPublicKey);
+
+    } catch (err: any) {
+      console.error('[Signature Error]:', err);
+      setPinError(err.message || 'Error al procesar la firma digital.');
+    } finally {
+      setIsCryptedSigning(false);
+    }
+  };
+
+  const handleSaveAndFinish = async () => {
+    setIsSubmitted(true);
+    setError(null);
+    
+    if (!diagnosis.trim()) {
+      setError('El diagnóstico es obligatorio para cerrar la consulta');
+      return;
+    }
+    
+    if (addPrescription && medications.length === 0) {
+      setError('Debe agregar al menos un medicamento si la receta electrónica está activa');
+      return;
+    }
+
+    if (addPrescription && medications.some(m => !m.name.trim())) {
+      setError('Todos los medicamentos deben tener un nombre');
+      return;
+    }
+
+    if (!appointmentData) {
+      setError('Error: No se pudo recuperar la información del turno.');
+      return;
+    }
+
+    // Si tiene receta y todavía no se firmó digitalmente con el PIN, abrimos el modal
+    if (addPrescription && !hasDigitalSignature) {
+      setPin('');
+      setPinError(null);
+      setShowPinModal(true);
+      return;
+    }
+
+    // De lo contrario, procedemos con el cierre
+    await submitFinalization(digitalSigValue, sigPublicKeyVal);
   };
 
   const handleAICompose = async () => {
@@ -899,6 +1079,97 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
           )}
         </div>
       </div>
+      {/* PIN Signature Modal */}
+      {showPinModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[#020617]/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0f172a] border border-white/10 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-teal-500 to-blue-500"></div>
+            
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-teal-500/10 text-teal-400 rounded-2xl border border-teal-500/20">
+                <ShieldCheck className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white tracking-tight">
+                  {!localUserPublicKey ? 'Configurar Firma Digital' : 'Firma de Receta Digital'}
+                </h3>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Firma Electrónica Avanzada</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleVerifyPinAndSign} className="space-y-6">
+              {!localUserPublicKey ? (
+                <div className="p-4 rounded-2xl bg-teal-500/5 border border-teal-500/20 text-xs text-slate-300 leading-relaxed">
+                  Es tu primera firma en MEDINEX. Generaremos un par de **claves asimétricas ECDSA (P-256)** exclusivas para vos. 
+                  Por favor, elegí un **PIN numérico de 6 dígitos**. Este PIN se usará de forma local para cifrar tu clave de firma.
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Por favor, ingresá tu **PIN numérico de 6 dígitos** para autorizar y firmar criptográficamente esta receta.
+                </p>
+              )}
+
+              <div className="space-y-4">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
+                  {!localUserPublicKey ? 'Establecer PIN (6 dígitos)' : 'Ingresar PIN de Firma'}
+                </label>
+                <div className="flex justify-center gap-3 max-w-sm mx-auto" onPaste={handlePinPaste}>
+                  {[0, 1, 2, 3, 4, 5].map((idx) => (
+                    <input
+                      key={idx}
+                      ref={(el) => {
+                        pinInputsRef.current[idx] = el;
+                      }}
+                      type="password"
+                      pattern="[0-9]*"
+                      inputMode="numeric"
+                      maxLength={1}
+                      disabled={isCryptedSigning}
+                      className="w-12 h-16 bg-slate-950/80 border border-white/10 rounded-2xl text-center font-mono text-2xl text-white focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all outline-none"
+                      value={pin[idx] || ''}
+                      onChange={(e) => handlePinChange(idx, e.target.value)}
+                      onKeyDown={(e) => handlePinKeyDown(idx, e)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {pinError && (
+                <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs animate-in fade-in zoom-in duration-200">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p className="font-semibold">{pinError}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-4 pt-2">
+                <button
+                  type="button"
+                  disabled={isCryptedSigning}
+                  onClick={() => setShowPinModal(false)}
+                  className="px-6 py-3.5 text-slate-400 font-bold hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCryptedSigning || pin.length !== 6}
+                  className="px-8 py-3.5 bg-teal-500 hover:bg-teal-400 text-[#020617] rounded-2xl font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCryptedSigning ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-slate-950/20 border-t-slate-950 rounded-full animate-spin"></div>
+                      <span>Procesando...</span>
+                    </>
+                  ) : (
+                    <span>{!localUserPublicKey ? 'Configurar y Firmar' : 'Confirmar Firma'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <CompletionOverlay />
     </div>
   );

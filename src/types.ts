@@ -9,6 +9,8 @@ export interface User {
   phone?: string;
   dni?: string;
   isActive?: boolean;
+  digitalPublicKey?: string;
+  encryptedPrivateKey?: string;
 }
 
 export interface FamilyMember {
@@ -102,6 +104,7 @@ export interface Prescription {
   date: string;
   status: 'active' | 'dispensed' | 'expired';
   digitalSignature: string; // PRD 3.4
+  signaturePublicKey?: string;
   expirationDate: string;
   pdfUrl?: string;
   notes?: string;
@@ -179,4 +182,75 @@ export interface Payment {
   period: string; // e.g., "Mayo 2024"
   status: 'paid' | 'pending' | 'overdue';
   invoiceUrl?: string;
+}
+
+export type QuestionType = 'single_choice' | 'multiple_choice' | 'boolean' | 'numeric' | 'text';
+
+export interface SurveyQuestion {
+  id: string;
+  templateId: string;
+  text: string;
+  type: QuestionType;
+  options?: string[];
+  isRequired: boolean;
+  orderIndex: number;
+}
+
+export interface SurveyTemplate {
+  id: string;
+  title: string;
+  description?: string;
+  createdBy?: string;
+  createdAt: string;
+  questions?: SurveyQuestion[];
+}
+
+export type CampaignStatus = 'draft' | 'active' | 'completed';
+export type CampaignTargetGroup = 'all' | 'agreement' | 'risk_group';
+
+export interface Campaign {
+  id: string;
+  title: string;
+  description?: string;
+  templateId: string;
+  templateTitle?: string;
+  status: CampaignStatus;
+  targetGroup: CampaignTargetGroup;
+  targetGroupId?: string;
+  startDate: string;
+  endDate?: string;
+  createdAt: string;
+}
+
+export type ConditionOperator = 'equals' | 'greater_than' | 'less_than' | 'contains';
+export type ActionType = 'medical_alert' | 'tag_risk_group' | 'recommend_appointment';
+
+export interface CampaignAction {
+  id: string;
+  campaignId: string;
+  questionId: string;
+  conditionOperator: ConditionOperator;
+  conditionValue: string;
+  actionType: ActionType;
+  actionPayload?: Record<string, any>;
+}
+
+export interface CampaignAssignment {
+  id: string;
+  campaignId: string;
+  campaignTitle?: string;
+  templateId?: string;
+  patientId: string;
+  status: 'pending' | 'completed';
+  assignedAt: string;
+  completedAt?: string;
+}
+
+export interface SurveyResponse {
+  id: string;
+  assignmentId: string;
+  questionId: string;
+  patientId: string;
+  responseValue: string;
+  createdAt: string;
 }

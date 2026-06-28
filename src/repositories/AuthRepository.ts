@@ -104,12 +104,17 @@ export class AuthRepository {
       avatarUrl: profileData.avatar_url,
       dni: profileData.dni,
       planName: profileData.plan_name || 'Plan Global',
-      bloodType: profileData.blood_type,
+      bloodType: profileData.blood_type ?? undefined,
+      birthDate: profileData.birth_date ?? undefined,
       credentialHash: profileData.credential_hash,
       phone: profileData.phone,
+      address: profileData.address,
       planStatus: profileData.plan_status || 'active',
       paymentStatus: profileData.payment_status || 'paid',
       currentPeriodQuotaUsed: profileData.current_period_quota_used || 0,
+      familyGroupId: profileData.family_group_id ?? undefined,
+      digitalPublicKey: profileData.digital_public_key,
+      encryptedPrivateKey: profileData.encrypted_private_key,
     } as any;
   }
 
