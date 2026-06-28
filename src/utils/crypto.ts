@@ -209,7 +209,7 @@ export async function signPrescription(
   const canonicalPayload = JSON.stringify({
     appointmentId,
     patientId,
-    medications: medications.map(m => ({
+    medications: (medications || []).map(m => ({
       name: m.name,
       instructions: m.instructions ?? '',
     })).sort((a, b) => a.name.localeCompare(b.name)),
@@ -250,7 +250,7 @@ export async function verifyPrescription(
     const canonicalPayload = JSON.stringify({
       appointmentId,
       patientId,
-      medications: medications.map(m => ({
+      medications: (medications || []).map(m => ({
         name: m.name,
         instructions: m.instructions ?? '',
       })).sort((a, b) => a.name.localeCompare(b.name)),

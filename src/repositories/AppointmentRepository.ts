@@ -90,12 +90,17 @@ export class AppointmentRepository {
     specialty: string;
     status: 'pending' | 'confirmed';
   }): Promise<any> {
-    // 1. Verificar solapamiento (Overlap check)
+    // 1. Verificar solapamiento (Overlap check con margen de 14 minutos y normalización ISO)
+    const targetTime = new Date(data.scheduled_at).getTime();
+    const startTime = new Date(targetTime - 14 * 60 * 1000).toISOString();
+    const endTime = new Date(targetTime + 14 * 60 * 1000).toISOString();
+
     const { data: overlaps, error: overlapError } = await supabase
       .from('appointments')
       .select('id')
       .eq('doctor_id', data.doctor_id)
-      .eq('scheduled_at', data.scheduled_at)
+      .gte('scheduled_at', startTime)
+      .lte('scheduled_at', endTime)
       .neq('status', 'cancelled');
 
     if (overlapError) throw overlapError;
