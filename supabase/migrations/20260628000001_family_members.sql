@@ -40,5 +40,13 @@ CREATE POLICY "Admins full access family_members"
   TO authenticated
   USING (auth.jwt() ->> 'role' = 'admin');
 
+-- Doctors have read access for patient care
+CREATE POLICY "Doctors read family_members"
+  ON public.family_members
+  FOR SELECT
+  TO authenticated
+  USING (auth.jwt() ->> 'role' = 'doctor');
+
 -- Index for lookups by group
 CREATE INDEX IF NOT EXISTS idx_family_members_group ON public.family_members(family_group_id);
+

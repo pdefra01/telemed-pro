@@ -58,14 +58,15 @@ export class FamilyMemberRepository {
     groupId: string,
     data: { fullName: string; relation: string; birthDate?: string; dni?: string }
   ): Promise<FamilyMember & { dni?: string; birthDate?: string }> {
+    const cleanRelation = data.relation.trim().toLowerCase();
     const { data: row, error } = await supabase
       .from('family_members')
       .insert({
         family_group_id: groupId,
-        full_name: data.fullName,
-        relation: data.relation,
+        full_name: data.fullName.trim(),
+        relation: cleanRelation,
         birth_date: data.birthDate || null,
-        dni: data.dni || null,
+        dni: data.dni ? data.dni.trim() : null,
       })
       .select()
       .single();
@@ -86,10 +87,10 @@ export class FamilyMemberRepository {
     data: Partial<{ fullName: string; relation: string; birthDate: string; dni: string }>
   ): Promise<FamilyMember & { dni?: string; birthDate?: string }> {
     const payload: Record<string, unknown> = {};
-    if (data.fullName !== undefined) payload.full_name = data.fullName;
-    if (data.relation !== undefined) payload.relation = data.relation;
+    if (data.fullName !== undefined) payload.full_name = data.fullName.trim();
+    if (data.relation !== undefined) payload.relation = data.relation.trim().toLowerCase();
     if (data.birthDate !== undefined) payload.birth_date = data.birthDate || null;
-    if (data.dni !== undefined) payload.dni = data.dni || null;
+    if (data.dni !== undefined) payload.dni = data.dni ? data.dni.trim() : null;
 
     const { data: row, error } = await supabase
       .from('family_members')
