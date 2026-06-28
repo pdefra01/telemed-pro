@@ -99,11 +99,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-200 ease-in-out z-40 w-64 bg-white shadow-lg flex flex-col justify-between`}
+        className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-200 ease-in-out z-40 w-64 h-full md:h-screen bg-white shadow-lg flex flex-col justify-between`}
       >
-        <div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar pb-4">
           <div className="p-6 flex flex-col items-center space-y-3 hidden md:flex border-b border-gray-100 mb-6 text-center">
-            <div className="w-24 h-24 bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center p-2 hover:scale-105 transition-transform duration-500 select-none">
+            <div className="w-20 h-20 bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center p-2 hover:scale-105 transition-transform duration-500 select-none">
               <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
             </div>
             <span className="text-xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
@@ -113,10 +113,10 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
           <div className="px-6 mb-6">
             <div className="flex items-center p-3 bg-teal-50 rounded-lg space-x-3">
-              <img src={user.avatarUrl || `https://ui-avatars.com/api/?name=${user.name}`} alt="Profile" className="w-10 h-10 rounded-full object-cover" />
-              <div className="overflow-hidden">
+              <img src={user.avatarUrl || `https://ui-avatars.com/api/?name=${user.name}`} alt="Profile" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+              <div className="overflow-hidden min-w-0">
                 <p className="text-sm font-semibold text-gray-800 truncate">{user.name || 'Paciente'}</p>
-                <p className="text-xs text-teal-600 capitalize">{user.role === 'patient' ? 'Afiliado' : user.role === 'doctor' ? 'Médico' : 'Admin'}</p>
+                <p className="text-xs text-teal-600 capitalize font-medium">{user.role === 'patient' ? 'Afiliado' : user.role === 'doctor' ? 'Médico' : 'Admin'}</p>
               </div>
             </div>
           </div>
@@ -128,25 +128,25 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                 to={item.path}
                 onClick={() => setIsSidebarOpen(false)}
                 className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${location.pathname === item.path
-                    ? 'bg-teal-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-teal-50 hover:text-teal-700'
+                    ? 'bg-teal-600 text-white shadow-md font-semibold'
+                    : 'text-gray-600 hover:bg-teal-50 hover:text-teal-700 font-medium'
                   }`}
               >
                 {item.icon}
-                <span className="font-medium">{item.name}</span>
+                <span>{item.name}</span>
               </Link>
             ))}
           </nav>
         </div>
 
-        <div className="p-4 border-t border-gray-100">
+        <div className="flex-shrink-0 p-4 border-t border-gray-100 bg-white">
           <button
             type="button"
             onClick={onLogout}
-            className="flex items-center w-full space-x-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            className="flex items-center justify-center w-full space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-semibold active:scale-95 cursor-pointer border border-red-100"
           >
-            <LogOut size={20} />
-            <span className="font-medium">Cerrar Sesión</span>
+            <LogOut size={18} />
+            <span>Cerrar Sesión</span>
           </button>
         </div>
       </aside>

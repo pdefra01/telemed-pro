@@ -66,11 +66,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 ease-out z-40 w-72 bg-[#0f172a]/40 backdrop-blur-xl border-r border-white/5 flex flex-col`}
+        className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 ease-out z-40 w-72 h-full md:h-screen bg-[#0f172a]/90 backdrop-blur-xl border-r border-white/5 flex flex-col justify-between`}
       >
-        <div className="p-8">
-          <div className="flex flex-col items-center space-y-4 mb-10 hidden md:flex text-center border-b border-white/5 pb-6 w-full">
-            <div className="w-24 h-24 bg-white/5 rounded-2xl shadow-xl border border-white/10 flex items-center justify-center p-2 hover:scale-105 transition-transform duration-500 select-none">
+        {/* Scrollable Navigation Area */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar">
+          <div className="flex flex-col items-center space-y-3 hidden md:flex text-center border-b border-white/5 pb-6 w-full">
+            <div className="w-20 h-20 bg-white/5 rounded-2xl shadow-xl border border-white/10 flex items-center justify-center p-2 hover:scale-105 transition-transform duration-500 select-none">
               <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
             </div>
             <div>
@@ -81,7 +82,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
             </div>
           </div>
 
-          <nav className="space-y-2">
+          <nav className="space-y-1.5">
             {navItems.map((item) => (
               <Link
                 key={item.path}
@@ -105,10 +106,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
           </nav>
         </div>
 
-        <div className="mt-auto p-6 space-y-4">
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/5 backdrop-blur-sm">
+        {/* Fixed User Profile Footer & Logout */}
+        <div className="flex-shrink-0 p-5 border-t border-white/10 bg-[#0f172a] backdrop-blur-md">
+          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5">
             <div className="flex items-center space-x-3 mb-3">
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <img 
                   src={user.avatarUrl || `https://ui-avatars.com/api/?name=${user.name}&background=10b981&color=fff`} 
                   alt="Profile" 
@@ -116,16 +118,17 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
                 />
                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0f172a] rounded-full"></div>
               </div>
-              <div className="overflow-hidden">
+              <div className="overflow-hidden min-w-0">
                 <p className="text-sm font-bold text-white truncate">{user.name}</p>
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Root Administrator</p>
+                <p className="text-[10px] text-slate-400 font-semibold truncate">Administrador Root</p>
               </div>
             </div>
             <button
+              type="button"
               onClick={onLogout}
-              className="flex items-center justify-center w-full space-x-2 py-2 text-xs font-semibold text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+              className="flex items-center justify-center w-full space-x-2 py-2.5 px-3 text-xs font-bold text-slate-300 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all border border-white/5 hover:border-red-500/20 active:scale-95 cursor-pointer"
             >
-              <LogOut size={14} />
+              <LogOut size={15} />
               <span>Cerrar Sesión</span>
             </button>
           </div>
