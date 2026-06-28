@@ -135,6 +135,25 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         }
     };
 
+    const [kpiTimeframe, setKpiTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+    const [dynamicKPIs, setDynamicKPIs] = useState<{
+        pendingConsultations: number;
+        effectiveConsultations: number;
+        avgSessionMinutes: number;
+    }>({
+        pendingConsultations: 0,
+        effectiveConsultations: 0,
+        avgSessionMinutes: 15
+    });
+
+    useEffect(() => {
+        const loadKPIs = async () => {
+            const kpis = await dashboardRepository.getDoctorKPIs(user.id, kpiTimeframe);
+            setDynamicKPIs(kpis);
+        };
+        loadKPIs();
+    }, [user.id, kpiTimeframe]);
+
     const location = useLocation();
 
     useEffect(() => {
@@ -371,10 +390,85 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             </header>
 
             {/* Metrics HUD */}
-            {metrics && (
-                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
-                    {/* Reputación Card */}
-                    <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-emerald-500/20 transition-all duration-700 overflow-hidden">
+            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+                {/* Consultas Pendientes Card */}
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-amber-500/20 transition-all duration-700 overflow-hidden">
+                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"></div>
+                    <div className="flex justify-between items-start mb-6">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Consultas Pendientes</p>
+                        <Clock className="text-amber-500/60 group-hover:rotate-12 transition-transform" size={20} />
+                    </div>
+                    <div className="flex items-baseline gap-3">
+                        <h3 className="text-5xl font-bold text-white tracking-tighter group-hover:scale-105 transition-transform origin-left duration-700">{dynamicKPIs.pendingConsultations}</h3>
+                        <span className="text-xs font-bold text-amber-400 tracking-wider uppercase">En Cola</span>
+                    </div>
+                    <div className="mt-8 flex items-center gap-3">
+                         <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                            <div className="bg-amber-500 h-full w-[100%] rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>
+                         </div>
+                    </div>
+                </div>
+
+                {/* Consultas Efectivas Card */}
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-emerald-500/20 transition-all duration-700 overflow-hidden">
+                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
+                    <div className="flex justify-between items-start mb-6">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Consultas Efectivas</p>
+                        <CheckCircle className="text-emerald-500/60" size={20} />
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                        <h3 className="text-5xl font-bold text-white tracking-tighter">{dynamicKPIs.effectiveConsultations}</h3>
+                        <span className="text-xs font-bold text-emerald-400 tracking-wider uppercase">Completadas</span>
+                    </div>
+                    <div className="mt-8 flex items-center justify-between">
+                        <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Atenciones Exitosas</span>
+                        <span className="text-[10px] font-bold text-emerald-400">100% Registro</span>
+                    </div>
+                </div>
+
+                {/* Tiempo Promedio de Sesión Card (Con Selector Diaria / Semanal / Mensual) */}
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-blue-500/20 transition-all duration-700 overflow-hidden md:col-span-2 lg:col-span-1">
+                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
+                    <div className="flex justify-between items-start mb-4">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Promedio Sesión</p>
+                        <Activity className="text-blue-500/60" size={20} />
+                    </div>
+                    <div className="flex items-baseline gap-2 mb-4">
+                        <h3 className="text-5xl font-bold text-white tracking-tighter">{dynamicKPIs.avgSessionMinutes} <span className="text-xl font-normal text-slate-400">min</span></h3>
+                    </div>
+                    
+                    {/* Botonera de Selector Rango Temporal */}
+                    <div className="flex p-1 bg-slate-950/60 rounded-xl border border-white/5 gap-1">
+                        <button
+                            onClick={() => setKpiTimeframe('daily')}
+                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                kpiTimeframe === 'daily' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
+                            }`}
+                        >
+                            Diaria
+                        </button>
+                        <button
+                            onClick={() => setKpiTimeframe('weekly')}
+                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                kpiTimeframe === 'weekly' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
+                            }`}
+                        >
+                            Semanal
+                        </button>
+                        <button
+                            onClick={() => setKpiTimeframe('monthly')}
+                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                kpiTimeframe === 'monthly' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
+                            }`}
+                        >
+                            Mensual
+                        </button>
+                    </div>
+                </div>
+
+                {/* Reputación Card */}
+                {metrics && (
+                    <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-yellow-500/20 transition-all duration-700 overflow-hidden">
                         <div className="absolute -right-6 -top-6 w-32 h-32 bg-yellow-500/5 rounded-full blur-2xl group-hover:bg-yellow-500/10 transition-colors"></div>
                         <div className="flex justify-between items-start mb-6">
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Reputación</p>
@@ -394,61 +488,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                              </div>
                         </div>
                     </div>
-
-                    {/* Eficiencia Card */}
-                    <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-blue-500/20 transition-all duration-700 overflow-hidden">
-                        <div className="absolute -right-6 -top-6 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
-                        <div className="flex justify-between items-start mb-6">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Score de Eficiencia</p>
-                            <TrendingUp className="text-blue-500/40" size={20} />
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                            <h3 className="text-5xl font-bold text-white tracking-tighter">{metrics.rankingScore}</h3>
-                            <span className="text-xs font-bold text-blue-500 tracking-tighter">ELITE</span>
-                        </div>
-                        <div className="mt-8 flex items-center justify-between">
-                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Global Rank</span>
-                            <span className="text-[10px] font-bold text-blue-400">#42</span>
-                        </div>
-                    </div>
-
-                    {/* Show Rate Card */}
-                    <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-emerald-500/20 transition-all duration-700 overflow-hidden">
-                        <div className="absolute -right-6 -top-6 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
-                        <div className="flex justify-between items-start mb-6">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Asistencia</p>
-                            <Users className="text-emerald-500/40" size={20} />
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                            <h3 className="text-5xl font-bold text-white tracking-tighter">{metrics.showRate}%</h3>
-                        </div>
-                        <div className="mt-8">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Paciente vs Turno</span>
-                                <span className="text-[10px] font-bold text-emerald-400">Óptimo</span>
-                            </div>
-                            <div className="flex gap-1">
-                                {[1,2,3,4,5,6,7,8,9,10].map(i => (
-                                    <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= 9 ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.4)]' : 'bg-white/5'}`}></div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Tiempo Promedio Card */}
-                    <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-slate-500/20 transition-all duration-700 overflow-hidden">
-                        <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-                        <div className="flex justify-between items-start mb-6">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Promedio Sesión</p>
-                            <Clock className="text-slate-500/40" size={20} />
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                            <h3 className="text-5xl font-bold text-white tracking-tighter">{metrics.avgConsultationTime}</h3>
-                        </div>
-                        <p className="mt-8 text-[9px] text-slate-600 font-bold uppercase tracking-tighter italic">"Calidad sobre velocidad"</p>
-                    </div>
-                </section>
-            )}
+                )}
+            </section>
 
             {/* Main Operational Area */}
             <section className="space-y-6 relative z-10">

@@ -154,6 +154,72 @@ export class DashboardRepository {
       return [];
     }
   }
+
+  /**
+   * Obtiene los KPIs dinámicos del médico (Consultas pendientes, efectivas y tiempo promedio de sesión)
+   */
+  async getDoctorKPIs(doctorId: string, timeframe: 'daily' | 'weekly' | 'monthly'): Promise<{
+    pendingConsultations: number;
+    effectiveConsultations: number;
+    avgSessionMinutes: number;
+  }> {
+    try {
+      // 1. Consultas Pendientes (status: 'confirmed' o 'in_progress')
+      const { count: pendingCount, error: errPending } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact', head: true })
+        .eq('doctor_id', doctorId)
+        .in('status', ['confirmed', 'in_progress']);
+
+      if (errPending) console.warn("Error buscando consultas pendientes:", errPending);
+
+      // 2. Filtrar por rango de fecha para Consultas Efectivas y Tiempo Promedio
+      const now = new Date();
+      let startDate = new Date();
+
+      if (timeframe === 'daily') {
+        startDate.setHours(0, 0, 0, 0);
+      } else if (timeframe === 'weekly') {
+        const day = now.getDay() || 7; // 1 (Lun) a 7 (Dom)
+        startDate.setDate(now.getDate() - day + 1);
+        startDate.setHours(0, 0, 0, 0);
+      } else if (timeframe === 'monthly') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+
+      const { data: completedData, error: errCompleted } = await supabase
+        .from('appointments')
+        .select('duration_minutes, created_at, scheduled_at')
+        .eq('doctor_id', doctorId)
+        .eq('status', 'completed')
+        .gte('scheduled_at', startDate.toISOString());
+
+      if (errCompleted) console.warn("Error buscando consultas completadas:", errCompleted);
+
+      const effectiveCount = completedData?.length || 0;
+
+      let avgMinutes = 0;
+      if (effectiveCount > 0) {
+        const totalMinutes = completedData.reduce((acc, row) => acc + (row.duration_minutes || 15), 0);
+        avgMinutes = Math.round(totalMinutes / effectiveCount);
+      } else {
+        avgMinutes = 15; // Valor por defecto de referencia cuando no hay atenciones en el período
+      }
+
+      return {
+        pendingConsultations: pendingCount || 0,
+        effectiveConsultations: effectiveCount,
+        avgSessionMinutes: avgMinutes
+      };
+    } catch (error) {
+      console.error("Error obteniendo KPIs del médico:", error);
+      return {
+        pendingConsultations: 0,
+        effectiveConsultations: 0,
+        avgSessionMinutes: 15
+      };
+    }
+  }
 }
 
 export const dashboardRepository = new DashboardRepository();
