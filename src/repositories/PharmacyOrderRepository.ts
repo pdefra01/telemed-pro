@@ -51,7 +51,39 @@ export class PharmacyOrderRepository {
       throw itemsError;
     }
 
-    // 3. Crear automáticamente el registro de cadetería asignado
+    // 3. Descontar stock del inventario (FIFO por fecha de vencimiento)
+    for (const item of orderData.items) {
+      const { data: batches } = await supabase
+        .from('pharmacy_inventory')
+        .select('*')
+        .eq('product_id', item.productId)
+        .gt('stock_quantity', 0)
+        .order('expiration_date', { ascending: true });
+
+      if (batches && batches.length > 0) {
+        let remainingNeeded = item.quantity;
+        for (const batch of batches) {
+          if (remainingNeeded <= 0) break;
+          const deduct = Math.min(batch.stock_quantity, remainingNeeded);
+          const newStock = batch.stock_quantity - deduct;
+          await supabase
+            .from('pharmacy_inventory')
+            .update({ stock_quantity: newStock })
+            .eq('id', batch.id);
+          remainingNeeded -= deduct;
+        }
+      }
+    }
+
+    // 4. Si la compra proviene de una receta electrónica, marcarla como dispensada
+    if (orderData.prescriptionId) {
+      await supabase
+        .from('prescriptions')
+        .update({ status: 'dispensed' })
+        .eq('id', orderData.prescriptionId);
+    }
+
+    // 5. Crear automáticamente el registro de cadetería asignado
     await supabase.from('pharmacy_deliveries').insert({
       order_id: orderRow.id,
       courier_name: 'Marcos Benítez (Cadete MEDINEX)',
