@@ -18,6 +18,7 @@ interface Props {
 
 const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [activeTab, setActiveTab] = useState<'queue' | 'history'>('queue');
+    const [doctorStatus, setDoctorStatus] = useState<'online' | 'away'>('online');
     const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
     const [isLoading, setIsLoading] = useState(true);
@@ -36,6 +37,34 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [historyView, setHistoryView] = useState<'records' | 'documents'>('records');
     const [isFetchingPatientHistory, setIsFetchingPatientHistory] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [searchDni, setSearchDni] = useState('');
+    const [isSearchingDni, setIsSearchingDni] = useState(false);
+
+    const handleSearchDni = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const cleanDni = searchDni.trim();
+        if (!cleanDni) return;
+        setIsSearchingDni(true);
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, dni')
+                .ilike('dni', `%${cleanDni}%`)
+                .limit(1);
+
+            if (error || !data || data.length === 0) {
+                setToast({ message: `No se encontró ningún paciente con DNI ${cleanDni}`, type: 'error' });
+            } else {
+                setSelectedPatientId(data[0].id);
+                setToast({ message: `Expediente cargado para ${data[0].full_name}`, type: 'success' });
+            }
+        } catch (err) {
+            console.error("Error al buscar paciente por DNI:", err);
+            setToast({ message: 'Error al consultar la base de datos de pacientes.', type: 'error' });
+        } finally {
+            setIsSearchingDni(false);
+        }
+    };
 
     const location = useLocation();
 
@@ -199,31 +228,28 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                     <h1 className="text-6xl font-bold text-white tracking-tighter leading-none">
                         Dashboard <span className="text-emerald-500">Médico</span>
                     </h1>
-                    <p className="text-slate-500 font-medium tracking-wide flex items-center gap-2">
+                    <div className="flex items-center gap-3 pt-1">
                         <Clock size={14} className="text-emerald-500" /> 
-                        Estado actual: <span className="text-slate-300 font-bold">EN LÍNEA</span> 
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                    </p>
-                </div>
-
-                <div className="flex items-center gap-4 bg-slate-900/40 backdrop-blur-3xl border border-white/5 p-2 rounded-3xl shadow-2xl">
-                   <div className="flex -space-x-3 px-4">
-                        {[1,2,3].map(i => (
-                            <div key={i} className="w-10 h-10 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden">
-                                <img src={`https://i.pravatar.cc/150?u=doc${i}`} alt="doc" className="opacity-80 group-hover:opacity-100 transition-opacity" />
+                        <span className="text-slate-400 font-medium text-sm tracking-wide">Estado actual:</span>
+                        <button
+                            onClick={() => setDoctorStatus(prev => prev === 'online' ? 'away' : 'online')}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2.5 transition-all duration-300 border backdrop-blur-md shadow-lg active:scale-95 ${
+                                doctorStatus === 'online'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 shadow-emerald-500/5'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 shadow-amber-500/5'
+                            }`}
+                        >
+                            <span>{doctorStatus === 'online' ? 'EN LÍNEA' : 'AUSENTE'}</span>
+                            <div className="relative flex items-center justify-center">
+                                <span className={`w-2 h-2 rounded-full ${
+                                    doctorStatus === 'online' ? 'bg-emerald-500' : 'bg-amber-500'
+                                }`}></span>
+                                {doctorStatus === 'online' && (
+                                    <span className="absolute w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                                )}
                             </div>
-                        ))}
-                   </div>
-                   <div className="h-10 w-px bg-white/5 mx-2"></div>
-                   <div className="pr-6 pl-2">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Carga de Red</p>
-                        <div className="flex items-center gap-3">
-                            <div className="w-24 bg-white/5 h-1.5 rounded-full overflow-hidden">
-                                <div className="bg-emerald-500 h-full w-[65%] rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                            </div>
-                            <span className="text-xs font-bold text-emerald-500">ROBUSTA</span>
-                        </div>
-                   </div>
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -308,9 +334,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             )}
 
             {/* Main Operational Area */}
-            <section className="grid grid-cols-1 xl:grid-cols-12 gap-8 relative z-10">
-                {/* Navigation & List (Left Column) */}
-                <div className="xl:col-span-8 space-y-6">
+            <section className="space-y-6 relative z-10">
+                {/* Navigation & List */}
+                <div className="space-y-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-900/20 p-4 rounded-[2rem] border border-white/5 backdrop-blur-xl">
                         <div className="flex p-1.5 bg-slate-950/50 rounded-2xl w-fit border border-white/5">
                             <button
@@ -327,14 +353,18 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             </button>
                         </div>
                         
-                        <div className="relative group">
-                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-emerald-500 transition-colors" size={16} />
+                        <form onSubmit={handleSearchDni} className="relative group">
+                            <button type="submit" disabled={isSearchingDni} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-emerald-500 hover:text-emerald-400 transition-colors">
+                                {isSearchingDni ? <div className="w-4 h-4 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div> : <Search size={16} />}
+                            </button>
                             <input 
                                 type="text" 
-                                placeholder="BUSCAR PACIENTE POR DNI..." 
+                                value={searchDni}
+                                onChange={(e) => setSearchDni(e.target.value)}
+                                placeholder="BUSCAR PACIENTE POR DNI (PRESIONAR ENTER)..." 
                                 className="bg-slate-950/50 border border-white/5 pl-14 pr-6 py-4 rounded-2xl text-[10px] font-bold tracking-widest text-white placeholder:text-slate-700 focus:outline-none focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all w-full md:w-80"
                             />
-                        </div>
+                        </form>
                     </div>
 
                     <div className="space-y-4">
@@ -450,63 +480,6 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 </div>
                             )
                         )}
-                    </div>
-                </div>
-
-                {/* Performance Analytics & News (Right Column) */}
-                <div className="xl:col-span-4 space-y-8">
-                    {/* Real-time Insights */}
-                    <div className="bg-gradient-to-br from-emerald-600 to-teal-800 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-3xl group">
-                        <div className="absolute right-[-20%] top-[-10%] w-[80%] h-[80%] bg-white/10 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-1000"></div>
-                        <div className="relative z-10 space-y-8">
-                            <div className="flex justify-between items-start">
-                                <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md">
-                                    <Zap size={24} className="text-white shadow-2xl" />
-                                </div>
-                                <span className="text-[10px] font-bold uppercase tracking-[0.3em] bg-white/20 px-4 py-1.5 rounded-full">Pro Insight</span>
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <h4 className="text-4xl font-bold tracking-tighter leading-none">Rendimiento Semanal</h4>
-                                <p className="text-emerald-100 text-sm font-medium opacity-80 leading-relaxed italic">"Has optimizado tu tiempo de respuesta un 15% este mes. ¡Excelente trabajo!"</p>
-                            </div>
-
-                            <button className="w-full py-4 bg-slate-950 text-white rounded-2xl font-bold text-[10px] uppercase tracking-[0.3em] flex items-center justify-center gap-3 hover:bg-white hover:text-slate-950 transition-all duration-500 group/btn">
-                                Ver Reporte Detallado <ArrowRight size={14} className="group-hover/btn:translate-x-2 transition-transform" />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Quick Shortcuts */}
-                    <div className="bg-slate-900/40 backdrop-blur-2xl rounded-[3rem] p-10 border border-white/5 space-y-8">
-                        <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em]">Accesos de Emergencia</h5>
-                        <div className="grid grid-cols-1 gap-4">
-                            <button className="flex items-center justify-between p-6 bg-white/5 rounded-[2rem] border border-white/5 hover:border-emerald-500/40 hover:bg-white/[0.07] transition-all group">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <Activity size={20} />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-xs font-bold text-white tracking-tight uppercase">Soporte Técnico 24/7</p>
-                                        <p className="text-[9px] text-slate-600 font-bold uppercase mt-0.5">Canal de alta prioridad</p>
-                                    </div>
-                                </div>
-                                <ChevronRight size={16} className="text-slate-700 group-hover:text-emerald-500 transition-colors" />
-                            </button>
-
-                            <button className="flex items-center justify-between p-6 bg-white/5 rounded-[2rem] border border-white/5 hover:border-blue-500/40 hover:bg-white/[0.07] transition-all group">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <AlertCircle size={20} />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-xs font-bold text-white tracking-tight uppercase">Protocolos IA</p>
-                                        <p className="text-[9px] text-slate-600 font-bold uppercase mt-0.5">Asistente de diagnóstico</p>
-                                    </div>
-                                </div>
-                                <ChevronRight size={16} className="text-slate-700 group-hover:text-blue-500 transition-colors" />
-                            </button>
-                        </div>
                     </div>
                 </div>
             </section>
