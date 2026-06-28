@@ -238,6 +238,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                       setError('');
                     }}
                     icon={<UserIcon size={18} />}
+                    labelClassName="!text-gray-700 font-bold"
+                    className="!text-slate-900 !bg-white !border-gray-300 focus:!border-teal-500 focus:!ring-teal-500/20 font-semibold placeholder:!text-gray-400"
                   />
                 </div>
               )}
@@ -266,6 +268,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                       ? (inputValue.includes('@') ? <Mail size={18} /> : <CreditCard size={18} />)
                       : <Mail size={18} />
                   }
+                  labelClassName="!text-gray-700 font-bold"
+                  className="!text-slate-900 !bg-white !border-gray-300 focus:!border-teal-500 focus:!ring-teal-500/20 font-semibold placeholder:!text-gray-400"
                 />
               </div>
 
@@ -284,6 +288,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                       setError('');
                     }}
                     icon={<CreditCard size={18} />}
+                    labelClassName="!text-gray-700 font-bold"
+                    className="!text-slate-900 !bg-white !border-gray-300 focus:!border-teal-500 focus:!ring-teal-500/20 font-semibold placeholder:!text-gray-400"
                   />
                 </div>
               )}
@@ -297,6 +303,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   icon={<Lock size={18} />}
                   error={error && error.includes('contraseña') ? error : undefined}
+                  labelClassName="!text-gray-700 font-bold"
+                  className="!text-slate-900 !bg-white !border-gray-300 focus:!border-teal-500 focus:!ring-teal-500/20 font-semibold placeholder:!text-gray-400"
                 />
               </div>
 
