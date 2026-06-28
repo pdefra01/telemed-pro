@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Doctor, Appointment, MedicalRecord, Prescription, MedicalDocument } from '../../types';
-import { Video, Calendar, Clock, Star, AlertCircle, FileText, CheckCircle, TrendingUp, Users, Activity, AlertTriangle, X, Search, Clipboard, Shield, ChevronRight, Zap, ArrowRight, MousePointer2 } from 'lucide-react';
+import { Doctor, Appointment, MedicalRecord, Prescription, MedicalDocument, DoctorWorkShift } from '../../types';
+import { Video, Calendar, Clock, Star, AlertCircle, FileText, CheckCircle, TrendingUp, Users, Activity, AlertTriangle, X, Search, Clipboard, Shield, ChevronRight, Zap, ArrowRight, MousePointer2, LogIn, LogOut as LogOutIcon, MapPin } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { appointmentRepository } from '../../repositories/AppointmentRepository';
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
@@ -9,6 +9,7 @@ import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRep
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { dashboardRepository } from '../../repositories/DashboardRepository';
 import { notificationRepository, Notification } from '../../repositories/NotificationRepository';
+import { doctorShiftRepository } from '../../repositories/DoctorShiftRepository';
 import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, Download, ExternalLink, History, FolderOpen } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
@@ -63,6 +64,74 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             setToast({ message: 'Error al consultar la base de datos de pacientes.', type: 'error' });
         } finally {
             setIsSearchingDni(false);
+        }
+    };
+
+    const [activeShift, setActiveShift] = useState<DoctorWorkShift | null>(null);
+    const [shiftDurationText, setShiftDurationText] = useState('00h 00m 00s');
+    const [isShiftLoading, setIsShiftLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchShift = async () => {
+            const shift = await doctorShiftRepository.getActiveShift(user.id);
+            setActiveShift(shift);
+            if (shift) {
+                setDoctorStatus('online');
+            }
+        };
+        fetchShift();
+    }, [user.id]);
+
+    useEffect(() => {
+        if (!activeShift) {
+            setShiftDurationText('00h 00m 00s');
+            return;
+        }
+
+        const updateTimer = () => {
+            const start = new Date(activeShift.clockIn).getTime();
+            const now = new Date().getTime();
+            const diffSec = Math.max(0, Math.floor((now - start) / 1000));
+
+            const hours = Math.floor(diffSec / 3600);
+            const minutes = Math.floor((diffSec % 3600) / 60);
+            const seconds = diffSec % 60;
+
+            const pad = (n: number) => n.toString().padStart(2, '0');
+            setShiftDurationText(`${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [activeShift]);
+
+    const handleClockIn = async () => {
+        setIsShiftLoading(true);
+        try {
+            const res = await doctorShiftRepository.clockIn(user.id);
+            setActiveShift(res.shift);
+            setDoctorStatus('online');
+            setToast({ message: `Jornada fichada exitosamente en ${res.matchedOffice.name}`, type: 'success' });
+        } catch (err: any) {
+            setToast({ message: err.message || 'Error al fichar entrada', type: 'error' });
+        } finally {
+            setIsShiftLoading(false);
+        }
+    };
+
+    const handleClockOut = async () => {
+        if (!activeShift) return;
+        setIsShiftLoading(true);
+        try {
+            const completed = await doctorShiftRepository.clockOut(activeShift.id);
+            setActiveShift(null);
+            setDoctorStatus('away');
+            setToast({ message: `Jornada finalizada. Duración: ${completed.durationMinutes} min`, type: 'success' });
+        } catch (err: any) {
+            setToast({ message: err.message || 'Error al fichar salida', type: 'error' });
+        } finally {
+            setIsShiftLoading(false);
         }
     };
 
@@ -249,6 +318,54 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 )}
                             </div>
                         </button>
+                    </div>
+                </div>
+
+                {/* Control de Jornada Laboral Card */}
+                <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/5 p-6 rounded-3xl shadow-2xl flex flex-col sm:flex-row items-center gap-6">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                            activeShift ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-500'
+                        }`}>
+                            <Activity size={24} className={activeShift ? 'animate-pulse' : ''} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Jornada Laboral</span>
+                                {activeShift && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                                        <MapPin size={10} /> {activeShift.officeName}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-2xl font-bold text-white tracking-tight font-mono mt-0.5">
+                                {shiftDurationText}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="h-10 w-px bg-white/5 hidden sm:block"></div>
+
+                    <div>
+                        {activeShift ? (
+                            <button
+                                onClick={handleClockOut}
+                                disabled={isShiftLoading}
+                                className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-red-500/5 disabled:opacity-50"
+                            >
+                                {isShiftLoading ? <div className="w-4 h-4 border-2 border-red-400/20 border-t-red-400 rounded-full animate-spin"></div> : <LogOutIcon size={16} />}
+                                <span>Fichar Salida</span>
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleClockIn}
+                                disabled={isShiftLoading}
+                                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                            >
+                                {isShiftLoading ? <div className="w-4 h-4 border-2 border-slate-950/20 border-t-slate-950 rounded-full animate-spin"></div> : <LogIn size={16} />}
+                                <span>Fichar Entrada</span>
+                            </button>
+                        )}
                     </div>
                 </div>
             </header>

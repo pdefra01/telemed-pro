@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import { taxRepository } from '../../repositories/TaxRepository';
 import { systemSettingsRepository } from '../../repositories/SystemSettingsRepository';
+import { officeLocationRepository } from '../../repositories/OfficeLocationRepository';
 import { useToast } from '../../context/ToastContext';
-import { TaxConfiguration } from '../../types';
+import { TaxConfiguration, OfficeLocation } from '../../types';
 
 const GlassCard: React.FC<{
   children: React.ReactNode;
@@ -31,15 +32,22 @@ const OCCSettings: React.FC = () => {
     scope: 'local' as 'national' | 'local'
   });
 
+  const [offices, setOffices] = useState<OfficeLocation[]>([]);
+  const [isOfficeModalOpen, setIsOfficeModalOpen] = useState(false);
+  const [isDetectingIp, setIsDetectingIp] = useState(false);
+  const [newOffice, setNewOffice] = useState({ name: '', publicIp: '' });
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [taxesData, policy] = await Promise.all([
+        const [taxesData, policy, officesData] = await Promise.all([
           taxRepository.getAll(),
-          systemSettingsRepository.getByKey('delinquency_policy')
+          systemSettingsRepository.getByKey('delinquency_policy'),
+          officeLocationRepository.getAllOffices()
         ]);
         setTaxes(taxesData);
         if (policy) setDelinquencyPolicy(policy);
+        setOffices(officesData);
       } catch (error) {
         console.error("Error loading settings", error);
       } finally {
@@ -48,6 +56,52 @@ const OCCSettings: React.FC = () => {
     };
     loadSettings();
   }, []);
+
+  const handleDetectCurrentIp = async () => {
+    setIsDetectingIp(true);
+    try {
+      const ip = await officeLocationRepository.detectCurrentIp();
+      setNewOffice(prev => ({ ...prev, publicIp: ip }));
+      toast(`IP detectada: ${ip}`, 'success');
+    } catch (err) {
+      toast("Error al detectar IP pública", 'error');
+    } finally {
+      setIsDetectingIp(false);
+    }
+  };
+
+  const handleAddOffice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const created = await officeLocationRepository.createOffice(newOffice.name, newOffice.publicIp);
+      setOffices([created, ...offices]);
+      setIsOfficeModalOpen(false);
+      setNewOffice({ name: '', publicIp: '' });
+      toast(`Oficina '${created.name}' registrada exitosamente`, 'success');
+    } catch (err) {
+      toast("Error al registrar oficina", 'error');
+    }
+  };
+
+  const handleToggleOffice = async (office: OfficeLocation) => {
+    try {
+      await officeLocationRepository.toggleOfficeStatus(office.id, !office.isActive);
+      setOffices(offices.map(o => o.id === office.id ? { ...o, isActive: !o.isActive } : o));
+      toast(`Sucursal ${office.name} ${!office.isActive ? 'activada' : 'desactivada'}`, 'success');
+    } catch (err) {
+      toast("Error al actualizar sucursal", 'error');
+    }
+  };
+
+  const handleDeleteOffice = async (id: string) => {
+    try {
+      await officeLocationRepository.deleteOffice(id);
+      setOffices(offices.filter(o => o.id !== id));
+      toast("Sucursal eliminada", 'success');
+    } catch (err) {
+      toast("Error al eliminar sucursal", 'error');
+    }
+  };
 
   const handleToggleActive = async (tax: TaxConfiguration) => {
     try {
@@ -229,6 +283,121 @@ const OCCSettings: React.FC = () => {
           </GlassCard>
         </div>
       </div>
+
+      {/* Red de Oficinas Autorizadas (IP Whitelist) */}
+      <div className="space-y-6 pt-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-xl font-bold text-white flex items-center">
+              <Globe size={20} className="mr-2 text-emerald-500" />
+              Red de Oficinas Autorizadas (Control de IP Pública)
+            </h3>
+            <p className="text-slate-400 text-xs mt-1">
+              Las IPs públicas registradas aquí permiten a los médicos fichar el ingreso a su jornada laboral desde la red física de la sucursal.
+            </p>
+          </div>
+          <button 
+            onClick={() => setIsOfficeModalOpen(true)}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-colors shadow-lg shadow-emerald-500/5"
+          >
+            <Plus size={14} />
+            <span>Nueva Sucursal</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {offices.map((office) => (
+            <GlassCard key={office.id} className={`p-6 border-l-4 ${office.isActive ? 'border-l-emerald-500' : 'border-l-slate-700'}`}>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h4 className="text-base font-bold text-white tracking-tight">{office.name}</h4>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20 mt-1 inline-block">
+                    IP: {office.publicIp}
+                  </span>
+                </div>
+                <button 
+                  onClick={() => handleDeleteOffice(office.id)}
+                  className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                  title="Eliminar sucursal"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                <span className={`text-[10px] font-bold uppercase tracking-widest ${office.isActive ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {office.isActive ? 'Activa / Permitida' : 'Inactiva'}
+                </span>
+                <button 
+                  onClick={() => handleToggleOffice(office)}
+                  className={`w-10 h-5 rounded-full relative transition-colors duration-300 ${office.isActive ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-300 ${office.isActive ? 'left-5.5' : 'left-0.5'}`}></div>
+                </button>
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+      </div>
+
+      {/* Add Office Modal */}
+      {isOfficeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsOfficeModalOpen(false)}></div>
+          <GlassCard className="relative w-full max-w-md p-8 animate-in zoom-in duration-300">
+            <h3 className="text-2xl font-bold text-white mb-6">Registrar Sucursal / Oficina</h3>
+            <form onSubmit={handleAddOffice} className="space-y-6">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500 mb-2">Nombre de la Sucursal</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Ej: Oficina Central Salta, Consultorio Belgrano"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500/50"
+                  value={newOffice.name}
+                  onChange={(e) => setNewOffice({...newOffice, name: e.target.value})}
+                />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500">IP Pública Autorizada</label>
+                  <button
+                    type="button"
+                    onClick={handleDetectCurrentIp}
+                    disabled={isDetectingIp}
+                    className="text-[10px] font-bold text-emerald-400 hover:underline flex items-center gap-1"
+                  >
+                    {isDetectingIp ? 'Detectando...' : '🪄 Detectar mi IP actual'}
+                  </button>
+                </div>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Ej: 200.123.45.67 o 127.0.0.1"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-emerald-500/50"
+                  value={newOffice.publicIp}
+                  onChange={(e) => setNewOffice({...newOffice, publicIp: e.target.value})}
+                />
+              </div>
+              <div className="flex space-x-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsOfficeModalOpen(false)}
+                  className="flex-1 px-6 py-3 bg-white/5 text-slate-400 rounded-xl font-bold hover:bg-white/10 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                >
+                  Guardar Sucursal
+                </button>
+              </div>
+            </form>
+          </GlassCard>
+        </div>
+      )}
 
       {/* Add Tax Modal */}
       {isModalOpen && (

@@ -324,3 +324,23 @@ export interface ContactVerification {
   expiresAt: string;
   verifiedAt?: string;
 }
+
+export interface OfficeLocation {
+  id: string;
+  name: string;
+  publicIp: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface DoctorWorkShift {
+  id: string;
+  doctorId: string;
+  officeLocationId?: string;
+  clockIn: string;
+  clockOut?: string;
+  durationMinutes?: number;
+  ipAddress?: string;
+  status: 'active' | 'completed';
+  officeName?: string;
+}
