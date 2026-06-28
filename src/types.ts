@@ -254,3 +254,58 @@ export interface SurveyResponse {
   responseValue: string;
   createdAt: string;
 }
+
+export interface PharmacyProduct {
+  id: string;
+  name: string;
+  activeIngredient: string;
+  presentation: string;
+  laboratory: string;
+  price: number;
+  requiresPrescription: boolean;
+  category: string;
+  imageUrl?: string;
+}
+
+export interface PharmacyInventory {
+  id: string;
+  productId: string;
+  batchNumber: string;
+  expirationDate: string;
+  stockQuantity: number;
+  reservedQuantity: number;
+}
+
+export interface PharmacyOrderItem {
+  id?: string;
+  productId: string;
+  productName?: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface PharmacyOrder {
+  id: string;
+  patientId: string;
+  prescriptionId?: string;
+  status: 'pending' | 'paid' | 'preparing' | 'dispatched' | 'delivered' | 'cancelled';
+  subtotal: number;
+  coverageDiscount: number;
+  total: number;
+  deliveryAddress: string;
+  createdAt: string;
+  items?: PharmacyOrderItem[];
+}
+
+export interface PharmacyDelivery {
+  id: string;
+  orderId: string;
+  courierId?: string;
+  courierName?: string;
+  courierPhone?: string;
+  trackingStatus: 'assigned' | 'picked_up' | 'in_transit' | 'delivered' | 'failed';
+  currentLat?: number;
+  currentLng?: number;
+  otpCode: string;
+  updatedAt: string;
+}

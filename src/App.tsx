@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { User, Patient, Doctor } from './types';
 import Auth from './pages/Auth';
 import Layout from './components/Layout';
@@ -21,6 +21,9 @@ import SurveyBuilder from './pages/admin/SurveyBuilder';
 import Campaigns from './pages/admin/Campaigns';
 import Profile from './pages/patient/Profile';
 import PatientSurveys from './pages/patient/PatientSurveys';
+import { PharmacyCatalog } from './pages/patient/PharmacyCatalog';
+import { PatientOrderTracking } from './pages/patient/PatientOrderTracking';
+import { PharmacyInventoryAdmin } from './pages/admin/PharmacyInventoryAdmin';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
@@ -219,6 +222,34 @@ const App: React.FC = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/pharmacy"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['patient']}>
+            <PharmacyCatalog 
+              patientId={user?.id || ''} 
+              patientAddress={(user as Patient)?.address || 'Av. Belgrano 1234, Salta Capital'} 
+              onNavigateToTracking={(orderId) => window.location.hash = `#/pharmacy-tracking/${orderId}`}
+            />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pharmacy-tracking/:orderId"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['patient']}>
+            <PatientOrderTrackingWrapper onBack={() => window.location.hash = '#/pharmacy'} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/pharmacy-inventory"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <PharmacyInventoryAdmin />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Video Room */}
       <Route
@@ -275,6 +306,11 @@ const App: React.FC = () => {
       </ErrorBoundary>
     </Router>
   );
+};
+
+const PatientOrderTrackingWrapper: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
+  const { orderId } = useParams<{ orderId: string }>();
+  return <PatientOrderTracking orderId={orderId || ''} onBack={onBack} />;
 };
 
 export default App;
