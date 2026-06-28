@@ -206,12 +206,21 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               </div>
               <div>
                 <p className={`text-[9px] font-bold ${isDoctor ? 'text-teal-500' : 'text-emerald-500'} uppercase tracking-[0.25em] leading-none mb-2`}>
-                  {isDoctor ? 'MÉDICO EN LÍNEA' : 'PACIENTE EN LÍNEA'}
+                  {isDoctor ? 'MÉDICO EN LÍNEA' : 'PROFESIONAL EN LÍNEA'}
                 </p>
                 <div className="flex items-center gap-3">
-                  <h1 className="text-base font-bold text-white tracking-tight leading-none">
-                    {isDoctor ? (appointment?.patientName || 'Cargando Paciente...') : 'Dr. Profesional'}
-                  </h1>
+                  <div>
+                    <h1 className="text-base font-bold text-white tracking-tight leading-none">
+                      {isDoctor
+                        ? (appointment?.patientName || 'Cargando Paciente...')
+                        : (appointment?.doctorName ? `Dr. ${appointment.doctorName}` : 'Cargando profesional...')}
+                    </h1>
+                    {!isDoctor && (appointment?.doctorSpecialty || appointment?.doctorLicense) && (
+                      <p className="text-[10px] text-slate-400 font-medium mt-0.5 leading-none">
+                        {[appointment?.doctorSpecialty, appointment?.doctorLicense ? `Mat. ${appointment.doctorLicense}` : ''].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
                     <Shield size={10} className="text-emerald-500" />
                     <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest">SECURE</span>

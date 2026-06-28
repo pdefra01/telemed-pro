@@ -245,7 +245,7 @@ export class AppointmentRepository {
       .select(`
         *,
         patient:profiles!patient_id(full_name),
-        doctor:profiles!doctor_id(full_name)
+        doctor:profiles!doctor_id(full_name, specialty, license_number)
       `)
       .eq('id', appointmentId)
       .single();
@@ -262,11 +262,13 @@ export class AppointmentRepository {
       patientName: data.patient?.full_name || "Paciente",
       doctorId: data.doctor_id,
       doctorName: data.doctor?.full_name || "Doctor",
+      doctorSpecialty: data.doctor?.specialty || "",
+      doctorLicense: data.doctor?.license_number || "",
       date: new Date(data.scheduled_at).toISOString().split('T')[0],
       time: new Date(data.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       status: data.status,
       type: 'video', // Por defecto en este MVP
-      notes: data.notes || '', // Agregado para soportar leer notas pre-existentes
+      notes: data.notes || '',
       consultationMetadata: data.consultation_metadata || {},
     } as any; 
   }
