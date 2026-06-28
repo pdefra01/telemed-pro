@@ -360,12 +360,12 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
           {showAddForm && (
             <form
               onSubmit={handleAddMember}
-              className="mb-6 p-5 bg-blue-500/5 border border-blue-500/20 rounded-2xl space-y-4 animate-in slide-in-from-top duration-300"
+              className="mb-6 p-5 bg-slate-900/80 border border-emerald-500/30 rounded-2xl space-y-4 animate-in slide-in-from-top duration-300 shadow-xl"
             >
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Nuevo Familiar</p>
-                <button type="button" onClick={() => setShowAddForm(false)} className="text-slate-500 hover:text-white transition-colors">
-                  <X size={16} />
+                <p className="text-sm font-semibold text-emerald-400">Nuevo Familiar</p>
+                <button type="button" onClick={() => setShowAddForm(false)} className="text-slate-400 hover:text-white transition-colors p-1">
+                  <X size={18} />
                 </button>
               </div>
 
@@ -379,40 +379,40 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
                     placeholder="Ej: María García"
                     required
                     icon={<UserIcon size={16} />}
-                    className="bg-white/5 border-white/10 text-white focus:border-blue-500 focus:ring-blue-500/20"
+                    className="bg-slate-950/60 border-slate-700 text-white placeholder:text-slate-400 focus:border-emerald-500 focus:ring-emerald-500/20"
                   />
                 </div>
 
                 {/* Relation select */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-slate-400 pl-1">Relación *</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 pl-1">Relación *</label>
                   <div className="relative">
-                    <Heart size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    <Heart size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <select
                       value={newMemberRelation}
                       onChange={(e) => setNewMemberRelation(e.target.value)}
                       required
-                      className="w-full pl-10 pr-8 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer"
+                      className="w-full pl-10 pr-8 py-3 bg-slate-950/60 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer font-medium"
                     >
                       {RELATION_OPTIONS.map(r => (
-                        <option key={r} value={r} className="bg-slate-900">{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+                        <option key={r} value={r} className="bg-slate-900 text-slate-100 py-2">{r.charAt(0).toUpperCase() + r.slice(1)}</option>
                       ))}
                     </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Birth date */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-slate-400 pl-1">Fecha de Nacimiento</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 pl-1">Fecha de Nacimiento</label>
                   <div className="relative">
-                    <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <input
                       type="date"
                       value={newMemberBirthDate}
                       onChange={(e) => setNewMemberBirthDate(e.target.value)}
                       max={new Date().toISOString().split('T')[0]}
-                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all [color-scheme:dark]"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-950/60 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all [color-scheme:dark] font-medium"
                     />
                   </div>
                 </div>
@@ -426,7 +426,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
                     onChange={(e) => setNewMemberDni(e.target.value)}
                     placeholder="Ej: 30123456"
                     icon={<CreditCard size={16} />}
-                    className="bg-white/5 border-white/10 text-white focus:border-blue-500 focus:ring-blue-500/20"
+                    className="bg-slate-950/60 border-slate-700 text-white placeholder:text-slate-400 focus:border-emerald-500 focus:ring-emerald-500/20"
                   />
                 </div>
               </div>

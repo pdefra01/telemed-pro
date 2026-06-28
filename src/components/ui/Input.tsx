@@ -12,21 +12,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
         return (
             <div className="w-full">
-                <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor={id} className="block text-xs font-semibold text-slate-300 dark:text-slate-300 mb-1.5 pl-1">
                     {label}
                 </label>
                 <div className="relative">
                     {icon && (
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                             {icon}
                         </div>
                     )}
                     <input
                         ref={ref}
                         id={id}
-                        className={`w-full ${icon ? 'pl-10' : 'pl-4'} pr-4 py-3 border rounded-xl focus:ring-2 outline-none transition disabled:bg-gray-100 disabled:text-gray-500 ${error
+                        className={`w-full ${icon ? 'pl-10' : 'pl-4'} pr-4 py-3 border rounded-xl focus:ring-2 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-400 disabled:bg-slate-800/50 disabled:text-slate-500 ${error
                                 ? 'border-red-500 focus:ring-red-200'
-                                : 'border-gray-300 focus:ring-teal-500 focus:border-transparent'
+                                : 'border-slate-700/60 focus:ring-emerald-500/20 focus:border-emerald-500'
                             } ${className}`}
                         aria-invalid={!!error}
                         aria-describedby={error ? `${id}-error` : undefined}

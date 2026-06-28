@@ -16,6 +16,22 @@ body {
   color: #e2e8f0;
 }
 
+/* Combobox (select) Option Styling for dark mode consistency */
+select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  padding: 10px !important;
+}
+
+select option:hover, select option:focus {
+  background-color: #1e293b !important;
+}
+
+/* Global Placeholder High-Contrast Ergonomics */
+::placeholder {
+  opacity: 1 !important;
+}
+
 /* Mobile input zoom prevention for iOS Safari */
 @media (max-width: 640px) {
   input, select, textarea {
