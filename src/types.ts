@@ -7,6 +7,10 @@ export interface User {
   role: Role;
   avatarUrl?: string;
   phone?: string;
+  phoneVerified?: boolean;
+  realEmail?: string;
+  emailVerified?: boolean;
+  communicationPreferences?: { whatsapp: boolean; sms: boolean; email: boolean };
   dni?: string;
   isActive?: boolean;
   digitalPublicKey?: string;
@@ -308,4 +312,15 @@ export interface PharmacyDelivery {
   currentLng?: number;
   otpCode: string;
   updatedAt: string;
+}
+
+export interface ContactVerification {
+  id: string;
+  userId: string;
+  channel: 'phone' | 'email';
+  contactValue: string;
+  otpCode: string;
+  attempts: number;
+  expiresAt: string;
+  verifiedAt?: string;
 }

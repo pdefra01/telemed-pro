@@ -30,6 +30,7 @@ export const Campaigns: React.FC = () => {
   const [description, setDescription] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [targetGroup, setTargetGroup] = useState<'all' | 'agreement'>('all');
+  const [verifiedChannelsOnly, setVerifiedChannelsOnly] = useState<boolean>(true);
   const [actions, setActions] = useState<NewAction[]>([]);
 
   // Selected template questions for action rules
@@ -202,6 +203,20 @@ export const Campaigns: React.FC = () => {
                 onChange={e => setDescription(e.target.value)}
                 className="bg-slate-950/60 border-white/10 text-white"
               />
+            </div>
+
+            <div className="md:col-span-2 bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="verifiedOnly"
+                checked={verifiedChannelsOnly}
+                onChange={e => setVerifiedChannelsOnly(e.target.checked)}
+                className="w-4 h-4 text-blue-500 bg-slate-950 border-white/10 rounded focus:ring-blue-500/20 cursor-pointer"
+              />
+              <label htmlFor="verifiedOnly" className="text-xs font-semibold text-slate-200 cursor-pointer">
+                Enviar campaña únicamente a afiliados con <span className="text-teal-400 font-bold">Celular / Email Verificados (2FA OTP)</span>
+                <span className="block text-[10px] text-slate-400 font-normal mt-0.5">Garantiza un 0% de tasa de rebote en notificaciones críticas y recordatorios sanitarios.</span>
+              </label>
             </div>
           </div>
 

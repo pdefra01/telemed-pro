@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button';
 import { Patient, FamilyMember } from '../../types';
 import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { familyMemberRepository } from '../../repositories/FamilyMemberRepository';
+import { ContactValidationModal } from '../../components/ui/ContactValidationModal';
 
 interface ProfileProps {
   user: Patient;
@@ -34,6 +35,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
   const [bloodType, setBloodType] = useState(user.bloodType || '');
   const [birthDate, setBirthDate] = useState(user.birthDate || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // ── OTP Validation state ───────────────────────────────────────────────────
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [otpChannel, setOtpChannel] = useState<'phone' | 'email'>('phone');
+  const [otpContactValue, setOtpContactValue] = useState('');
 
   // ── Family state ───────────────────────────────────────────────────────────
   const [familyMembers, setFamilyMembers] = useState<ExtendedFamilyMember[]>([]);
@@ -259,6 +265,39 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
                   icon={<MapPin size={18} />}
                   className="bg-white/5 border-white/10 text-white focus:border-emerald-500 focus:ring-emerald-500/20"
                 />
+              </div>
+
+              {/* Verificación en Dos Pasos (2FA) Badges */}
+              <div className="bg-slate-950/60 p-4 rounded-2xl border border-white/5 space-y-3">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Shield size={14} className="text-teal-400" /> Estado de Canales de Comunicación
+                </p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white/5 p-3.5 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <Phone size={18} className="text-teal-400" />
+                    <div>
+                      <span className="text-xs font-bold text-white block">Celular: {phone || 'Sin registrar'}</span>
+                      <span className="text-[10px] text-slate-400">Notificaciones de turnos y recetas por WhatsApp</span>
+                    </div>
+                  </div>
+                  {user.phoneVerified ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                      <CheckCircle2 size={14} /> Verificado
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOtpChannel('phone');
+                        setOtpContactValue(phone || '+5493875123456');
+                        setIsOtpModalOpen(true);
+                      }}
+                      className="text-xs font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-lg border border-amber-500/30 transition"
+                    >
+                      Validar con PIN
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -515,6 +554,18 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
           )}
         </div>
       </div>
+
+      <ContactValidationModal
+        isOpen={isOtpModalOpen}
+        onClose={() => setIsOtpModalOpen(false)}
+        userId={user.id}
+        channel={otpChannel}
+        contactValue={otpContactValue}
+        onSuccess={() => {
+          onLogin({ ...user, phoneVerified: true, phone: otpContactValue });
+          toast('¡Canal de contacto verificado con éxito!', 'success');
+        }}
+      />
     </div>
   );
 };
