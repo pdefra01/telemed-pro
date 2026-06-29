@@ -57,12 +57,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
     }
 
     if (role === 'doctor') {
-      return [
-        ...common,
-        { name: 'Agenda', icon: <Calendar size={20} />, path: '/schedule' },
-        { name: 'Pacientes', icon: <Users size={20} />, path: '/patients' },
-        ...tools
-      ];
+      return common;
     }
 
     if (role === 'admin') {
