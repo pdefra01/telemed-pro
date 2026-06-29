@@ -1,6 +1,6 @@
 # Manual del Usuario — Plataforma MEDINEX v2.0
 
-Bienvenido al manual oficial de la plataforma **MEDINEX**. Este documento guía a los usuarios (Pacientes, Médicos y Administradores) en el uso de las herramientas del sistema, incluyendo los módulos de **Receta Electrónica Criptográfica**, **Perfil de Paciente y Grupo Familiar**, y el **Módulo de Encuestas y Campañas de Censado Epidemiológico**.
+Bienvenido al manual oficial de la plataforma **MEDINEX**. Este documento guía a los usuarios (Pacientes, Médicos y Administradores) en el uso de las herramientas del sistema, incluyendo los módulos de **Receta Electrónica Criptográfica**, **Control de Jornada Laboral y Geofencing por IP**, **Indicadores y Analítica Evolutiva**, **Ficha Médica Integral**, **Vademécum & Stock de Medicamentos** y el **Módulo de Encuestas y Campañas de Censado Epidemiológico**.
 
 ---
 
@@ -9,8 +9,8 @@ Bienvenido al manual oficial de la plataforma **MEDINEX**. Este documento guía 
 | Rol | Flujo Principal | Acceso por Defecto |
 |-----|-----------------|--------------------|
 | **Paciente** | Responder censos, ver recetas verificadas y gestionar grupo familiar | DNI o Email / `password123` |
-| **Médico** | Atender consultas y emitir recetas firmadas digitalmente con PIN | `doctor@medinex.com` / `password123` |
-| **Administrador** | Administrar usuarios, diseñar encuestas y lanzar campañas epidemiológicas | `admin@medinex.com` / `password123` |
+| **Médico** | Fichar jornada por IP, atender consultas, consultar vademécum y emitir recetas firmadas con PIN | `medico@medinex.com.ar` / `medico123` |
+| **Administrador** | Administrar usuarios y sucursales, auditar tendencias evolutivas y lanzar campañas epidemiológicas | `admin@medinex.com` / `password123` |
 
 ---
 
@@ -40,43 +40,70 @@ Cuando la administración lanza una campaña epidemiológica, el paciente recibe
 
 ## 🩺 2. Módulo para Médicos
 
-### 2.1. Cierre de Consulta y Receta Digital (`PostConsultation`)
-Durante la atención de un turno activo, el profesional médica accede al panel de post-consultación:
-1. Registrar el diagnóstico (CIE-10 / texto).
-2. Habilitar **Receta Electrónica** y agregar los medicamentos e indicaciones.
-3. Hacer clic en **Finalizar Consulta**.
+### 2.1. Control de Jornada Laboral y Fichado por IP (`DoctorDashboard`)
+Para comenzar a atender consultas en la clínica, el profesional médico debe registrar su ingreso:
+1. En el encabezado del **Dashboard Médico**, presionar el botón **Fichar Entrada**.
+2. **Validación Geográfica por IP**: El sistema verificará de forma automática si la IP pública de la red actual pertenece a una sucursal física autorizada. Si la IP es válida, la jornada comenzará y se activará el temporizador en vivo (`00h 00m 00s`) indicando la sucursal asignada.
+3. Al finalizar la guardia o turno, presionar **Fichar Salida**. El sistema registrará los minutos totales trabajados.
 
-### 2.2. Firma Digital con PIN de Seguridad
-Al finalizar una consulta con receta, se despliega el modal de firma electrónica avanzada:
-- **Primera vez**: El sistema solicitará definir un **PIN de 6 dígitos**. Se generará un par de claves asimétricas **ECDSA (P-256)** y la clave privada se cifrará localmente con el PIN.
-- **Firmas subsiguientes**: Ingresar el PIN de 6 dígitos para autorizar y firmar criptográficamente la receta.
-- El PDF generado incluirá el código de autenticidad criptográfica y la matrícula profesional (`license_number`).
+### 2.2. Indicadores Clínicos en Tiempo Real (`DoctorDashboard`)
+El panel superior HUD muestra los indicadores operativos clave del profesional:
+- **Consultas Pendientes**: Total de pacientes aguardando en la sala de espera.
+- **Consultas Efectivas**: Total de atenciones completadas en el período.
+- **Tiempo Promedio de Sesión**: Duración media en minutos por paciente, con selector interactivo de rango temporal (**Diario**, **Semanal**, **Mensual**).
+- **Búsqueda Global por DNI**: Buscador directo para consultar pacientes en toda la red clínica e inspeccionar su bóveda de antecedentes.
+
+### 2.3. Vademécum & Consulta de Inventario de Medicamentos
+El médico puede consultar las existencias de la farmacia digital en cualquier momento:
+1. Presionar el botón **💊 Vademécum & Stock** en la barra de acciones principal.
+2. Ingresar el nombre del medicamento, droga o laboratorio. El modal mostrará el stock exacto disponible en vivo (`ej: Stock: 42 un.`).
+
+### 2.4. Cierre de Consulta, Receta Criptográfica y Descuento de Stock (`PostConsultation`)
+Durante la atención de un turno activo:
+1. Registrar el diagnóstico y las notas evolutivas.
+2. **Autocompletado de Receta**: Al escribir un medicamento, el sistema desplegará las sugerencias del catálogo oficial indicando su stock en vivo. Si el producto se selecciona del catálogo, quedará vinculado automáticamente.
+3. **Firma Criptográfica con PIN de 6 dígitos**:
+   - *Primera vez*: Definir un PIN de 6 dígitos para generar el par de claves asimétricas **ECDSA (P-256)**.
+   - *Médico recurrente*: Ingresar el PIN de 6 dígitos para autorizar y firmar la receta.
+4. **Deducción Automática de Inventario**: Al emitirse la receta firmada, la plataforma descontará atómicamente las unidades del stock de los lotes activos de farmacia según su fecha de vencimiento (método FIFO).
 
 ---
 
 ## 🛠️ 3. Módulo para Administradores (Command Center)
 
-### 3.1. Diseñador de Encuestas (`/survey-builder`)
-Permite a los auditores médicos diseñar cuestionarios dinámicos para relevar patologías crónicas:
-1. Acceder a **Encuestas** en el menú lateral.
-2. Hacer clic en **Nueva Encuesta** e ingresar título y objetivo.
-3. Agregar preguntas configurando el tipo de respuesta (Opción Única, Múltiple, Sí/No, Valor Numérico o Texto Libre).
-4. Guardar la plantilla para dejarla disponible para campañas.
+### 3.1. Analítica Evolutiva y Filtros por Médico (`AdminDashboard`)
+El Command Center cuenta con herramientas de inteligencia operativa avanzada:
+- **Barra de Control de Filtros**: Permite alternar la visualización entre la **🌐 Red Clínica Global** o auditar el desempeño de un médico específico.
+- **Selector Temporal**: Filtro para evaluar tendencias a nivel **Diario** (bloques horarios), **Semanal** (días) o **Mensual** (semanas).
+- **Gráficos Evolutivos (Recharts)**:
+  - *Flujo Evolutivo de Consultas*: Volumen de atenciones y porcentaje de variación respecto al período anterior.
+  - *Tendencia Promedio de Sesión*: Comparativa en minutos del tiempo dedicado por atención.
+  - *Horas de Guardia Fichadas*: Auditoría de horas trabajadas reales en sucursales.
 
-### 3.2. Gestión de Campañas y Disparadores Automáticos (`/campaigns`)
-Permite lanzar censos masivos y configurar acciones inteligentes:
-1. Acceder a **Campañas** y presionar **Nueva Campaña**.
-2. Seleccionar la encuesta asociada y definir el grupo objetivo (Todos los afiliados o por convenio).
-3. **Configurar Disparadores de Acciones**: Definir reglas automáticas basadas en las respuestas del paciente:
-   - *Ejemplo*: Si "Presión Sistólica" > 140 → Disparar **⚠️ Alerta Médica Prioritaria**.
-   - *Ejemplo*: Si "Controles al día" = No → Disparar **🩺 Invitación a Turno Preventivo**.
-4. Hacer clic en **Activar Campaña** para notificar automáticamente a todos los afiliados asignados.
+### 3.2. Red de Oficinas Autorizadas y Control de IP (`/settings`)
+En la sección **OCC Settings**, los administradores pueden gestionar las sucursales físicas:
+1. Acceder a **Red de Oficinas Autorizadas (Control de IP Pública)**.
+2. Hacer clic en **Nueva Sucursal**, ingresar el nombre del centro médico e indicar la IP pública autorizada.
+3. **🪄 Detectar mi IP actual**: Función automática que obtiene la IP pública de la red administrativa actual para darla de alta con un solo clic.
+
+### 3.3. Legajo y Ficha Médica Integral (`/doctors`)
+La gestión del cuerpo médico (`/doctors`) dispone del modal estructurado **Ficha Médica Integral**:
+- **Pestaña 1 (Datos Personales)**: Nombre, Email, Teléfono Móvil de Contacto, CUIT/CUIL Fiscal y Especialidad.
+- **Pestaña 2 (Licencias & Título)**: Matrícula Nacional (MN), Matrícula Provincial (MP), Universidad de Egreso y Año de Titulación.
+- **Pestaña 3 (Vínculo Laboral)**: **Fecha de Inicio de Relación Laboral**, **Fecha de Fin de Relación Laboral (Opcional)**, Honorario por Consulta ($ ARS) y Contraseña Temporal de Acceso.
+- La tabla principal destaca de forma inmediata las insignias de licencias y los rangos de fechas contractuales de cada profesional.
+
+### 3.4. Diseñador de Encuestas y Campañas Epidemiológicas (`/survey-builder` & `/campaigns`)
+Permite crear cuestionarios dinámicos y lanzar censos masivos configurando **Disparadores de Acciones Automáticos** (Alertas Médicas o Invitaciones a Turnos Preventivos basados en las respuestas de los afiliados).
 
 ---
 
-## 📋 Checklist de Verificación de Funcionalidades
+## 📋 Checklist de Verificación de Funcionalidades v2.0
 
-- [x] **Receta Electrónica**: Firma ECDSA con PIN + Verificación Client-Side en portal del paciente.
-- [x] **Perfil & Familiares**: Registro de datos médicos y gestión de dependientes.
-- [x] **Diseñador de Encuestas**: Creación de plantillas dinámicas multitipo.
-- [x] **Campañas de Censado**: Activación masiva y evaluación automática de reglas clínicas.
+- [x] **Receta Electrónica Criptográfica**: Firma ECDSA con PIN + Verificación Client-Side + Deducción Automática de Stock FIFO.
+- [x] **Jornada Laboral & IP Whitelist**: Fichado con temporizador y geofencing por IP pública de sucursal con autodetección administrativa.
+- [x] **KPIs & Analítica Evolutiva**: Indicadores dinámicos filtrables por médico y rango temporal (Diario, Semanal, Mensual).
+- [x] **Ficha Médica Integral**: Legajo profesional completo con matrículas (MN/MP), CUIT, formación y fechas de relación laboral.
+- [x] **Vademécum de Farmacia**: Buscador in-app para médicos con stock verificado en vivo.
+- [x] **Perfil & Grupo Familiar**: Registro de datos médicos y gestión de dependientes.
+- [x] **Campañas Epidemiológicas**: Censos masivos con evaluación de reglas clínicas automáticas.
