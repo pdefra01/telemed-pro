@@ -236,7 +236,7 @@ export class DashboardRepository {
   }> {
     try {
       // 1. Obtener citas
-      let appQuery = supabase.from('appointments').select('id, doctor_id, status, duration_minutes, scheduled_at');
+      let appQuery = supabase.from('appointments').select('id, doctor_id, status, duration_minutes, scheduled_at, created_at');
       if (doctorId !== 'global') {
         appQuery = appQuery.eq('doctor_id', doctorId);
       }
