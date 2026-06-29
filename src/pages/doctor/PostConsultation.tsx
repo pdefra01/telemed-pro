@@ -32,6 +32,7 @@ import { Doctor, Appointment, MedicalRecord, MedicalDocument } from '../../types
 import { appointmentRepository } from '../../repositories/AppointmentRepository';
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
+import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { supabase } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
 import '../../styles/animations.css';
@@ -61,10 +62,17 @@ const COMMON_MEDS = [
   "Sertralina 50mg"
 ];
 
+interface MedicationItem {
+  name: string;
+  instructions: string;
+  productId?: string;
+  stockAvailable?: number;
+}
+
 interface MedicationCardProps {
-  med: { name: string; instructions: string };
+  med: MedicationItem;
   index: number;
-  onChange: (index: number, field: 'name' | 'instructions', value: string) => void;
+  onChange: (index: number, field: 'name' | 'instructions' | 'productId' | 'stockAvailable', value: any) => void;
   onRemove: (index: number) => void;
   showRemove: boolean;
 }
@@ -77,9 +85,30 @@ const MedicationCard: React.FC<MedicationCardProps> = ({
   showRemove 
 }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const filteredMeds = COMMON_MEDS.filter(m => 
-    m.toLowerCase().includes(med.name.toLowerCase()) && med.name.length > 0
-  ).slice(0, 5);
+  const [catalogSuggestions, setCatalogSuggestions] = useState<Array<{ id: string; name: string; activeIngredient: string; presentation: string; totalStock: number }>>([]);
+
+  useEffect(() => {
+    if (!med.name.trim()) {
+      setCatalogSuggestions([]);
+      return;
+    }
+    const searchCatalog = async () => {
+      try {
+        const results = await pharmacyRepository.searchProductsWithStock(med.name);
+        setCatalogSuggestions(results.map(r => ({
+          id: r.id,
+          name: `${r.name} (${r.presentation})`,
+          activeIngredient: r.activeIngredient,
+          presentation: r.presentation,
+          totalStock: r.totalStock
+        })));
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+    const timer = setTimeout(searchCatalog, 300);
+    return () => clearTimeout(timer);
+  }, [med.name]);
 
   return (
     <div className="relative grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-900/40 border border-white/5 rounded-2xl group/med animate-fade-in-up hover:border-blue-500/30 transition-all duration-300">
@@ -97,24 +126,43 @@ const MedicationCard: React.FC<MedicationCardProps> = ({
           />
           <Pill className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600" />
           
-          {showSuggestions && filteredMeds.length > 0 && (
-            <div className="absolute z-10 left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-              {filteredMeds.map((m, i) => (
+          {showSuggestions && catalogSuggestions.length > 0 && (
+            <div className="absolute z-20 left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 divide-y divide-white/5">
+              {catalogSuggestions.map((item) => (
                 <button
-                  key={i}
+                  key={item.id}
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    onChange(index, 'name', m);
+                    onChange(index, 'name', item.name);
+                    onChange(index, 'productId', item.id);
+                    onChange(index, 'stockAvailable', item.totalStock);
                     setShowSuggestions(false);
                   }}
-                  className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-blue-600 hover:text-white transition-colors"
+                  className="w-full text-left px-4 py-3 hover:bg-blue-600/30 transition-colors flex items-center justify-between group cursor-pointer"
                 >
-                  {m}
+                  <div>
+                    <p className="text-xs font-bold text-white group-hover:text-blue-300">{item.name}</p>
+                    <p className="text-[10px] text-slate-400">{item.activeIngredient}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                    item.totalStock > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                  }`}>
+                    {item.totalStock > 0 ? `Stock: ${item.totalStock} un.` : 'Sin Stock'}
+                  </span>
                 </button>
               ))}
             </div>
           )}
         </div>
+        {med.stockAvailable !== undefined && (
+          <div className="pt-1">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-block border ${
+              med.stockAvailable > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+            }`}>
+              {med.stockAvailable > 0 ? `✓ Stock verificado en farmacia: ${med.stockAvailable} unidades` : '⚠️ Producto sin stock en farmacia'}
+            </span>
+          </div>
+        )}
       </div>
       
       <div className="space-y-2">
@@ -434,9 +482,9 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     setMedications(medications.filter((_, i) => i !== index));
   };
 
-  const handleMedicationChange = (index: number, field: 'name' | 'instructions', value: string) => {
+  const handleMedicationChange = (index: number, field: 'name' | 'instructions' | 'productId' | 'stockAvailable', value: any) => {
     const newMedications = [...medications];
-    newMedications[index][field] = value;
+    (newMedications[index] as any)[field] = value;
     setMedications(newMedications);
   };
 
@@ -446,6 +494,15 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     setError(null);
     
     try {
+      // Descontar stock de medicamentos seleccionados del catálogo
+      if (addPrescription && medications.length > 0) {
+        for (const med of medications) {
+          if (med.productId) {
+            await pharmacyRepository.deductStock(med.productId, 1);
+          }
+        }
+      }
+
       const { data, error: functionError } = await supabase.functions.invoke('finalize-consultation', {
         body: {
           appointmentId: appointmentData.id,

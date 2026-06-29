@@ -10,7 +10,8 @@ import { prescriptionRepository } from '../../repositories/PrescriptionRepositor
 import { dashboardRepository } from '../../repositories/DashboardRepository';
 import { notificationRepository, Notification } from '../../repositories/NotificationRepository';
 import { doctorShiftRepository } from '../../repositories/DoctorShiftRepository';
-import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, Download, ExternalLink, History, FolderOpen } from 'lucide-react';
+import { pharmacyRepository } from '../../repositories/PharmacyRepository';
+import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, Download, ExternalLink, History, FolderOpen, Pill } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
 interface Props {
@@ -37,9 +38,27 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [patientDocuments, setPatientDocuments] = useState<MedicalDocument[]>([]);
     const [historyView, setHistoryView] = useState<'records' | 'documents'>('records');
     const [isFetchingPatientHistory, setIsFetchingPatientHistory] = useState(false);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [searchDni, setSearchDni] = useState('');
     const [isSearchingDni, setIsSearchingDni] = useState(false);
+
+    // Vademécum & Stock Farmacia state
+    const [showPharmacyModal, setShowPharmacyModal] = useState(false);
+    const [pharmacySearchQuery, setPharmacySearchQuery] = useState('');
+    const [isSearchingPharmacy, setIsSearchingPharmacy] = useState(false);
+    const [pharmacySearchResults, setPharmacySearchResults] = useState<Array<any>>([]);
+
+    const handleSearchPharmacy = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        setIsSearchingPharmacy(true);
+        try {
+            const results = await pharmacyRepository.searchProductsWithStock(pharmacySearchQuery);
+            setPharmacySearchResults(results);
+        } catch (err) {
+            console.warn(err);
+        } finally {
+            setIsSearchingPharmacy(false);
+        }
+    };
 
     const handleSearchDni = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -511,18 +530,29 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             </button>
                         </div>
                         
-                        <form onSubmit={handleSearchDni} className="relative group">
-                            <button type="submit" disabled={isSearchingDni} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-emerald-500 hover:text-emerald-400 transition-colors">
-                                {isSearchingDni ? <div className="w-4 h-4 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div> : <Search size={16} />}
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setShowPharmacyModal(true); handleSearchPharmacy(); }}
+                                className="px-5 py-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-2xl font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-500/5 cursor-pointer"
+                            >
+                                <Pill size={16} />
+                                <span>Vademécum & Stock</span>
                             </button>
-                            <input 
-                                type="text" 
-                                value={searchDni}
-                                onChange={(e) => setSearchDni(e.target.value)}
-                                placeholder="BUSCAR PACIENTE POR DNI (PRESIONAR ENTER)..." 
-                                className="bg-slate-950/50 border border-white/5 pl-14 pr-6 py-4 rounded-2xl text-[10px] font-bold tracking-widest text-white placeholder:text-slate-700 focus:outline-none focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all w-full md:w-80"
-                            />
-                        </form>
+
+                            <form onSubmit={handleSearchDni} className="relative group w-full sm:w-auto">
+                                <button type="submit" disabled={isSearchingDni} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-emerald-500 hover:text-emerald-400 transition-colors">
+                                    {isSearchingDni ? <div className="w-4 h-4 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div> : <Search size={16} />}
+                                </button>
+                                <input 
+                                    type="text" 
+                                    value={searchDni}
+                                    onChange={(e) => setSearchDni(e.target.value)}
+                                    placeholder="BUSCAR PACIENTE POR DNI..." 
+                                    className="bg-slate-950/50 border border-white/5 pl-14 pr-6 py-4 rounded-2xl text-[10px] font-bold tracking-widest text-white placeholder:text-slate-700 focus:outline-none focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all w-full sm:w-72"
+                                />
+                            </form>
+                        </div>
                     </div>
 
                     <div className="space-y-4">
@@ -937,6 +967,78 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             >
                                 Archivar Protocolo
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Vademécum & Stock Farmacia Modal */}
+            {showPharmacyModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-[#0f172a] border border-white/10 rounded-[2.5rem] p-8 w-full max-w-3xl shadow-2xl relative flex flex-col max-h-[85vh]">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                                    <Pill className="text-blue-400" size={28} />
+                                    Vademécum & Stock Farmacia
+                                </h3>
+                                <p className="text-slate-400 text-xs mt-1">Consulte el catálogo y las existencias en vivo antes de recetar.</p>
+                            </div>
+                            <button
+                                onClick={() => setShowPharmacyModal(false)}
+                                className="p-3 text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-2xl transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSearchPharmacy} className="flex gap-3 mb-6">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                                <input
+                                    type="text"
+                                    value={pharmacySearchQuery}
+                                    onChange={(e) => setPharmacySearchQuery(e.target.value)}
+                                    placeholder="Buscar medicamento, droga o laboratorio..."
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-3.5 text-white text-sm focus:outline-none focus:border-blue-500/50"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={isSearchingPharmacy}
+                                className="px-6 py-3.5 bg-blue-500 hover:bg-blue-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
+                            >
+                                {isSearchingPharmacy ? 'Buscando...' : 'Buscar'}
+                            </button>
+                        </form>
+
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                            {isSearchingPharmacy ? (
+                                <div className="text-center py-12 text-slate-500 animate-pulse text-xs font-bold uppercase tracking-widest">
+                                    Consultando inventario en tiempo real...
+                                </div>
+                            ) : pharmacySearchResults.length === 0 ? (
+                                <div className="text-center py-12 text-slate-500 text-xs italic">
+                                    {pharmacySearchQuery ? 'No se encontraron medicamentos para esa búsqueda.' : 'Ingrese un término de búsqueda para ver existencias.'}
+                                </div>
+                            ) : (
+                                pharmacySearchResults.map((item) => (
+                                    <div key={item.id} className="bg-white/5 border border-white/5 p-5 rounded-2xl flex items-center justify-between hover:border-blue-500/30 transition-all">
+                                        <div className="space-y-1">
+                                            <h4 className="text-base font-bold text-white tracking-tight">{item.name}</h4>
+                                            <p className="text-xs text-slate-400 font-medium">Droga: <span className="text-slate-300">{item.activeIngredient}</span> • {item.presentation}</p>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Lab: {item.laboratory}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`px-4 py-2 rounded-2xl text-xs font-bold font-mono inline-block border ${
+                                                item.totalStock > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-lg shadow-emerald-500/5' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                            }`}>
+                                                {item.totalStock > 0 ? `${item.totalStock} unidades disponibles` : 'Sin Stock'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>

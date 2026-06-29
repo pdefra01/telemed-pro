@@ -151,6 +151,51 @@ export class PharmacyRepository {
       imageUrl: data.image_url
     };
   }
+
+  /**
+   * Busca productos del catálogo para el módulo médico calculando el total de stock disponible en vivo
+   */
+  async searchProductsWithStock(query: string): Promise<Array<PharmacyProduct & { totalStock: number }>> {
+    const products = await this.getProducts({ query });
+    if (products.length === 0) return [];
+
+    const productIds = products.map(p => p.id);
+    const { data: inventoryData } = await supabase
+      .from('pharmacy_inventory')
+      .select('product_id, stock_quantity')
+      .in('product_id', productIds)
+      .gte('expiration_date', new Date().toISOString().split('T')[0]);
+
+    const stockMap: Record<string, number> = {};
+    (inventoryData || []).forEach(item => {
+      stockMap[item.product_id] = (stockMap[item.product_id] || 0) + item.stock_quantity;
+    });
+
+    return products.map(p => ({
+      ...p,
+      totalStock: stockMap[p.id] || 0
+    }));
+  }
+
+  /**
+   * Descuenta atómicamente el stock de un medicamento vía RPC almacenado
+   */
+  async deductStock(productId: string, quantity: number): Promise<boolean> {
+    try {
+      const { data, error } = await supabase.rpc('deduct_medication_stock', {
+        p_product_id: productId,
+        p_quantity: quantity
+      });
+      if (error) {
+        console.error("Error al descontar stock por RPC:", error);
+        return false;
+      }
+      return !!data;
+    } catch (err) {
+      console.error("Excepción al descontar stock:", err);
+      return false;
+    }
+  }
 }
 
 export const pharmacyRepository = new PharmacyRepository();
