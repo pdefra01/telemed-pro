@@ -37,6 +37,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [patientRecords, setPatientRecords] = useState<MedicalRecord[]>([]);
     const [patientDocuments, setPatientDocuments] = useState<MedicalDocument[]>([]);
     const [historyView, setHistoryView] = useState<'records' | 'documents'>('records');
+    const [isFetchingPatientHistory, setIsFetchingPatientHistory] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [searchDni, setSearchDni] = useState('');
     const [isSearchingDni, setIsSearchingDni] = useState(false);
