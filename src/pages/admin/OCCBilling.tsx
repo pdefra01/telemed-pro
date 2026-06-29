@@ -79,6 +79,36 @@ const OCCBilling: React.FC = () => {
     inv.entityId.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Dynamic Metrics Computation
+  const now = new Date();
+  const currentPeriodStr = now.toISOString().substring(0, 7); // YYYY-MM
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevPeriodStr = prevDate.toISOString().substring(0, 7);
+
+  // Current vs Prev Month Billing
+  const currentMonthInvoices = invoices.filter(inv => inv.period.startsWith(currentPeriodStr) && inv.status !== 'cancelled');
+  const prevMonthInvoices = invoices.filter(inv => inv.period.startsWith(prevPeriodStr) && inv.status !== 'cancelled');
+
+  const totalFacturadoMes = currentMonthInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+  const totalFacturadoPrev = prevMonthInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+  
+  // If no invoices for specific YYYY-MM period format, fallback to all active invoices sum
+  const displayFacturado = totalFacturadoMes > 0 ? totalFacturadoMes : invoices.filter(i => i.status !== 'cancelled').reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+
+  let varPercentage = 0;
+  if (totalFacturadoPrev > 0) {
+    varPercentage = Math.round(((totalFacturadoMes - totalFacturadoPrev) / totalFacturadoPrev) * 100);
+  }
+
+  // Pending Payments
+  const pendingInvoices = invoices.filter(inv => inv.status === 'issued');
+  const pendienteMonto = pendingInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+  const pendingCount = pendingInvoices.length;
+
+  // Dynamic Next Closure Date (Last day of current month)
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const formattedNextClosure = lastDayOfMonth.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* Header */}
@@ -112,17 +142,19 @@ const OCCBilling: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <GlassCard className="p-6 border-l-4 border-l-blue-500">
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Total Facturado (Mes)</p>
-          <h4 className="text-3xl font-bold text-white">$1.240.500</h4>
-          <p className="text-emerald-400 text-[10px] font-bold mt-2">+12.5% vs mes anterior</p>
+          <h4 className="text-3xl font-bold text-white">${displayFacturado.toLocaleString()}</h4>
+          <p className="text-emerald-400 text-[10px] font-bold mt-2">
+            {varPercentage >= 0 ? `+${varPercentage}% vs mes anterior` : `${varPercentage}% vs mes anterior`}
+          </p>
         </GlassCard>
         <GlassCard className="p-6 border-l-4 border-l-amber-500">
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Pendiente de Cobro</p>
-          <h4 className="text-3xl font-bold text-white">$320.000</h4>
-          <p className="text-amber-400 text-[10px] font-bold mt-2">14 facturas vencidas</p>
+          <h4 className="text-3xl font-bold text-white">${pendienteMonto.toLocaleString()}</h4>
+          <p className="text-amber-400 text-[10px] font-bold mt-2">{pendingCount} {pendingCount === 1 ? 'factura emitida sin cobrar' : 'facturas emitidas sin cobrar'}</p>
         </GlassCard>
         <GlassCard className="p-6 border-l-4 border-l-indigo-500">
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Próximo Cierre</p>
-          <h4 className="text-3xl font-bold text-white">30 Abr</h4>
+          <h4 className="text-3xl font-bold text-white capitalize">{formattedNextClosure}</h4>
           <p className="text-indigo-400 text-[10px] font-bold mt-2">Cierre automático programado</p>
         </GlassCard>
       </div>
