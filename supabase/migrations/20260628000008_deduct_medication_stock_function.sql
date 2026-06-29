@@ -1,4 +1,4 @@
--- Migration: Stored procedure to deduct medication stock atomically
+-- Migration: Stored procedure to deduct medication stock atomically with role validation
 -- Description: Decrements stock_quantity in pharmacy_inventory for a given product_id across available batches.
 
 CREATE OR REPLACE FUNCTION public.deduct_medication_stock(
@@ -12,7 +12,14 @@ AS $$
 DECLARE
   v_batch RECORD;
   v_remaining INT := p_quantity;
+  v_role TEXT;
 BEGIN
+  -- Security check: Verify caller has doctor or admin role
+  v_role := auth.jwt() ->> 'role';
+  IF v_role IS NULL OR v_role NOT IN ('doctor', 'admin') THEN
+    RAISE EXCEPTION 'Acceso denegado: Solo médicos o administradores pueden descontar stock de farmacia.';
+  END IF;
+
   IF p_quantity <= 0 THEN
     RETURN TRUE;
   END IF;
@@ -42,4 +49,4 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.deduct_medication_stock IS 'Descuenta atómicamente el stock de medicamentos de los lotes activos según su fecha de vencimiento (FIFO).';
+COMMENT ON FUNCTION public.deduct_medication_stock IS 'Descuenta atómicamente el stock de medicamentos de los lotes activos según su fecha de vencimiento (FIFO) previa validación de rol.';

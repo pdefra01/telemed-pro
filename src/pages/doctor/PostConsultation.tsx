@@ -494,15 +494,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     setError(null);
     
     try {
-      // Descontar stock de medicamentos seleccionados del catálogo
-      if (addPrescription && medications.length > 0) {
-        for (const med of medications) {
-          if (med.productId) {
-            await pharmacyRepository.deductStock(med.productId, 1);
-          }
-        }
-      }
-
+      // 1. Consolidar la consulta y generar la receta en el servidor primero
       const { data, error: functionError } = await supabase.functions.invoke('finalize-consultation', {
         body: {
           appointmentId: appointmentData.id,
@@ -515,6 +507,18 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       });
 
       if (functionError) throw functionError;
+
+      // 2. Tras la emisión exitosa, descontar stock de los medicamentos seleccionados del catálogo
+      if (addPrescription && medications.length > 0) {
+        for (const med of medications) {
+          if (med.productId) {
+            const success = await pharmacyRepository.deductStock(med.productId, 1);
+            if (!success) {
+              console.warn(`No se pudo descontar el stock para ${med.name}. Es posible que el lote haya vencido o no tenga stock suficiente.`);
+            }
+          }
+        }
+      }
 
       // Artificial delay for premium feel of the steps
       await new Promise(resolve => setTimeout(resolve, 2000));
