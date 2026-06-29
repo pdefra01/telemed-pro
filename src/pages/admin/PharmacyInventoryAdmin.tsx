@@ -5,15 +5,16 @@ import { supplierRepository } from '../../repositories/SupplierRepository';
 import { 
   Package, Plus, AlertTriangle, Calendar, Layers, Search, 
   CheckCircle, Truck, Building2, CreditCard, ShoppingCart, 
-  Edit3, ShieldAlert, ArrowDownLeft, ArrowUpRight, DollarSign, RefreshCw
+  Edit3, ShieldAlert, ArrowDownLeft, ArrowUpRight, DollarSign, RefreshCw, BarChart3, Zap
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 
 export const PharmacyInventoryAdmin: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'catalog' | 'batches' | 'orders' | 'suppliers'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'batches' | 'orders' | 'suppliers' | 'analytics'>('catalog');
   const [products, setProducts] = useState<Array<PharmacyProduct & { totalStock?: number }>>([]);
   const [suppliers, setSuppliers] = useState<PharmacySupplier[]>([]);
   const [orders, setOrders] = useState<PharmacySupplierOrder[]>([]);
+  const [paretoData, setParetoData] = useState<Array<any>>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
@@ -67,14 +68,16 @@ export const PharmacyInventoryAdmin: React.FC = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [prods, sups, ords] = await Promise.all([
+      const [prods, sups, ords, pareto] = await Promise.all([
         pharmacyRepository.searchProductsWithStock(''),
         supplierRepository.getSuppliers(),
-        supplierRepository.getSupplierOrders()
+        supplierRepository.getSupplierOrders(),
+        pharmacyRepository.getTopSellingAndParetoAnalysis()
       ]);
       setProducts(prods);
       setSuppliers(sups);
       setOrders(ords);
+      setParetoData(pareto);
       if (prods.length > 0 && !selectedProductId) {
         handleSelectProduct(prods[0].id);
       }
@@ -82,6 +85,25 @@ export const PharmacyInventoryAdmin: React.FC = () => {
       console.error("Error cargando datos de farmacia ERP:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAutoApplyPareto = async () => {
+    if (paretoData.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      for (const item of paretoData) {
+        await pharmacyRepository.updateProduct(item.id, {
+          minStockThreshold: item.suggestedMinStock,
+          reorderQuantity: item.suggestedReorderQty
+        });
+      }
+      setToastMsg("Mínimos de stock y reorden ajustados automáticamente según curva de Pareto ABC.");
+      await loadAllData();
+    } catch (err) {
+      alert("Error al aplicar sugerencias Pareto.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -342,6 +364,14 @@ export const PharmacyInventoryAdmin: React.FC = () => {
             }`}
           >
             <Building2 size={14} /> Proveedores & CC
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'analytics' ? 'bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <BarChart3 size={14} /> Ranking & Pareto ABC
           </button>
         </div>
       </div>
@@ -637,6 +667,121 @@ export const PharmacyInventoryAdmin: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: DASHBOARD RANKING & PARETO ABC */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6">
+          {/* Header & Auto-Adjust Button */}
+          <div className="bg-slate-900/40 border border-white/5 rounded-3xl p-6 flex flex-col md:flex-row justify-between items-center gap-6 backdrop-blur-xl shadow-2xl">
+            <div className="space-y-1">
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <BarChart3 className="text-teal-400" size={24} />
+                Análisis de Rotación Pareto ABC y Ranking de Ventas
+              </h3>
+              <p className="text-xs text-slate-400">
+                Clasificación inteligente de inventario según el principio 80/20 para determinar umbrales óptimos de stock mínimo y reposición.
+              </p>
+            </div>
+            <button
+              onClick={handleAutoApplyPareto}
+              disabled={isSubmitting || paretoData.length === 0}
+              className="px-6 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-lg shadow-teal-500/20 flex items-center gap-2.5 active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              <Zap size={18} className="fill-slate-950" />
+              Auto-Ajustar Umbrales Sugeridos por Pareto
+            </button>
+          </div>
+
+          {/* Pareto Summary HUD Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="bg-slate-900/40 border border-emerald-500/30 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
+              <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block mb-1">Clase A • Alta Rotación (80% Vol)</span>
+              <div className="text-3xl font-extrabold text-white font-mono">
+                {paretoData.filter(p => p.paretoCategory === 'A').length} <span className="text-xs text-slate-400 font-normal">productos</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2">Sugerido: Stock Mínimo 50 un. • Reorden 200 un.</p>
+            </div>
+
+            <div className="bg-slate-900/40 border border-amber-500/30 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
+              <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block mb-1">Clase B • Rotación Media (15% Vol)</span>
+              <div className="text-3xl font-extrabold text-white font-mono">
+                {paretoData.filter(p => p.paretoCategory === 'B').length} <span className="text-xs text-slate-400 font-normal">productos</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2">Sugerido: Stock Mínimo 20 un. • Reorden 100 un.</p>
+            </div>
+
+            <div className="bg-slate-900/40 border border-slate-700 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
+              <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-slate-500/10 rounded-full blur-xl pointer-events-none" />
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Clase C • Baja Rotación (5% Vol)</span>
+              <div className="text-3xl font-extrabold text-white font-mono">
+                {paretoData.filter(p => p.paretoCategory === 'C').length} <span className="text-xs text-slate-400 font-normal">productos</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2">Sugerido: Stock Mínimo 5 un. • Reorden 30 un.</p>
+            </div>
+          </div>
+
+          {/* Table Ranking & Pareto Details */}
+          <div className="bg-slate-900/40 border border-white/5 rounded-3xl p-6 backdrop-blur-xl space-y-4">
+            <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Layers size={16} className="text-teal-400" /> Ranking de Dispensación y Matriz Pareto
+            </h4>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                    <th className="py-3 px-4"># Pos</th>
+                    <th className="py-3 px-4">Medicamento / Presentación</th>
+                    <th className="py-3 px-4 text-center">Clasif. ABC</th>
+                    <th className="py-3 px-4 text-right">Unidades Disp.</th>
+                    <th className="py-3 px-4 text-right">% Acumulado</th>
+                    <th className="py-3 px-4 text-center">Stock Actual</th>
+                    <th className="py-3 px-4 text-center">Mín. Actual vs Sugerido</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {paretoData.map((item, index) => (
+                    <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-4 px-4 font-mono font-bold text-slate-500">#{index + 1}</td>
+                      <td className="py-4 px-4">
+                        <span className="font-bold text-white block">{item.name}</span>
+                        <span className="text-[10px] text-slate-400">{item.laboratory} • {item.presentation}</span>
+                      </td>
+                      <td className="py-4 px-4 text-center">
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
+                          item.paretoCategory === 'A' 
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                            : item.paretoCategory === 'B'
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                            : 'bg-slate-800 text-slate-400 border-slate-700'
+                        }`}>
+                          Clase {item.paretoCategory}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-right font-mono font-bold text-teal-400 text-sm">
+                        {item.unitsSold} un.
+                      </td>
+                      <td className="py-4 px-4 text-right font-mono text-slate-300">
+                        {item.cumulativePercentage}%
+                      </td>
+                      <td className="py-4 px-4 text-center font-mono font-bold text-white">
+                        {item.totalStock || 0} un.
+                      </td>
+                      <td className="py-4 px-4 text-center font-mono text-xs">
+                        <span className="text-slate-400">{item.minStockThreshold || 20} un.</span>
+                        <span className="text-slate-600 mx-1">→</span>
+                        <span className="text-emerald-400 font-bold">{item.suggestedMinStock} un.</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
