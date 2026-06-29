@@ -14,7 +14,9 @@ import {
   CreditCard,
   FileBarChart,
   Wand2,
-  ShoppingBag
+  ShoppingBag,
+  Award,
+  ShieldCheck
 } from 'lucide-react';
 import { User, Role } from '../types';
 import logoMedinex from '../logo_medinex.jpeg';
@@ -49,6 +51,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
     if (role === 'patient') {
       return [
         ...common,
+        { name: 'Contratar Plan', icon: <ShieldCheck size={20} />, path: '/subscription-wizard' },
         { name: 'Farmacia Digital', icon: <ShoppingBag size={20} />, path: '/pharmacy' },
         { name: 'Historia Clínica', icon: <Activity size={20} />, path: '/history' },
         { name: 'Mis Pagos', icon: <CreditCard size={20} />, path: '/payments' },
@@ -65,6 +68,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         ...common,
         { name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors' },
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
+        { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
         { name: 'Reportes', icon: <Activity size={20} />, path: '/reports' },
         ...tools
       ];

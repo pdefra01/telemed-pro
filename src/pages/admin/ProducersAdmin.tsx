@@ -1,0 +1,207 @@
+import React, { useState, useEffect } from 'react';
+import { Producer } from '../../types';
+import { producerRepository } from '../../repositories/ProducerRepository';
+import { 
+  Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp
+} from 'lucide-react';
+
+export const ProducersAdmin: React.FC = () => {
+  const [producers, setProducers] = useState<Producer[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Form states
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [commissionRate, setCommissionRate] = useState<number>(10.00);
+
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [toastMsg, setToastMsg] = useState<string>('');
+
+  useEffect(() => {
+    loadProducers();
+  }, []);
+
+  const loadProducers = async () => {
+    setLoading(true);
+    try {
+      const sups = await producerRepository.getProducers();
+      setProducers(sups);
+    } catch (err) {
+      console.error("Error cargando productores:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveProducer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await producerRepository.createProducer({
+        name,
+        producerCode: code,
+        email,
+        phone,
+        commissionRate,
+        status: 'active'
+      });
+      setToastMsg("Asesor comercial registrado correctamente.");
+      setShowModal(false);
+      setName('');
+      setCode('');
+      setEmail('');
+      setPhone('');
+      setCommissionRate(10.00);
+      await loadProducers();
+    } catch (err) {
+      alert("Error al crear productor comercial.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const filteredProducers = producers.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.producerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalAffiliatesAllProducers = producers.reduce((sum, p) => sum + (p.totalAffiliatesReferred || 0), 0);
+
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="bg-slate-900/60 p-6 rounded-3xl border border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 backdrop-blur-xl shadow-2xl">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-teal-500/10 text-teal-400 rounded-2xl flex items-center justify-center font-bold border border-teal-500/20 shadow-lg shadow-teal-500/5">
+            <Award size={28} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-teal-400 uppercase tracking-[0.3em]">Commercial Network</span>
+            </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Gestión de Productores & Asesores Comerciales</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Seguimiento de altas por comercial, comisiones asignadas y red de ventas.</p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setShowModal(true)}
+          className="px-6 py-3 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-lg shadow-teal-500/20 flex items-center gap-2 active:scale-95 cursor-pointer"
+        >
+          <Plus size={16} /> Nuevo Asesor Comercial
+        </button>
+      </div>
+
+      {toastMsg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 text-emerald-400 text-xs font-bold flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle size={18} />
+            <span>{toastMsg}</span>
+          </div>
+          <button onClick={() => setToastMsg('')} className="hover:text-white">✕</button>
+        </div>
+      )}
+
+      {/* HUD Metrics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="bg-slate-900/40 border border-white/5 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Asesores Activos</span>
+          <div className="text-3xl font-extrabold text-white font-mono">{producers.length}</div>
+        </div>
+
+        <div className="bg-slate-900/40 border border-teal-500/30 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
+          <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest block mb-1">Altas Referidas por Red</span>
+          <div className="text-3xl font-extrabold text-white font-mono">{totalAffiliatesAllProducers} <span className="text-xs text-slate-400 font-normal">afiliados</span></div>
+        </div>
+
+        <div className="bg-slate-900/40 border border-emerald-500/30 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
+          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block mb-1">Comisión Promedio</span>
+          <div className="text-3xl font-extrabold text-white font-mono">11.25 %</div>
+        </div>
+      </div>
+
+      {/* Search & List */}
+      <div className="space-y-4">
+        <div className="relative max-w-md w-full">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, código o email de asesor..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-900/60 border border-white/10 rounded-2xl pl-12 pr-4 py-3 text-white text-xs focus:outline-none focus:border-teal-500/50"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProducers.map(p => (
+            <div key={p.id} className="bg-slate-900/40 border border-white/5 hover:border-teal-500/30 rounded-3xl p-6 space-y-4 transition-all duration-300 backdrop-blur-xl relative group">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-bold font-mono text-teal-400 uppercase tracking-widest px-2.5 py-1 bg-teal-500/10 rounded-full border border-teal-500/20 inline-block mb-2">
+                    {p.producerCode}
+                  </span>
+                  <h3 className="text-lg font-bold text-white tracking-tight">{p.name}</h3>
+                  <p className="text-xs text-slate-400">{p.email}</p>
+                </div>
+                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[10px] font-bold uppercase border border-emerald-500/20">
+                  {p.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/5 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Afiliados Traídos</span>
+                  <span className="font-mono font-bold text-teal-400 text-lg">{p.totalAffiliatesReferred || 0}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">% Comisión</span>
+                  <span className="font-mono font-bold text-white text-lg">{p.commissionRate}%</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal Crear Productor */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#0f172a] border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl relative space-y-6">
+            <h3 className="text-xl font-bold text-white">Alta de Asesor Comercial / Productor</h3>
+            <form onSubmit={handleSaveProducer} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Nombre Completo:</label>
+                <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="Ej. Carlos Gómez" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Código Único Comercial:</label>
+                <input type="text" required value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Ej. PROD-103" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Email Corporativo:</label>
+                <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="asesor@medinex.com" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">% Comisión por Alta / Cobro:</label>
+                <input type="number" step="0.5" required value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 bg-white/5 text-slate-400 rounded-xl text-xs font-bold">Cancelar</button>
+                <button type="submit" disabled={isSubmitting} className="px-6 py-3 bg-teal-500 text-slate-950 rounded-xl text-xs font-bold">{isSubmitting ? 'Guardando...' : 'Guardar Productor'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProducersAdmin;
