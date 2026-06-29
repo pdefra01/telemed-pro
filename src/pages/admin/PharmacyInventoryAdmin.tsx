@@ -68,16 +68,14 @@ export const PharmacyInventoryAdmin: React.FC = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [prods, sups, ords, pareto] = await Promise.all([
+      const [prods, sups, ords] = await Promise.all([
         pharmacyRepository.searchProductsWithStock(''),
         supplierRepository.getSuppliers(),
-        supplierRepository.getSupplierOrders(),
-        pharmacyRepository.getTopSellingAndParetoAnalysis()
+        supplierRepository.getSupplierOrders()
       ]);
       setProducts(prods);
       setSuppliers(sups);
       setOrders(ords);
-      setParetoData(pareto);
       if (prods.length > 0 && !selectedProductId) {
         handleSelectProduct(prods[0].id);
       }
@@ -85,6 +83,19 @@ export const PharmacyInventoryAdmin: React.FC = () => {
       console.error("Error cargando datos de farmacia ERP:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRecalculatePareto = async () => {
+    setIsSubmitting(true);
+    try {
+      const pareto = await pharmacyRepository.getTopSellingAndParetoAnalysis();
+      setParetoData(pareto);
+      setToastMsg("Recálculo de Matriz Pareto ABC y Ranking ejecutado correctamente.");
+    } catch (err) {
+      alert("Error al recalcular Pareto.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -98,7 +109,7 @@ export const PharmacyInventoryAdmin: React.FC = () => {
           reorderQuantity: item.suggestedReorderQty
         });
       }
-      setToastMsg("Mínimos de stock y reorden ajustados automáticamente según curva de Pareto ABC.");
+      setToastMsg("Mínimos de stock y reorden ajustados según la última reclasificación Pareto ABC.");
       await loadAllData();
     } catch (err) {
       alert("Error al aplicar sugerencias Pareto.");
@@ -685,14 +696,24 @@ export const PharmacyInventoryAdmin: React.FC = () => {
                 Clasificación inteligente de inventario según el principio 80/20 para determinar umbrales óptimos de stock mínimo y reposición.
               </p>
             </div>
-            <button
-              onClick={handleAutoApplyPareto}
-              disabled={isSubmitting || paretoData.length === 0}
-              className="px-6 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-lg shadow-teal-500/20 flex items-center gap-2.5 active:scale-95 cursor-pointer whitespace-nowrap"
-            >
-              <Zap size={18} className="fill-slate-950" />
-              Auto-Ajustar Umbrales Sugeridos por Pareto
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleRecalculatePareto}
+                disabled={isSubmitting}
+                className="px-5 py-3.5 bg-slate-800 hover:bg-slate-700 text-teal-400 font-extrabold text-xs uppercase tracking-wider rounded-2xl border border-teal-500/30 transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
+              >
+                <RefreshCw size={16} className={isSubmitting ? "animate-spin" : ""} />
+                Ejecutar Recálculo Pareto
+              </button>
+              <button
+                onClick={handleAutoApplyPareto}
+                disabled={isSubmitting || paretoData.length === 0}
+                className="px-5 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-lg shadow-teal-500/20 flex items-center gap-2 active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <Zap size={16} className="fill-slate-950" />
+                Aplicar Umbrales Sugeridos
+              </button>
+            </div>
           </div>
 
           {/* Pareto Summary HUD Cards */}
