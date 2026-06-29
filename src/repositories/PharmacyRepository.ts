@@ -15,7 +15,10 @@ export class PharmacyRepository {
       q = q.eq('requires_prescription', filters.requiresPrescription);
     }
     if (filters?.query) {
-      q = q.or(`name.ilike.%${filters.query}%,active_ingredient.ilike.%${filters.query}%,laboratory.ilike.%${filters.query}%`);
+      const cleanQuery = filters.query.replace(/[,()]/g, ' ').trim();
+      if (cleanQuery) {
+        q = q.or(`name.ilike.%${cleanQuery}%,active_ingredient.ilike.%${cleanQuery}%,laboratory.ilike.%${cleanQuery}%`);
+      }
     }
 
     const { data, error } = await q.order('name', { ascending: true });
@@ -87,7 +90,7 @@ export class PharmacyRepository {
   }
 
   /**
-   * Registra un nuevo lote de producto en el inventario
+   * Registra o acumula stock en un lote de producto en el inventario
    */
   async addInventoryBatch(batchData: {
     productId: string;
@@ -95,11 +98,41 @@ export class PharmacyRepository {
     expirationDate: string;
     stockQuantity: number;
   }): Promise<PharmacyInventory> {
+    const cleanBatch = batchData.batchNumber.trim();
+    
+    // Verificar si ya existe un lote activo con el mismo número para este producto
+    const { data: existingBatch } = await supabase
+      .from('pharmacy_inventory')
+      .select('*')
+      .eq('product_id', batchData.productId)
+      .eq('batch_number', cleanBatch)
+      .maybeSingle();
+
+    if (existingBatch) {
+      const newStock = existingBatch.stock_quantity + batchData.stockQuantity;
+      const { data, error } = await supabase
+        .from('pharmacy_inventory')
+        .update({ stock_quantity: newStock, expiration_date: batchData.expirationDate })
+        .eq('id', existingBatch.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return {
+        id: data.id,
+        productId: data.product_id,
+        batchNumber: data.batch_number,
+        expirationDate: data.expiration_date,
+        stockQuantity: data.stock_quantity,
+        reservedQuantity: data.reserved_quantity
+      };
+    }
+
     const { data, error } = await supabase
       .from('pharmacy_inventory')
       .insert({
         product_id: batchData.productId,
-        batch_number: batchData.batchNumber.trim(),
+        batch_number: cleanBatch,
         expiration_date: batchData.expirationDate,
         stock_quantity: batchData.stockQuantity
       })
@@ -160,11 +193,14 @@ export class PharmacyRepository {
     if (products.length === 0) return [];
 
     const productIds = products.map(p => p.id);
+    const today = new Date();
+    const localDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
     const { data: inventoryData } = await supabase
       .from('pharmacy_inventory')
       .select('product_id, stock_quantity')
       .in('product_id', productIds)
-      .gte('expiration_date', new Date().toISOString().split('T')[0]);
+      .gte('expiration_date', localDateStr);
 
     const stockMap: Record<string, number> = {};
     (inventoryData || []).forEach(item => {
