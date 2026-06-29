@@ -37,7 +37,9 @@ export class PharmacyRepository {
       price: Number(row.price),
       requiresPrescription: row.requires_prescription,
       category: row.category,
-      imageUrl: row.image_url
+      imageUrl: row.image_url,
+      minStockThreshold: row.min_stock_threshold || 20,
+      reorderQuantity: row.reorder_quantity || 100
     }));
   }
 
@@ -63,7 +65,9 @@ export class PharmacyRepository {
       price: Number(data.price),
       requiresPrescription: data.requires_prescription,
       category: data.category,
-      imageUrl: data.image_url
+      imageUrl: data.image_url,
+      minStockThreshold: data.min_stock_threshold || 20,
+      reorderQuantity: data.reorder_quantity || 100
     };
   }
 
@@ -90,6 +94,18 @@ export class PharmacyRepository {
   }
 
   /**
+   * Actualiza el stock de un lote en particular
+   */
+  async updateBatchQuantity(batchId: string, newQuantity: number): Promise<void> {
+    const { error } = await supabase
+      .from('pharmacy_inventory')
+      .update({ stock_quantity: Math.max(0, newQuantity) })
+      .eq('id', batchId);
+
+    if (error) throw error;
+  }
+
+  /**
    * Registra o acumula stock en un lote de producto en el inventario
    */
   async addInventoryBatch(batchData: {
@@ -100,7 +116,6 @@ export class PharmacyRepository {
   }): Promise<PharmacyInventory> {
     const cleanBatch = batchData.batchNumber.trim();
     
-    // Verificar si ya existe un lote activo con el mismo número para este producto
     const { data: existingBatch } = await supabase
       .from('pharmacy_inventory')
       .select('*')
@@ -165,7 +180,9 @@ export class PharmacyRepository {
         price: productData.price,
         requires_prescription: productData.requiresPrescription,
         category: productData.category,
-        image_url: productData.imageUrl
+        image_url: productData.imageUrl,
+        min_stock_threshold: productData.minStockThreshold || 20,
+        reorder_quantity: productData.reorderQuantity || 100
       })
       .select()
       .single();
@@ -181,8 +198,33 @@ export class PharmacyRepository {
       price: Number(data.price),
       requiresPrescription: data.requires_prescription,
       category: data.category,
-      imageUrl: data.image_url
+      imageUrl: data.image_url,
+      minStockThreshold: data.min_stock_threshold,
+      reorderQuantity: data.reorder_quantity
     };
+  }
+
+  /**
+   * Actualiza un producto existente en el catálogo
+   */
+  async updateProduct(id: string, productData: Partial<PharmacyProduct>): Promise<void> {
+    const payload: any = {};
+    if (productData.name) payload.name = productData.name.trim();
+    if (productData.activeIngredient) payload.active_ingredient = productData.activeIngredient.trim();
+    if (productData.presentation) payload.presentation = productData.presentation.trim();
+    if (productData.laboratory) payload.laboratory = productData.laboratory.trim();
+    if (productData.price !== undefined) payload.price = productData.price;
+    if (productData.requiresPrescription !== undefined) payload.requires_prescription = productData.requiresPrescription;
+    if (productData.category) payload.category = productData.category;
+    if (productData.minStockThreshold !== undefined) payload.min_stock_threshold = productData.minStockThreshold;
+    if (productData.reorderQuantity !== undefined) payload.reorder_quantity = productData.reorderQuantity;
+
+    const { error } = await supabase
+      .from('pharmacy_products')
+      .update(payload)
+      .eq('id', id);
+
+    if (error) throw error;
   }
 
   /**

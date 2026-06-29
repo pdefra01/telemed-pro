@@ -278,6 +278,42 @@ export interface PharmacyProduct {
   requiresPrescription: boolean;
   category: string;
   imageUrl?: string;
+  minStockThreshold?: number;
+  reorderQuantity?: number;
+}
+
+export interface PharmacySupplier {
+  id: string;
+  name: string;
+  cuit: string;
+  contactEmail: string;
+  phone?: string;
+  currentBalance: number;
+  status: 'active' | 'inactive';
+  createdAt?: string;
+}
+
+export interface PharmacySupplierOrder {
+  id: string;
+  supplierId: string;
+  productId: string;
+  quantityOrdered: number;
+  unitCost: number;
+  totalCost: number;
+  status: 'draft' | 'sent' | 'received' | 'cancelled';
+  createdAt: string;
+  supplierName?: string;
+  productName?: string;
+}
+
+export interface SupplierAccountMovement {
+  id: string;
+  supplierId: string;
+  orderId?: string;
+  type: 'purchase_order' | 'payment';
+  amount: number;
+  description: string;
+  createdAt: string;
 }
 
 export interface PharmacyInventory {
