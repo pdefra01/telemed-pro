@@ -162,15 +162,16 @@ export class DoctorShiftRepository {
 
     if (data && data.length > 0) {
       const now = new Date();
-      for (const old of data) {
+      const updates = data.map(old => {
         const clockInDate = new Date(old.clock_in);
         const diffMs = now.getTime() - clockInDate.getTime();
         const durationMinutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
-        await supabase
+        return supabase
           .from('doctor_work_shifts')
           .update({ clock_out: now.toISOString(), duration_minutes: durationMinutes, status: 'completed' })
           .eq('id', old.id);
-      }
+      });
+      await Promise.all(updates);
     }
   }
 }

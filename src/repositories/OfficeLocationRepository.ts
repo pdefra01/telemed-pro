@@ -60,17 +60,29 @@ export class OfficeLocationRepository {
   }
 
   /**
-   * Helper to detect current client public IP via public API or fallback
+   * Helper to detect current client public IP via public API or redundant fallback
    */
   async detectCurrentIp(): Promise<string> {
     try {
-      const res = await fetch('https://api.ipify.org?format=json');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
-      return data.ip || '127.0.0.1';
+      if (data.ip) return data.ip;
     } catch (err) {
-      console.warn("Failed to detect IP via ipify, using fallback:", err);
-      return window.location.hostname === 'localhost' ? '127.0.0.1' : '192.168.0.141';
+      console.warn("Failed to detect IP via primary provider (ipify), trying fallback:", err);
     }
+
+    try {
+      const res = await fetch('https://api.seeip.org/jsonip');
+      const data = await res.json();
+      if (data.ip) return data.ip;
+    } catch (err) {
+      console.warn("Failed to detect IP via secondary provider (seeip):", err);
+    }
+
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? '127.0.0.1' : '192.168.0.141';
   }
 }
 
