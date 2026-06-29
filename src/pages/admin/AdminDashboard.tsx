@@ -65,20 +65,42 @@ const AdminDashboard: React.FC = () => {
     monthlyRevenue: 0,
     pendingInvoices: 0
   });
+  const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
   const [topDoctors, setTopDoctors] = useState<Doctor[]>([]);
-  const [weeklyData, setWeeklyData] = useState<WeeklyStat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filtros globales de analítica evolutiva
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('global');
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [analyticsData, setAnalyticsData] = useState<{
+    timeSeries: Array<{ name: string; consultations: number; avgDuration: number; workHours: number }>;
+    summary: {
+      totalConsultations: number;
+      avgSessionTime: number;
+      totalWorkHours: number;
+      consultationTrend: string;
+      durationTrend: string;
+    };
+  }>({
+    timeSeries: [],
+    summary: {
+      totalConsultations: 0,
+      avgSessionTime: 15,
+      totalWorkHours: 0,
+      consultationTrend: "+0%",
+      durationTrend: "0 min"
+    }
+  });
 
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        const [metricsData, doctorsData, weeklyStats] = await Promise.all([
+        const [metricsData, doctorsData] = await Promise.all([
           dashboardRepository.getMetrics(),
-          doctorRepository.getAllDoctors(),
-          dashboardRepository.getWeeklyStats()
+          doctorRepository.getAllDoctors()
         ]);
         setMetrics(metricsData);
-        setWeeklyData(weeklyStats);
+        setDoctorsList(doctorsData);
         setTopDoctors([...doctorsData].sort((a, b) => b.rating - a.rating).slice(0, 5));
       } catch (error) {
         console.error("Error loading dashboard data", error);
@@ -88,6 +110,14 @@ const AdminDashboard: React.FC = () => {
     };
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      const data = await dashboardRepository.getAdminAnalytics(selectedDoctorId, timeframe);
+      setAnalyticsData(data);
+    };
+    loadAnalytics();
+  }, [selectedDoctorId, timeframe]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -105,6 +135,56 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Barra de Filtros de Analítica (Médico + Temporal) */}
+      <GlassCard className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border-emerald-500/20 bg-emerald-500/5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Stethoscope size={18} className="text-emerald-400" />
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Médico:</span>
+          </div>
+          <select
+            value={selectedDoctorId}
+            onChange={(e) => setSelectedDoctorId(e.target.value)}
+            className="bg-slate-900/80 border border-white/10 text-white rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-emerald-500/50"
+          >
+            <option value="global">🌐 Red Clínica Global (Todos los Médicos)</option>
+            {doctorsList.map((doc) => (
+              <option key={doc.id} value={doc.id}>Dr. {doc.name} — {doc.specialty}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Rango Temporal:</span>
+          <div className="flex p-1 bg-slate-950/80 rounded-xl border border-white/10 gap-1">
+            <button
+              onClick={() => setTimeframe('daily')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                timeframe === 'daily' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Diario
+            </button>
+            <button
+              onClick={() => setTimeframe('weekly')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                timeframe === 'weekly' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Semanal
+            </button>
+            <button
+              onClick={() => setTimeframe('monthly')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                timeframe === 'monthly' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Mensual
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+
       {/* Primary Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Link to="/affiliates" className="block transform transition-transform hover:scale-[1.02]">
@@ -119,7 +199,7 @@ const AdminDashboard: React.FC = () => {
         <Link to="/doctors" className="block transform transition-transform hover:scale-[1.02]">
           <MetricCard
             icon={<Stethoscope size={20} />}
-            label="Médicos"
+            label="Médicos Activos"
             value={isLoading ? "---" : metrics.totalDoctors}
             trend="+2"
             color="emerald"
@@ -159,17 +239,24 @@ const AdminDashboard: React.FC = () => {
         <GlassCard className="lg:col-span-2 p-8">
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h3 className="text-xl font-bold text-white">Flujo de Consultas</h3>
-              <p className="text-sm text-slate-500">Actividad semanal consolidada</p>
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                Flujo Evolutivo de Consultas
+                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  {analyticsData.summary.consultationTrend}
+                </span>
+              </h3>
+              <p className="text-sm text-slate-500">
+                {selectedDoctorId === 'global' ? 'Actividad global consolidada de la clínica' : 'Actividad evolutiva del médico seleccionado'}
+              </p>
             </div>
-            <div className="flex space-x-2">
-              <button className="px-3 py-1 text-[10px] font-bold uppercase bg-white/10 text-white rounded-lg border border-white/10">7 Días</button>
-              <button className="px-3 py-1 text-[10px] font-bold uppercase text-slate-500 hover:text-white transition-colors">30 Días</button>
+            <div className="text-right">
+              <span className="text-2xl font-bold text-white font-mono">{analyticsData.summary.totalConsultations}</span>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Total Período</p>
             </div>
           </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={weeklyData}>
+              <AreaChart data={analyticsData.timeSeries}>
                 <defs>
                   <linearGradient id="colorConsultations" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={OCC_COLORS.emerald} stopOpacity={0.3}/>
@@ -201,6 +288,7 @@ const AdminDashboard: React.FC = () => {
                 <Area 
                   type="monotone" 
                   dataKey="consultations" 
+                  name="Consultas"
                   stroke={OCC_COLORS.emerald} 
                   strokeWidth={3}
                   fillOpacity={1} 
@@ -253,6 +341,77 @@ const AdminDashboard: React.FC = () => {
             </div>
           </GlassCard>
         </div>
+      </div>
+
+      {/* Secundary Trend Analytics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Promedio de Sesión Chart */}
+        <GlassCard className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h4 className="text-base font-bold text-white flex items-center gap-2">
+                Tendencia Promedio de Sesión
+                <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                  {analyticsData.summary.durationTrend}
+                </span>
+              </h4>
+              <p className="text-xs text-slate-400">Minutos por atención efectiva en el período</p>
+            </div>
+            <div className="text-right">
+              <span className="text-xl font-bold text-blue-400 font-mono">{analyticsData.summary.avgSessionTime} min</span>
+            </div>
+          </div>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={analyticsData.timeSeries}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', fontSize: '11px' }}
+                />
+                <Bar dataKey="avgDuration" name="Duración (min)" fill={OCC_COLORS.blue} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </GlassCard>
+
+        {/* Horas Fichadas Chart */}
+        <GlassCard className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h4 className="text-base font-bold text-white flex items-center gap-2">
+                Horas de Guardia / Jornada Fichadas
+                <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                  Fichado Real
+                </span>
+              </h4>
+              <p className="text-xs text-slate-400">Total horas trabajadas en sucursales autorizadas</p>
+            </div>
+            <div className="text-right">
+              <span className="text-xl font-bold text-indigo-400 font-mono">{analyticsData.summary.totalWorkHours} hs</span>
+            </div>
+          </div>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={analyticsData.timeSeries}>
+                <defs>
+                  <linearGradient id="colorWorkHours" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={OCC_COLORS.indigo} stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor={OCC_COLORS.indigo} stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', fontSize: '11px' }}
+                />
+                <Area type="monotone" dataKey="workHours" name="Horas Guardia" stroke={OCC_COLORS.indigo} strokeWidth={2} fillOpacity={1} fill="url(#colorWorkHours)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </GlassCard>
       </div>
 
       {/* Rankings / Tables */}
