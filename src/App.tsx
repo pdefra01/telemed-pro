@@ -213,7 +213,7 @@ const App: React.FC = () => {
         path="/subscription-wizard"
         element={
           <ProtectedRoute user={user} allowedRoles={['patient']}>
-            <SubscriptionWizard />
+            <SubscriptionWizard user={user as Patient} />
           </ProtectedRoute>
         }
       />

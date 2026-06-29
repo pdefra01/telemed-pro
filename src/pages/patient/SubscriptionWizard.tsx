@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
 import { producerRepository } from '../../repositories/ProducerRepository';
 import { subscriptionRepository } from '../../repositories/SubscriptionRepository';
-import { Producer, LegalTerm } from '../../types';
+import { Producer, LegalTerm, Patient } from '../../types';
 import { 
   ShieldCheck, CheckCircle, ArrowRight, ArrowLeft, CreditCard, 
   FileText, UserCheck, Mail, Lock, Sparkles, AlertCircle, Loader2, Award
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 
-export const SubscriptionWizard: React.FC = () => {
-  const { user } = useAuth();
+interface Props {
+  user?: Patient;
+}
+
+export const SubscriptionWizard: React.FC<Props> = ({ user }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   
   // Selection
