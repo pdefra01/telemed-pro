@@ -26,11 +26,21 @@ const Doctors: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [resetPasswordDoc, setResetPasswordDoc] = useState<Doctor | null>(null);
+  const [activeTab, setActiveTab] = useState<'personal' | 'accreditation' | 'contract'>('personal');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     specialty: 'Clínica Médica',
-    password: ''
+    password: '',
+    licenseNumber: '',
+    provincialLicense: '',
+    cuit: '',
+    phone: '',
+    university: '',
+    graduationYear: new Date().getFullYear(),
+    consultationFee: 0,
+    contractStartDate: '',
+    contractEndDate: ''
   });
 
   useEffect(() => {
@@ -51,11 +61,21 @@ const Doctors: React.FC = () => {
 
   const handleNewDoctor = () => {
     setEditId(null);
+    setActiveTab('personal');
     setFormData({
       name: '',
       email: '',
       specialty: 'Clínica Médica',
-      password: ''
+      password: '',
+      licenseNumber: '',
+      provincialLicense: '',
+      cuit: '',
+      phone: '',
+      university: '',
+      graduationYear: new Date().getFullYear(),
+      consultationFee: 0,
+      contractStartDate: '',
+      contractEndDate: ''
     });
     setShowModal(true);
   };
@@ -66,15 +86,15 @@ const Doctors: React.FC = () => {
     try {
       if (editId) {
         await doctorRepository.updateDoctor(editId, formData);
-        toast(`Dr. ${formData.name} actualizado`, "success");
+        toast(`Ficha del Dr. ${formData.name} actualizada`, "success");
       } else {
         await doctorRepository.createDoctor(formData);
-        toast(`Dr. ${formData.name} registrado`, "success");
+        toast(`Ficha del Dr. ${formData.name} registrada`, "success");
       }
       setShowModal(false);
       loadDoctors();
     } catch (error) {
-      toast("Error al guardar médico", "error");
+      toast("Error al guardar ficha del médico", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -82,10 +102,21 @@ const Doctors: React.FC = () => {
 
   const handleEdit = (doctor: Doctor) => {
     setEditId(doctor.id);
+    setActiveTab('personal');
     setFormData({
-      name: doctor.name,
-      email: doctor.email,
-      specialty: doctor.specialty
+      name: doctor.name || '',
+      email: doctor.email || '',
+      specialty: doctor.specialty || 'Clínica Médica',
+      password: '',
+      licenseNumber: doctor.licenseNumber || '',
+      provincialLicense: doctor.provincialLicense || '',
+      cuit: doctor.cuit || '',
+      phone: doctor.phone || '',
+      university: doctor.university || '',
+      graduationYear: doctor.graduationYear || new Date().getFullYear(),
+      consultationFee: doctor.consultationFee || 0,
+      contractStartDate: doctor.contractStartDate || '',
+      contractEndDate: doctor.contractEndDate || ''
     });
     setShowModal(true);
   };
@@ -169,16 +200,17 @@ const Doctors: React.FC = () => {
             <thead>
               <tr className="bg-white/5 text-slate-500 text-[10px] uppercase tracking-widest font-bold">
                 <th className="px-8 py-5">Profesional</th>
-                <th className="px-6 py-5">Especialidad</th>
+                <th className="px-6 py-5">Especialidad & Licencias</th>
+                <th className="px-6 py-5">Relación Laboral</th>
                 <th className="px-6 py-5 text-center">Calificación</th>
                 <th className="px-8 py-5 text-right">Gestión</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {isLoading ? (
-                <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-500 italic animate-pulse">Sincronizando cuerpo médico...</td></tr>
+                <tr><td colSpan={5} className="px-8 py-20 text-center text-slate-500 italic animate-pulse">Sincronizando cuerpo médico...</td></tr>
               ) : doctors.length === 0 ? (
-                <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-500 italic">No se encontraron profesionales registrados.</td></tr>
+                <tr><td colSpan={5} className="px-8 py-20 text-center text-slate-500 italic">No se encontraron profesionales registrados.</td></tr>
               ) : doctors.map((doc) => (
                 <tr key={doc.id} className="group hover:bg-white/5 transition-all duration-200">
                   <td className="px-8 py-5">
@@ -192,13 +224,32 @@ const Doctors: React.FC = () => {
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{doc.name}</div>
-                        <div className="text-[11px] text-slate-500 mt-1">{doc.email}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{doc.email} {doc.phone ? `• ${doc.phone}` : ''}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="text-sm font-semibold text-slate-300">{doc.specialty}</div>
-                    <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">Verificado</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      {doc.licenseNumber && (
+                        <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          {doc.licenseNumber}
+                        </span>
+                      )}
+                      {doc.provincialLicense && (
+                        <span className="text-[9px] font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                          {doc.provincialLicense}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-5">
+                    <div className="text-xs font-bold text-slate-300">
+                      {doc.contractStartDate ? `Alta: ${doc.contractStartDate}` : 'Alta: Pendiente'}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {doc.contractEndDate ? `Fin: ${doc.contractEndDate}` : 'Contrato Indefinido'}
+                    </div>
                   </td>
                   <td className="px-6 py-5 text-center">
                     <div className="inline-flex items-center bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-xl">
@@ -238,83 +289,235 @@ const Doctors: React.FC = () => {
         </div>
       </GlassTableContainer>
 
-      {/* Premium Modal ABM */}
+      {/* Premium Modal ABM (Ficha Médica Integral) */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0f172a] border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 w-full max-w-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
+          <div className="bg-[#0f172a] border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 w-full max-w-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-indigo-500"></div>
             
-            <h3 className="text-2xl font-bold text-white mb-6">
-              {editId ? 'Editar' : 'Registrar'} <span className="text-emerald-500">Médico</span>
-            </h3>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-white">
+                Ficha Médica Integral — <span className="text-emerald-400">{editId ? 'Editar Legajo' : 'Nuevo Alta'}</span>
+              </h3>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="flex p-1 bg-slate-950/80 rounded-2xl border border-white/10 mb-6 gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab('personal')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                  activeTab === 'personal' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                1. Datos Personales
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('accreditation')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                  activeTab === 'accreditation' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                2. Licencias & Título
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('contract')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                  activeTab === 'contract' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                3. Vínculo Laboral
+              </button>
+            </div>
             
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Nombre Completo</label>
-                <input
-                  type="text" required
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
+            <form onSubmit={handleSubmit} className="space-y-6 flex-1 overflow-y-auto pr-2">
+              {/* TAB 1: DATOS PERSONALES */}
+              {activeTab === 'personal' && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Nombre y Apellido Completo</label>
+                    <input
+                      type="text" required
+                      placeholder="Ej: Dr. Alejandro Magno"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                      value={formData.name}
+                      onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    />
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Email Profesional</label>
-                <input
-                  type="email" required
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
-                  value={formData.email}
-                  onChange={e => setFormData({ ...formData, email: e.target.value })}
-                />
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Email Profesional</label>
+                      <input
+                        type="email" required
+                        placeholder="medico@medinex.com.ar"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                        value={formData.email}
+                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Teléfono Móvil Contacto</label>
+                      <input
+                        type="text"
+                        placeholder="+54 9 387 123-4567"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                        value={formData.phone}
+                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Especialidad Principal</label>
-                <select
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors appearance-none"
-                  value={formData.specialty}
-                  onChange={e => setFormData({ ...formData, specialty: e.target.value })}
-                >
-                  <option value="Clínica Médica" className="bg-[#0f172a]">Clínica Médica</option>
-                  <option value="Pediatría" className="bg-[#0f172a]">Pediatría</option>
-                  <option value="Cardiología" className="bg-[#0f172a]">Cardiología</option>
-                  <option value="Dermatología" className="bg-[#0f172a]">Dermatología</option>
-                  <option value="Ginecología" className="bg-[#0f172a]">Ginecología</option>
-                </select>
-              </div>
-
-              {/* Contraseña solo al crear, no al editar */}
-              {!editId && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Contraseña Temporal</label>
-                  <input
-                    type="password"
-                    required={!editId}
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder-slate-600"
-                    value={formData.password}
-                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                  />
-                  <p className="text-[10px] text-slate-500 ml-1">El médico la usará para ingresar por primera vez.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">CUIT / CUIL Fiscal</label>
+                      <input
+                        type="text"
+                        placeholder="20-34567890-9"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                        value={formData.cuit}
+                        onChange={e => setFormData({ ...formData, cuit: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Especialidad Principal</label>
+                      <select
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors appearance-none"
+                        value={formData.specialty}
+                        onChange={e => setFormData({ ...formData, specialty: e.target.value })}
+                      >
+                        <option value="Clínica Médica" className="bg-[#0f172a]">Clínica Médica</option>
+                        <option value="Pediatría" className="bg-[#0f172a]">Pediatría</option>
+                        <option value="Cardiología" className="bg-[#0f172a]">Cardiología</option>
+                        <option value="Dermatología" className="bg-[#0f172a]">Dermatología</option>
+                        <option value="Ginecología" className="bg-[#0f172a]">Ginecología</option>
+                        <option value="Neurología" className="bg-[#0f172a]">Neurología</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              <div className="flex justify-end space-x-4 pt-4">
+              {/* TAB 2: LICENCIAS Y FORMACIÓN */}
+              {activeTab === 'accreditation' && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-emerald-400 ml-1">Matrícula Nacional (MN)</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: MN 142.890"
+                        className="w-full bg-white/5 border border-emerald-500/30 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500 transition-colors font-mono"
+                        value={formData.licenseNumber}
+                        onChange={e => setFormData({ ...formData, licenseNumber: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-blue-400 ml-1">Matrícula Provincial (MP)</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: MP 8.412 (Salta)"
+                        className="w-full bg-white/5 border border-blue-500/30 rounded-2xl p-3.5 text-white outline-none focus:border-blue-500 transition-colors font-mono"
+                        value={formData.provincialLicense}
+                        onChange={e => setFormData({ ...formData, provincialLicense: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Universidad de Egreso</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Universidad Nacional de Córdoba (UNC)"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                        value={formData.university}
+                        onChange={e => setFormData({ ...formData, university: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Año Titulación</label>
+                      <input
+                        type="number"
+                        placeholder="2015"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                        value={formData.graduationYear}
+                        onChange={e => setFormData({ ...formData, graduationYear: parseInt(e.target.value) || 2020 })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: VÍNCULO LABORAL Y HONORARIOS */}
+              {activeTab === 'contract' && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-emerald-400 ml-1">Fecha Inicio Relación Laboral</label>
+                      <input
+                        type="date"
+                        className="w-full bg-slate-900 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                        value={formData.contractStartDate}
+                        onChange={e => setFormData({ ...formData, contractStartDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-400 ml-1">Fecha Fin Relación Laboral (Opcional)</label>
+                      <input
+                        type="date"
+                        className="w-full bg-slate-900 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-amber-500/50 transition-colors"
+                        value={formData.contractEndDate}
+                        onChange={e => setFormData({ ...formData, contractEndDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Honorario por Consulta ($ ARS)</label>
+                    <input
+                      type="number" step="100"
+                      placeholder="Ej: 15000"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors font-mono"
+                      value={formData.consultationFee}
+                      onChange={e => setFormData({ ...formData, consultationFee: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  {/* Contraseña solo al crear */}
+                  {!editId && (
+                    <div className="space-y-1.5 pt-2 border-t border-white/5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-rose-400 ml-1">Contraseña Temporal de Acceso</label>
+                      <input
+                        type="password"
+                        required={!editId}
+                        minLength={6}
+                        placeholder="Mínimo 6 caracteres"
+                        className="w-full bg-white/5 border border-rose-500/30 rounded-2xl p-3.5 text-white outline-none focus:border-rose-500 transition-colors placeholder-slate-600"
+                        value={formData.password}
+                        onChange={e => setFormData({ ...formData, password: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center space-x-4 pt-6 border-t border-white/10 mt-6">
                 <button 
                   type="button" 
                   onClick={() => setShowModal(false)} 
-                  className="px-6 py-3 text-slate-400 font-bold hover:text-white transition-colors"
+                  className="px-6 py-3 text-slate-400 font-bold hover:text-white transition-colors text-xs uppercase tracking-wider"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-[#020617] px-8 py-3 rounded-2xl font-bold transition-all disabled:opacity-50"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-8 py-3.5 rounded-2xl font-bold transition-all disabled:opacity-50 text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20"
                 >
-                  {isSubmitting ? 'Procesando...' : 'Guardar Médico'}
+                  {isSubmitting ? 'Guardando Legajo...' : 'Guardar Ficha Médica'}
                 </button>
               </div>
             </form>

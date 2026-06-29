@@ -57,6 +57,15 @@ export interface Doctor extends User {
   reviewCount: number;
   isVerified: boolean;
   availability: string[];
+  licenseNumber?: string;
+  provincialLicense?: string;
+  cuit?: string;
+  phone?: string;
+  university?: string;
+  graduationYear?: number;
+  consultationFee?: number;
+  contractStartDate?: string;
+  contractEndDate?: string;
   metrics?: DoctorMetrics; // PRD 3.13
 }
 

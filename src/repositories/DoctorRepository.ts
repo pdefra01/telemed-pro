@@ -121,6 +121,15 @@ export class DoctorRepository {
     if (data.specialty !== undefined) profileData.specialty = data.specialty;
     if (data.availability !== undefined) profileData.availability = data.availability;
     if (data.isVerified !== undefined) profileData.is_verified = data.isVerified;
+    if (data.licenseNumber !== undefined) profileData.license_number = data.licenseNumber;
+    if (data.provincialLicense !== undefined) profileData.provincial_license = data.provincialLicense;
+    if (data.cuit !== undefined) profileData.cuit = data.cuit;
+    if (data.phone !== undefined) profileData.phone = data.phone;
+    if (data.university !== undefined) profileData.university = data.university;
+    if (data.graduationYear !== undefined) profileData.graduation_year = data.graduationYear;
+    if (data.consultationFee !== undefined) profileData.consultation_fee = data.consultationFee;
+    if (data.contractStartDate !== undefined) profileData.contract_start_date = data.contractStartDate;
+    if (data.contractEndDate !== undefined) profileData.contract_end_date = data.contractEndDate;
 
     const { data: result, error } = await supabase
       .from('profiles')
@@ -178,6 +187,15 @@ export class DoctorRepository {
       reviewCount: row.review_count || 0,
       isVerified: row.is_verified || false,
       availability: row.availability || [],
+      licenseNumber: row.license_number,
+      provincialLicense: row.provincial_license,
+      cuit: row.cuit,
+      phone: row.phone,
+      university: row.university,
+      graduationYear: row.graduation_year,
+      consultationFee: row.consultation_fee ? parseFloat(row.consultation_fee) : 0,
+      contractStartDate: row.contract_start_date,
+      contractEndDate: row.contract_end_date,
       avatarUrl: row.avatar_url,
       metrics: row.metrics
     };
