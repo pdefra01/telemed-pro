@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { producerRepository } from '../../repositories/ProducerRepository';
 import { subscriptionRepository } from '../../repositories/SubscriptionRepository';
+import { officeLocationRepository } from '../../repositories/OfficeLocationRepository';
 import { Producer, LegalTerm, Patient } from '../../types';
 import { 
   ShieldCheck, CheckCircle, ArrowRight, ArrowLeft, CreditCard, 
@@ -24,7 +25,7 @@ export const SubscriptionWizard: React.FC<Props> = ({ user }) => {
   // Legal
   const [legalTerm, setLegalTerm] = useState<LegalTerm | null>(null);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(false);
-  const [showLegalModal, setShowLegalModal] = useState<boolean>(false);
+  const [detectedIp, setDetectedIp] = useState<string>('Detectando...');
 
   // States
   const [loading, setLoading] = useState<boolean>(true);
@@ -38,11 +39,19 @@ export const SubscriptionWizard: React.FC<Props> = ({ user }) => {
   const initWizard = async () => {
     setLoading(true);
     try {
-      const term = await subscriptionRepository.getActiveLegalTerms();
+      const [term, ip] = await Promise.all([
+        subscriptionRepository.getActiveLegalTerms(),
+        officeLocationRepository.detectCurrentIp()
+      ]);
       setLegalTerm(term);
-      // Validar código inicial si existe
-      if (producerCodeInput) {
-        const prod = await producerRepository.getProducerByCode(producerCodeInput);
+      setDetectedIp(ip);
+
+      // Detectar si hay referencia por URL (?ref=PROD-101)
+      const urlParams = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
+      const refCode = urlParams.get('ref') || producerCodeInput;
+      if (refCode) {
+        setProducerCodeInput(refCode.toUpperCase());
+        const prod = await producerRepository.getProducerByCode(refCode);
         if (prod) setBoundProducer(prod);
       }
     } catch (err) {
@@ -75,9 +84,8 @@ export const SubscriptionWizard: React.FC<Props> = ({ user }) => {
     if (!user || !hasAcceptedTerms || !legalTerm) return;
     setIsSubmitting(true);
     try {
-      // 1. Registrar auditoría legal con IP y timestamp
-      const ip = '190.210.45.12';
-      await subscriptionRepository.recordLegalAcceptance(user.id, legalTerm.version, ip);
+      // 1. Registrar auditoría legal con IP real detectada y timestamp
+      await subscriptionRepository.recordLegalAcceptance(user.id, legalTerm.version, detectedIp);
 
       // 2. Vincular productor y activar plan
       const planNames = {
@@ -121,7 +129,7 @@ export const SubscriptionWizard: React.FC<Props> = ({ user }) => {
           </div>
           <div className="flex justify-between items-center text-xs">
             <span className="text-slate-400">Auditoría Legal IP:</span>
-            <span className="font-mono text-slate-300">190.210.45.12 • {new Date().toLocaleTimeString()}</span>
+            <span className="font-mono text-slate-300">{detectedIp} • {new Date().toLocaleTimeString()}</span>
           </div>
         </div>
 
@@ -262,10 +270,8 @@ export const SubscriptionWizard: React.FC<Props> = ({ user }) => {
               </span>
             </div>
 
-            <div className="max-h-56 overflow-y-auto pr-2 custom-scrollbar text-xs text-slate-300 space-y-3 bg-slate-950/50 p-4 rounded-2xl border border-white/5 font-sans leading-relaxed">
-              <p><strong>1. Objeto del Contrato:</strong> MEDINEX brinda cobertura asistencial médica digital y presencial para el titular y su grupo familiar designado.</p>
-              <p><strong>2. Auditoría Criptográfica:</strong> Las recetas y órdenes médicas emitidas cuentan con firma electrónica avanzada basada en certificados ECDSA.</p>
-              <p><strong>3. Secreto Médico y Datos:</strong> La información clínica queda resguardada bajo los estándares internacionales HIPAA y secreto profesional.</p>
+            <div className="max-h-56 overflow-y-auto pr-2 custom-scrollbar text-xs text-slate-300 space-y-3 bg-slate-950/50 p-4 rounded-2xl border border-white/5 font-sans leading-relaxed whitespace-pre-line">
+              {legalTerm?.contentMarkdown || 'Cargando condiciones legales del servicio...'}
             </div>
 
             <div className="pt-2">
