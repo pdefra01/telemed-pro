@@ -93,8 +93,13 @@ La gestión del cuerpo médico (`/doctors`) dispone del modal estructurado **Fic
 - **Pestaña 3 (Vínculo Laboral)**: **Fecha de Inicio de Relación Laboral**, **Fecha de Fin de Relación Laboral (Opcional)**, Honorario por Consulta ($ ARS) y Contraseña Temporal de Acceso.
 - La tabla principal destaca de forma inmediata las insignias de licencias y los rangos de fechas contractuales de cada profesional.
 
-### 3.4. Diseñador de Encuestas y Campañas Epidemiológicas (`/survey-builder` & `/campaigns`)
-Permite crear cuestionarios dinámicos y lanzar censos masivos configurando **Disparadores de Acciones Automáticos** (Alertas Médicas o Invitaciones a Turnos Preventivos basados en las respuestas de los afiliados).
+### 3.5. Centro de Gestión de Farmacia ERP & Análisis Pareto ABC (`/admin/pharmacy`)
+El panel administrativo de farmacia e inventario se estructura en 5 pestañas de control institucional:
+1. **Catálogo Comercial**: Alta/edición de medicamentos con precio, laboratorio, droga activa y configuración de **Stock Mínimo** y **Cantidad de Reposición (OC)**.
+2. **Stock & Lotes**: Control de remesas y trazabilidad por vencimiento con ajuste manual de unidades en existencias.
+3. **Órdenes de Compra (OC)**: Detección automática de insumos con stock crítico y emisión de pedidos a droguerías. Incluye el modal **Confirmar Recepción de Mercadería** que acredita el stock al inventario en un solo clic.
+4. **Proveedores & Cuentas Corrientes**: CRUD de droguerías con CUIT, saldo adeudado acumulado en tiempo real y libro de movimientos financieros de cuenta corriente para registrar pagos y transferencias.
+5. **Ranking & Pareto ABC**: Dashboard de inteligencia de inventario que clasifica los medicamentos según la regla 80/20 en Clase A (Alta rotación / 80% vol), Clase B (Rotación media / 15% vol) y Clase C (Baja rotación / 5% vol). Cuenta con los botones **🔄 Ejecutar Recálculo Pareto** (para actualizar a demanda) y **⚡ Aplicar Umbrales Sugeridos** (para sincronizar los puntos de reorden).
 
 ---
 
@@ -104,6 +109,7 @@ Permite crear cuestionarios dinámicos y lanzar censos masivos configurando **Di
 - [x] **Jornada Laboral & IP Whitelist**: Fichado con temporizador y geofencing por IP pública de sucursal con autodetección administrativa.
 - [x] **KPIs & Analítica Evolutiva**: Indicadores dinámicos filtrables por médico y rango temporal (Diario, Semanal, Mensual).
 - [x] **Ficha Médica Integral**: Legajo profesional completo con matrículas (MN/MP), CUIT, formación y fechas de relación laboral.
-- [x] **Vademécum de Farmacia**: Buscador in-app para médicos con stock verificado en vivo.
+- [x] **Vademécum & Farmacia ERP**: Buscador médico en vivo, control de stock por lote, OC automáticas, cuentas corrientes de proveedores y Matriz Pareto ABC.
 - [x] **Perfil & Grupo Familiar**: Registro de datos médicos y gestión de dependientes.
 - [x] **Campañas Epidemiológicas**: Censos masivos con evaluación de reglas clínicas automáticas.
+
