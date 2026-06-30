@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Patient, Appointment, Doctor, Prescription } from '../../types';
 import { MOCK_RECORDS } from '../../constants';
-import { Calendar, Video, FileText, Plus, Clock, ChevronRight, Upload, Phone, User as UserIcon, X, Check, Search, Download, Shield, RefreshCw } from 'lucide-react';
+import { Calendar, Video, FileText, Plus, Clock, ChevronRight, Upload, Phone, User as UserIcon, X, Check, Search, Download, Shield, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { doctorRepository } from '../../repositories/DoctorRepository';
@@ -120,6 +120,22 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
     const [isLoadingDoctors, setIsLoadingDoctors] = useState(false);
     const [isBooking, setIsBooking] = useState(false);
+
+    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
+    const [showPastSlotWarning, setShowPastSlotWarning] = useState<boolean>(false);
+    const [pendingSlot, setPendingSlot] = useState<string | null>(null);
+
+    // Reset scheduler states on modal close
+    useEffect(() => {
+        if (!showAppointmentModal) {
+            setSelectedDate(new Date().toISOString().split('T')[0]);
+            setShowDatePicker(false);
+            setShowPastSlotWarning(false);
+            setPendingSlot(null);
+            setSelectedSlot(null);
+        }
+    }, [showAppointmentModal]);
 
     // Fetch Specialties
     useEffect(() => {
@@ -783,23 +799,141 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
                             {/* Slot Selection */}
                             {selectedDoctor && (
-                                <div className="animate-fade-in bg-white/5 p-6 rounded-2xl border border-white/5">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Horarios Disponibles</label>
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                                        {selectedDoctor.availability?.map(slot => (
+                                <div className="animate-fade-in bg-white/5 p-6 rounded-2xl border border-white/5 space-y-4">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                            Horarios Disponibles ({selectedDate.split('-').reverse().join('/')})
+                                        </label>
+                                        {!showDatePicker && (
                                             <button
-                                                key={slot}
-                                                onClick={() => setSelectedSlot(slot)}
-                                                className={`py-3 text-xs font-bold rounded-xl border transition-all ${
-                                                    selectedSlot === slot 
-                                                        ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20' 
-                                                        : 'bg-slate-800 border-white/5 text-slate-400 hover:border-emerald-500/30'
-                                                }`}
+                                                type="button"
+                                                onClick={() => setShowDatePicker(true)}
+                                                className="text-[10px] text-emerald-400 font-bold hover:text-emerald-300 transition-colors uppercase tracking-wider"
                                             >
-                                                {slot}
+                                                Cambiar Fecha
                                             </button>
-                                        ))}
+                                        )}
                                     </div>
+
+                                    {showDatePicker && (
+                                        <div className="animate-fade-in bg-slate-950/30 p-4 rounded-xl border border-white/5 space-y-3">
+                                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest">Seleccionar Fecha</label>
+                                            <div className="flex gap-3">
+                                                <input
+                                                    type="date"
+                                                    min={new Date().toISOString().split('T')[0]}
+                                                    value={selectedDate}
+                                                    onChange={(e) => {
+                                                        setSelectedDate(e.target.value);
+                                                        setSelectedSlot(null);
+                                                        setShowPastSlotWarning(false);
+                                                    }}
+                                                    className="flex-1 bg-slate-900 border border-white/10 rounded-xl p-3 text-white text-xs outline-none focus:border-emerald-500 transition-colors font-mono"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowDatePicker(false);
+                                                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                                                        setSelectedSlot(null);
+                                                        setShowPastSlotWarning(false);
+                                                    }}
+                                                    className="px-4 text-xs font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wider border border-white/10 rounded-xl"
+                                                >
+                                                    Cerrar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                                        {selectedDoctor.availability?.map(slot => {
+                                            const isSelected = selectedSlot === slot;
+                                            return (
+                                                <button
+                                                    key={slot}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        // Check if selectedDate is today
+                                                        const isToday = selectedDate === new Date().toISOString().split('T')[0];
+                                                        if (isToday) {
+                                                            const now = new Date();
+                                                            const [hours, minutes] = slot.split(':');
+                                                            const slotTime = new Date();
+                                                            slotTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+                                                            if (slotTime < now) {
+                                                                setPendingSlot(slot);
+                                                                setShowPastSlotWarning(true);
+                                                                setSelectedSlot(null);
+                                                                return;
+                                                            }
+                                                        }
+                                                        setSelectedSlot(slot);
+                                                        setShowPastSlotWarning(false);
+                                                        setPendingSlot(null);
+                                                    }}
+                                                    className={`py-3 text-xs font-bold rounded-xl border transition-all ${
+                                                        isSelected 
+                                                            ? 'bg-emerald-500 text-[#020617] border-emerald-500 shadow-lg shadow-emerald-500/20' 
+                                                            : 'bg-slate-800 border-white/5 text-slate-400 hover:border-emerald-500/30'
+                                                    }`}
+                                                >
+                                                    {slot}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {showPastSlotWarning && (
+                                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="flex gap-3 text-amber-400">
+                                                <AlertTriangle className="flex-shrink-0" size={18} />
+                                                <div>
+                                                    <p className="text-[11px] font-bold uppercase tracking-wide">Horario ya pasó hoy</p>
+                                                    <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                                                        El turno de las <strong className="text-white">{pendingSlot} hs</strong> no está disponible para hoy. ¿Querés agendarlo para mañana o elegir otra fecha?
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const tomorrow = new Date();
+                                                        tomorrow.setDate(tomorrow.getDate() + 1);
+                                                        setSelectedDate(tomorrow.toISOString().split('T')[0]);
+                                                        setSelectedSlot(pendingSlot);
+                                                        setShowPastSlotWarning(false);
+                                                        setPendingSlot(null);
+                                                    }}
+                                                    className="flex-1 py-2 text-[10px] font-bold bg-amber-500 text-[#020617] rounded-lg hover:bg-amber-400 transition-colors uppercase tracking-wider"
+                                                >
+                                                    Agendar para Mañana
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowDatePicker(true);
+                                                        setShowPastSlotWarning(false);
+                                                    }}
+                                                    className="flex-1 py-2 text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg transition-colors uppercase tracking-wider"
+                                                >
+                                                    Elegir otra fecha
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowPastSlotWarning(false);
+                                                        setPendingSlot(null);
+                                                    }}
+                                                    className="px-3 py-2 text-[10px] font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -809,11 +943,9 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         if (!selectedDoctor || !selectedSlot) return;
                                         setIsBooking(true);
                                         try {
-                                            const now = new Date();
                                             const [hours, minutes] = selectedSlot.split(':');
-                                            const scheduledDate = new Date();
+                                            const scheduledDate = new Date(selectedDate + 'T00:00:00');
                                             scheduledDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-                                            if (scheduledDate < now) scheduledDate.setDate(scheduledDate.getDate() + 1);
 
                                             await appointmentRepository.createAppointment({
                                                 patient_id: user.id,

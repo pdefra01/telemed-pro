@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PatientDashboard from '../PatientDashboard';
 import { MOCK_PATIENT } from '../../../constants';
@@ -55,8 +55,35 @@ const renderWithRouter = (ui: React.ReactElement) => {
 };
 
 describe('PatientDashboard Scheduler', () => {
+  let OriginalDate: typeof Date;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    const mockDate = new Date('2026-06-30T09:00:00');
+    OriginalDate = global.Date;
+    
+    class MockDate extends OriginalDate {
+      constructor(...args: any[]) {
+        if (args.length === 0) {
+          super(mockDate.getTime());
+        } else {
+          super(...(args as [any, ...any[]]));
+        }
+      }
+    }
+
+    vi.spyOn(global, 'Date').mockImplementation(function(this: any, ...args: any[]) {
+      if (new.target) {
+        return new MockDate(...args);
+      }
+      return mockDate.toString();
+    } as any);
+    
+    vi.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should allow booking an appointment through the flow', async () => {
