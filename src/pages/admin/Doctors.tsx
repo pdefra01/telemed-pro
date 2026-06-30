@@ -26,7 +26,7 @@ const Doctors: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [resetPasswordDoc, setResetPasswordDoc] = useState<Doctor | null>(null);
-  const [activeTab, setActiveTab] = useState<'personal' | 'accreditation' | 'contract'>('personal');
+  const [activeTab, setActiveTab] = useState<'personal' | 'accreditation' | 'contract' | 'agenda'>('personal');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -40,7 +40,8 @@ const Doctors: React.FC = () => {
     graduationYear: new Date().getFullYear(),
     consultationFee: 0,
     contractStartDate: '',
-    contractEndDate: ''
+    contractEndDate: '',
+    availability: [] as string[]
   });
 
   useEffect(() => {
@@ -75,7 +76,8 @@ const Doctors: React.FC = () => {
       graduationYear: new Date().getFullYear(),
       consultationFee: 0,
       contractStartDate: '',
-      contractEndDate: ''
+      contractEndDate: '',
+      availability: []
     });
     setShowModal(true);
   };
@@ -116,7 +118,8 @@ const Doctors: React.FC = () => {
       graduationYear: doctor.graduationYear || new Date().getFullYear(),
       consultationFee: doctor.consultationFee || 0,
       contractStartDate: doctor.contractStartDate || '',
-      contractEndDate: doctor.contractEndDate || ''
+      contractEndDate: doctor.contractEndDate || '',
+      availability: doctor.availability || []
     });
     setShowModal(true);
   };
@@ -302,33 +305,42 @@ const Doctors: React.FC = () => {
             </div>
 
             {/* Modal Tabs */}
-            <div className="flex p-1 bg-slate-950/80 rounded-2xl border border-white/10 mb-6 gap-1">
+            <div className="flex p-1 bg-slate-950/80 rounded-2xl border border-white/10 mb-6 gap-1 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setActiveTab('personal')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all min-w-[80px] ${
                   activeTab === 'personal' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                1. Datos Personales
+                1. Datos
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('accreditation')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all min-w-[80px] ${
                   activeTab === 'accreditation' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                2. Licencias & Título
+                2. Licencias
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('contract')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all min-w-[80px] ${
                   activeTab === 'contract' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                3. Vínculo Laboral
+                3. Contrato
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('agenda')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all min-w-[80px] ${
+                  activeTab === 'agenda' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                4. Agenda
               </button>
             </div>
             
@@ -501,6 +513,87 @@ const Doctors: React.FC = () => {
                       />
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* TAB 4: DISPONIBILIDAD / AGENDA */}
+              {activeTab === 'agenda' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div className="bg-white/5 border border-white/10 p-5 rounded-3xl">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest leading-relaxed">
+                      Definí los horarios de atención telefónica o video consulta disponibles para este profesional. Los pacientes verán y podrán agendar turnos únicamente en los bloques seleccionados.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Grilla de Horarios (08:00 - 00:00 hs)</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allSlots = Array.from({ length: 17 }, (_, i) => {
+                              const hour = 8 + i;
+                              return hour === 24 ? '00:00' : `${hour.toString().padStart(2, '0')}:00`;
+                            });
+                            setFormData({ ...formData, availability: allSlots });
+                          }}
+                          className="px-2.5 py-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 transition-all uppercase tracking-wider"
+                        >
+                          Marcar Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const originalSlots = Array.from({ length: 17 }, (_, i) => {
+                              const hour = 8 + i;
+                              return hour === 24 ? '00:00' : `${hour.toString().padStart(2, '0')}:00`;
+                            });
+                            setFormData({ ...formData, availability: originalSlots });
+                          }}
+                          className="px-2.5 py-1 text-[9px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-md hover:bg-blue-500/20 transition-all uppercase tracking-wider"
+                        >
+                          Originales
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, availability: [] })}
+                          className="px-2.5 py-1 text-[9px] font-bold text-slate-400 bg-white/5 border border-white/10 rounded-md hover:bg-white/10 transition-all uppercase tracking-wider"
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 bg-slate-950/30 p-4 rounded-3xl border border-white/5">
+                      {Array.from({ length: 17 }, (_, i) => {
+                        const hour = 8 + i;
+                        const slot = hour === 24 ? '00:00' : `${hour.toString().padStart(2, '0')}:00`;
+                        const isSelected = formData.availability.includes(slot);
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => {
+                              const current = [...formData.availability];
+                              if (current.includes(slot)) {
+                                setFormData({ ...formData, availability: current.filter(s => s !== slot) });
+                              } else {
+                                setFormData({ ...formData, availability: [...current, slot].sort() });
+                              }
+                            }}
+                            className={`py-3 text-xs font-bold rounded-xl border transition-all ${
+                              isSelected 
+                                ? 'bg-emerald-500 text-[#020617] border-emerald-500 shadow-lg shadow-emerald-500/20' 
+                                : 'bg-white/5 border-white/5 text-slate-400 hover:border-emerald-500/30'
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
 

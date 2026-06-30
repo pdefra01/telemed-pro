@@ -62,6 +62,7 @@ vi.mock('@livekit/components-react', () => ({
   useConnectionQualityIndicator: () => ({
     quality: 'excellent',
   }),
+  useTracks: () => [],
 }));
 
 vi.mock('@livekit/components-styles', () => ({}));

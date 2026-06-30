@@ -123,6 +123,9 @@ export class AppointmentRepository {
 
     if (error) {
       console.error("Error creando turno:", error);
+      if (error.code === '23505') {
+        throw new Error("Este horario ya fue reservado por otro paciente. Por favor, seleccioná otro momento.");
+      }
       throw error;
     }
 

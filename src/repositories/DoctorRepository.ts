@@ -98,17 +98,27 @@ export class DoctorRepository {
       throw new Error('Médico creado en Auth pero no se pudo obtener su perfil');
     }
 
-    // Si el trigger no copió la specialty aún, la actualizamos
-    if (data.specialty && !profile.specialty) {
-      await supabase
-        .from('profiles')
-        .update({ specialty: data.specialty, availability: [] })
-        .eq('id', json.id);
-      profile.specialty = data.specialty;
-      profile.availability = [];
+    // Actualizamos la especialidad y disponibilidad elegidas en el alta
+    await supabase
+      .from('profiles')
+      .update({ 
+        specialty: data.specialty || 'Clínica Médica', 
+        availability: data.availability || [] 
+      })
+      .eq('id', json.id);
+
+    // Volver a cargar el perfil actualizado para devolverlo
+    const { data: updatedProfile, error: getError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', json.id)
+      .single();
+
+    if (getError || !updatedProfile) {
+      throw new Error('Error al recargar el perfil del médico creado');
     }
 
-    return this.mapProfileToDoctor(profile);
+    return this.mapProfileToDoctor(updatedProfile);
   }
 
   /**

@@ -826,8 +826,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             toast('¡Turno agendado con éxito!', 'success');
                                             setShowAppointmentModal(false);
                                             window.location.reload();
-                                        } catch (error) {
-                                            toast('Error al agendar el turno', 'error');
+                                        } catch (error: any) {
+                                            toast(error.message || 'Error al agendar el turno', 'error');
                                         } finally {
                                             setIsBooking(false);
                                         }

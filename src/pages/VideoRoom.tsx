@@ -385,8 +385,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
         {isDoctor ? (
           <div className="flex flex-col h-full bg-slate-900/10">
             {/* Dr Notes */}
-            <div className="p-10 border-b border-white/5">
-              <div className="flex items-center gap-4 mb-8">
+            <div className="p-6 border-b border-white/5">
+              <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-teal-500/10 text-teal-400 rounded-2xl flex items-center justify-center border border-teal-500/20 shadow-[0_0_20px_rgba(20,184,166,0.1)]">
                   <FileText size={24} />
                 </div>
@@ -396,12 +396,12 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 </div>
               </div>
               
-              <div className="space-y-3">
-                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+              <div className="space-y-2">
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
                   <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Identidad Paciente</span>
                   <p className="text-sm font-bold text-white">{appointment?.patientName || 'Cargando...'}</p>
                 </div>
-                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
                   <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">ID Sesión Encriptada</span>
                   <p className="text-xs font-mono text-slate-400">{appointmentId?.substring(0, 16).toUpperCase()}</p>
                 </div>
@@ -409,7 +409,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
 
               <button 
                 onClick={() => setIsVaultOpen(true)}
-                className="mt-6 w-full p-4 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between group transition-all"
+                className="mt-4 w-full p-3 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between group transition-all"
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg group-hover:scale-110 transition-transform">
@@ -424,8 +424,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               </button>
             </div>
 
-            <div className="flex-1 p-10 flex flex-col min-h-0">
-              <div className="flex items-center justify-between mb-6">
+            <div className="flex-1 p-6 flex flex-col min-h-0">
+              <div className="flex items-center justify-between mb-3">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em]">Evolución Médica</label>
                 <button 
                   onClick={handleAiProfessionalize}
@@ -440,17 +440,17 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Documente hallazgos, diagnóstico y plan terapéutico..."
-                className="flex-1 w-full bg-slate-900/40 border border-white/5 rounded-[2rem] p-8 text-sm text-slate-300 focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500/30 transition-all duration-500 resize-none font-medium leading-relaxed placeholder:text-slate-700 shadow-inner"
+                className="flex-1 w-full bg-slate-900/40 border border-white/5 rounded-2xl p-4 text-sm text-slate-300 focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500/30 transition-all duration-500 resize-none font-medium leading-relaxed placeholder:text-slate-700 shadow-inner"
               />
             </div>
 
-            <div className="p-10 border-t border-white/5 space-y-4">
+            <div className="p-6 border-t border-white/5 space-y-3">
               <Button
                 variant="outline"
                 onClick={handleSaveNotes}
                 isLoading={isSavingNotes}
                 disabled={!notes.trim()}
-                className="w-full border-white/10 text-white hover:bg-white/5 h-14 rounded-2xl tracking-[0.25em] uppercase text-[10px] font-bold"
+                className="w-full border-white/10 text-white hover:bg-white/5 h-12 rounded-2xl tracking-[0.25em] uppercase text-[10px] font-bold"
                 icon={<Save size={18} />}
               >
                 Actualizar Ficha
@@ -460,7 +460,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 variant="primary"
                 onClick={handleCompleteAppointment}
                 isLoading={isCompleting}
-                className="w-full bg-teal-600 hover:bg-teal-500 text-white h-14 rounded-2xl shadow-[0_10px_40px_rgba(20,184,166,0.2)] tracking-[0.25em] uppercase text-[10px] font-bold border-none"
+                className="w-full bg-teal-600 hover:bg-teal-500 text-white h-12 rounded-2xl shadow-[0_10px_40px_rgba(20,184,166,0.2)] tracking-[0.25em] uppercase text-[10px] font-bold border-none"
                 icon={<CheckCircle size={18} />}
               >
                 Finalizar Turno

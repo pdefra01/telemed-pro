@@ -530,6 +530,11 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       
       setClosureStatus('success');
 
+      // Redirección automática al panel después de 3.5s
+      setTimeout(() => {
+        navigate('/doctor', { replace: true });
+      }, 3500);
+
     } catch (err: any) {
       console.error('Error saving consultation data:', err);
       setError('Ocurrió un error al procesar la consulta: ' + (err.message || 'Verifique su conexión.'));
@@ -992,11 +997,11 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                   Finalizar Consulta
                 </Button>
                 
-                {isSubmitted && !diagnosis.trim() && (
+                {isSubmitted && error && (
                   <div className="flex items-center justify-center gap-2 py-2 px-4 bg-red-500/10 border border-red-500/20 rounded-xl animate-in slide-in-from-top-2 duration-300">
                     <AlertCircle className="w-4 h-4 text-red-500" />
                     <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest">
-                      Diagnóstico Requerido
+                      {error === 'El diagnóstico es obligatorio para cerrar la consulta' ? 'Diagnóstico Requerido' : error}
                     </p>
                   </div>
                 )}
