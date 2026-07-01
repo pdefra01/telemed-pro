@@ -433,6 +433,12 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                         </div>
                                     );
                                 })}
+
+                                {filteredDocuments.length === 0 && searchTerm !== '' && (
+                                    <div className="col-span-full py-12 text-center text-slate-500 font-semibold text-sm">
+                                        No se encontraron estudios que coincidan con "{searchTerm}".
+                                    </div>
+                                )}
                             </div>
                         )}
 

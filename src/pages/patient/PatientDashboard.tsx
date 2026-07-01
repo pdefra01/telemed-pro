@@ -120,12 +120,24 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
         return () => { subscription.unsubscribe(); };
     }, [user.id]);
 
-    // Deep-link to open upload modal
+    // Deep-link to open upload modal (HashRouter and BrowserRouter compatible)
     useEffect(() => {
-        const queryParams = new URLSearchParams(window.location.search);
-        if (queryParams.get('upload') === 'true') {
-            setShowUploadModal(true);
-            window.history.replaceState({}, document.title, window.location.pathname);
+        const hash = window.location.hash;
+        const searchIndex = hash.indexOf('?');
+        if (searchIndex !== -1) {
+            const queryParams = new URLSearchParams(hash.substring(searchIndex));
+            if (queryParams.get('upload') === 'true') {
+                setShowUploadModal(true);
+                // Limpiar query parameter del hash
+                const cleanHash = hash.substring(0, searchIndex);
+                window.location.hash = cleanHash;
+            }
+        } else {
+            const queryParams = new URLSearchParams(window.location.search);
+            if (queryParams.get('upload') === 'true') {
+                setShowUploadModal(true);
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
         }
     }, []);
 
