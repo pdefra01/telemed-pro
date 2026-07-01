@@ -25,7 +25,7 @@ serve(async (req) => {
     // 1. Get Appointment Info
     const { data: appointment, error: apptError } = await supabase
       .from('appointments')
-      .select('*, patient:profiles!patient_id(full_name, dni)')
+      .select('*, patient:profiles!patient_id(full_name, dni, phone, email)')
       .eq('id', appointmentId)
       .single()
 
@@ -219,9 +219,22 @@ serve(async (req) => {
 
       if (prescError) throw prescError
 
-      // 4e. Mock WhatsApp API
-      console.log('📲 MOCK WHATSAPP API: Receta enviada a ' + appointment.patient.full_name)
     }
+
+    // 4e. Mock WhatsApp API - Envío de receta y recomendaciones estructuradas (siempre se envía al finalizar)
+    const patientPhone = appointment.patient.phone || "No especificado";
+    let messageBody = `¡Hola ${appointment.patient.full_name}! Tu consulta con el Dr. ${doctor.full_name} ha finalizado.\n\n` +
+      `📝 Diagnóstico: ${diagnosis}\n` +
+      `📌 Indicaciones: ${notes || 'Sin indicaciones adicionales.'}\n\n`;
+    
+    if (medications.length > 0) {
+      messageBody += `💊 Receta Digital:\n` + medications.map((m: any) => `- ${m.name}: ${m.instructions}`).join('\n') + `\n\n` +
+        `📄 Podés descargar tu receta firmada aquí: ${pdfUrl}`;
+    } else {
+      messageBody += `No se recetaron medicamentos en esta consulta.`;
+    }
+
+    console.log(`[SIMULADOR WHATSAPP OUTBOUND] Enviando mensaje a ${patientPhone}:\n========================================\n${messageBody}\n========================================`);
 
     // 5. Update Appointment Status to COMPLETED
     const { error: updateError } = await supabase
