@@ -120,6 +120,15 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
         return () => { subscription.unsubscribe(); };
     }, [user.id]);
 
+    // Deep-link to open upload modal
+    useEffect(() => {
+        const queryParams = new URLSearchParams(window.location.search);
+        if (queryParams.get('upload') === 'true') {
+            setShowUploadModal(true);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }, []);
+
     // Modals State
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showAppointmentModal, setShowAppointmentModal] = useState(false);

@@ -3,8 +3,9 @@ import {
     FileText, Pill, File, Download, Search, CheckCircle, 
     AlertCircle, Loader2, Calendar, User, ExternalLink, 
     FileArchive, ChevronRight, Hash, Clock, FlaskConical, Activity,
-    ShieldCheck, ShieldX, Shield
+    ShieldCheck, ShieldX, Shield, Upload
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { Patient, MedicalRecord, Prescription } from '../../types';
@@ -370,35 +371,47 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
 
                         {activeTab === 'documents' && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                                {filteredDocuments.length > 0 ? (
-                                    filteredDocuments.map(doc => {
-                                        const familyMember = doc.familyMemberId ? familyMembers.find(f => f.id === doc.familyMemberId) : null;
-                                        return (
-                                            <div key={doc.id} className="group bg-white/5 backdrop-blur-xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 shadow-2xl hover:bg-white/[0.08] transition-all duration-500 flex flex-col relative overflow-hidden">
-                                                <div className="absolute -right-6 -top-6 text-white/[0.02] group-hover:scale-125 transition-transform duration-1000 pointer-events-none">
-                                                    <FileText size={120} />
-                                                </div>
+                                <Link 
+                                    to="/?upload=true" 
+                                    className="group bg-white/2 hover:bg-emerald-500/5 border-2 border-dashed border-white/10 hover:border-emerald-500/30 p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl transition-all duration-500 flex flex-col items-center justify-center text-center min-h-[300px]"
+                                >
+                                    <div className="bg-emerald-500/10 p-5 rounded-2xl text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
+                                        <Upload size={32} />
+                                    </div>
+                                    <h4 className="font-bold text-white text-lg tracking-tight group-hover:text-emerald-400 transition-colors">Subir Nuevo Estudio</h4>
+                                    <p className="text-xs text-slate-500 mt-2 max-w-xs font-semibold leading-relaxed">
+                                        Cargá análisis clínicos o certificados médicos tuyos o de tu grupo familiar.
+                                    </p>
+                                </Link>
 
-                                                <div className="flex items-start justify-between mb-6 sm:mb-8 relative z-10 gap-4">
-                                                    <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl transition-all duration-500 group-hover:scale-110 shadow-lg border flex-shrink-0 ${
-                                                        doc.type.includes('lab') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-blue-500/10' : 
-                                                        doc.type.includes('imaging') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-purple-500/10' : 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-amber-500/10'
-                                                    }`}>
-                                                        {doc.type.includes('lab') ? <FlaskConical size={24} className="sm:w-8 sm:h-8" /> : doc.type.includes('imaging') ? <Activity size={24} className="sm:w-8 sm:h-8" /> : <FileText size={24} className="sm:w-8 sm:h-8" />}
-                                                    </div>
-                                                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                                                        <span className={`text-[9px] sm:text-[10px] px-3 sm:px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm ${
-                                                            doc.uploadedBy === 'doctor' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                                                        }`}>
-                                                            {doc.uploadedBy === 'doctor' ? 'Profesional' : 'Paciente'}
-                                                        </span>
-                                                        {familyMember && (
-                                                            <span className="text-[9px] sm:text-[10px] px-3 sm:px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm bg-teal-500/10 text-teal-400 border-teal-500/20">
-                                                                Familiar: {familyMember.name.split(' ')[0]}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                {filteredDocuments.map(doc => {
+                                    const familyMember = doc.familyMemberId ? familyMembers.find(f => f.id === doc.familyMemberId) : null;
+                                    return (
+                                        <div key={doc.id} className="group bg-white/5 backdrop-blur-xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 shadow-2xl hover:bg-white/[0.08] transition-all duration-500 flex flex-col relative overflow-hidden">
+                                            <div className="absolute -right-6 -top-6 text-white/[0.02] group-hover:scale-125 transition-transform duration-1000 pointer-events-none">
+                                                <FileText size={120} />
+                                            </div>
+
+                                            <div className="flex items-start justify-between mb-6 sm:mb-8 relative z-10 gap-4">
+                                                <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl transition-all duration-500 group-hover:scale-110 shadow-lg border flex-shrink-0 ${
+                                                    doc.type.includes('lab') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-blue-500/10' : 
+                                                    doc.type.includes('imaging') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-purple-500/10' : 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-amber-500/10'
+                                                }`}>
+                                                    {doc.type.includes('lab') ? <FlaskConical size={24} className="sm:w-8 sm:h-8" /> : doc.type.includes('imaging') ? <Activity size={24} className="sm:w-8 sm:h-8" /> : <FileText size={24} className="sm:w-8 sm:h-8" />}
                                                 </div>
+                                                <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                                    <span className={`text-[9px] sm:text-[10px] px-3 sm:px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm ${
+                                                        doc.uploadedBy === 'doctor' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                    }`}>
+                                                        {doc.uploadedBy === 'doctor' ? 'Profesional' : 'Paciente'}
+                                                    </span>
+                                                    {familyMember && (
+                                                        <span className="text-[9px] sm:text-[10px] px-3 sm:px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm bg-teal-500/10 text-teal-400 border-teal-500/20">
+                                                            Familiar: {familyMember.name.split(' ')[0]}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                             
                                             <h4 className="font-bold text-white text-lg sm:text-xl leading-tight mb-4 flex-1 group-hover:text-emerald-400 transition-colors tracking-tight relative z-10 truncate">{doc.title}</h4>
                                             
@@ -419,12 +432,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                             </Button>
                                         </div>
                                     );
-                                })
-                                ) : (
-                                    <div className="col-span-full">
-                                        <EmptyState message="No hay documentos cargados." />
-                                    </div>
-                                )}
+                                })}
                             </div>
                         )}
 
