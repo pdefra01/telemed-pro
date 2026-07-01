@@ -11,6 +11,7 @@ import { Patient, MedicalRecord, Prescription } from '../../types';
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
+import { familyMemberRepository } from '../../repositories/FamilyMemberRepository';
 import { verifyPrescription } from '../../utils/crypto';
 
 interface Props {
@@ -25,6 +26,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
     const [records, setRecords] = useState<MedicalRecord[]>([]);
     const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
     const [documents, setDocuments] = useState<any[]>([]);
+    const [familyMembers, setFamilyMembers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     // verifiedMap: null = verifying, true = valid, false = invalid/tampered, 'unsigned' = no crypto sig
     const [verifiedMap, setVerifiedMap] = useState<Record<string, boolean | 'unsigned' | null>>({});
@@ -33,14 +35,25 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                const [recs, prescs, docs] = await Promise.all([
+                let groupId = user.familyGroupId;
+                if (!groupId) {
+                    try {
+                        groupId = await familyMemberRepository.ensureFamilyGroup(user.id);
+                    } catch (e) {
+                        console.warn("No se pudo asegurar el grupo familiar:", e);
+                    }
+                }
+
+                const [recs, prescs, docs, fams] = await Promise.all([
                     medicalRecordRepository.getRecordsByPatientId(user.id),
                     prescriptionRepository.getPrescriptionsByPatientId(user.id),
-                    medicalDocumentRepository.getDocumentsByPatientId(user.id)
+                    medicalDocumentRepository.getDocumentsByPatientId(user.id),
+                    groupId ? familyMemberRepository.getByFamilyGroup(groupId) : Promise.resolve([])
                 ]);
                 setRecords(recs);
                 setPrescriptions(prescs);
                 setDocuments(docs);
+                setFamilyMembers(fams);
 
                 // Verify signatures client-side after loading
                 const initialMap: Record<string, boolean | 'unsigned' | null> = {};
@@ -358,27 +371,34 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                         {activeTab === 'documents' && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                                 {filteredDocuments.length > 0 ? (
-                                    filteredDocuments.map(doc => (
-                                        <div key={doc.id} className="group bg-white/5 backdrop-blur-xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 shadow-2xl hover:bg-white/[0.08] transition-all duration-500 flex flex-col relative overflow-hidden">
-                                            <div className="absolute -right-6 -top-6 text-white/[0.02] group-hover:scale-125 transition-transform duration-1000 pointer-events-none">
-                                                <FileText size={120} />
-                                            </div>
+                                    filteredDocuments.map(doc => {
+                                        const familyMember = doc.familyMemberId ? familyMembers.find(f => f.id === doc.familyMemberId) : null;
+                                        return (
+                                            <div key={doc.id} className="group bg-white/5 backdrop-blur-xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 shadow-2xl hover:bg-white/[0.08] transition-all duration-500 flex flex-col relative overflow-hidden">
+                                                <div className="absolute -right-6 -top-6 text-white/[0.02] group-hover:scale-125 transition-transform duration-1000 pointer-events-none">
+                                                    <FileText size={120} />
+                                                </div>
 
-                                            <div className="flex items-start justify-between mb-6 sm:mb-8 relative z-10 gap-4">
-                                                <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl transition-all duration-500 group-hover:scale-110 shadow-lg border flex-shrink-0 ${
-                                                    doc.type.includes('lab') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-blue-500/10' : 
-                                                    doc.type.includes('imaging') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-purple-500/10' : 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-amber-500/10'
-                                                }`}>
-                                                    {doc.type.includes('lab') ? <FlaskConical size={24} className="sm:w-8 sm:h-8" /> : doc.type.includes('imaging') ? <Activity size={24} className="sm:w-8 sm:h-8" /> : <FileText size={24} className="sm:w-8 sm:h-8" />}
-                                                </div>
-                                                <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                                                    <span className={`text-[9px] sm:text-[10px] px-3 sm:px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm ${
-                                                        doc.uploadedBy === 'doctor' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                <div className="flex items-start justify-between mb-6 sm:mb-8 relative z-10 gap-4">
+                                                    <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl transition-all duration-500 group-hover:scale-110 shadow-lg border flex-shrink-0 ${
+                                                        doc.type.includes('lab') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-blue-500/10' : 
+                                                        doc.type.includes('imaging') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-purple-500/10' : 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-amber-500/10'
                                                     }`}>
-                                                        {doc.uploadedBy === 'doctor' ? 'Profesional' : 'Paciente'}
-                                                    </span>
+                                                        {doc.type.includes('lab') ? <FlaskConical size={24} className="sm:w-8 sm:h-8" /> : doc.type.includes('imaging') ? <Activity size={24} className="sm:w-8 sm:h-8" /> : <FileText size={24} className="sm:w-8 sm:h-8" />}
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                                        <span className={`text-[9px] sm:text-[10px] px-3 sm:px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm ${
+                                                            doc.uploadedBy === 'doctor' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                        }`}>
+                                                            {doc.uploadedBy === 'doctor' ? 'Profesional' : 'Paciente'}
+                                                        </span>
+                                                        {familyMember && (
+                                                            <span className="text-[9px] sm:text-[10px] px-3 sm:px-4 py-1.5 rounded-full font-bold uppercase tracking-widest border shadow-sm bg-teal-500/10 text-teal-400 border-teal-500/20">
+                                                                Familiar: {familyMember.name.split(' ')[0]}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
                                             
                                             <h4 className="font-bold text-white text-lg sm:text-xl leading-tight mb-4 flex-1 group-hover:text-emerald-400 transition-colors tracking-tight relative z-10 truncate">{doc.title}</h4>
                                             
@@ -398,7 +418,8 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 Descargar
                                             </Button>
                                         </div>
-                                    ))
+                                    );
+                                })
                                 ) : (
                                     <div className="col-span-full">
                                         <EmptyState message="No hay documentos cargados." />

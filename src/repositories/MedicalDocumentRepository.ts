@@ -9,7 +9,8 @@ export class MedicalDocumentRepository {
     patientId: string,
     file: File,
     title: string,
-    type: MedicalDocument['type']
+    type: MedicalDocument['type'],
+    familyMemberId?: string
   ): Promise<MedicalDocument> {
     // 1. Definir el path: patientId/timestamp_filename
     const fileExt = file.name.split('.').pop();
@@ -27,8 +28,6 @@ export class MedicalDocumentRepository {
     }
 
     // 3. Obtener la URL (usamos URL firmada o pública dependiendo de la config)
-    // Para este caso, guardamos el path y generamos la URL al recuperar.
-    // O si es privado, guardamos el path. Por simplicidad en la UI, guardaremos el path.
     const { data: { publicUrl } } = supabase.storage
       .from('medical-documents')
       .getPublicUrl(filePath);
@@ -40,14 +39,15 @@ export class MedicalDocumentRepository {
         patient_id: patientId,
         title,
         type,
-        url: publicUrl, // En un entorno real, usaríamos Signed URLs si el bucket es privado
-        uploaded_by: 'patient'
+        url: publicUrl,
+        uploaded_by: 'patient',
+        family_member_id: familyMemberId || null
       }])
       .select()
       .single();
 
     if (dbError) {
-      // Si falla la DB, deberíamos idealmente borrar el archivo del storage (cleanup)
+      // Si falla la DB, borramos el archivo del storage (cleanup)
       await supabase.storage.from('medical-documents').remove([filePath]);
       console.error('Error saving to database:', dbError);
       throw new Error(`Error al registrar documento: ${dbError.message}`);
@@ -56,6 +56,7 @@ export class MedicalDocumentRepository {
     return {
       id: data.id,
       patientId: data.patient_id,
+      familyMemberId: data.family_member_id || undefined,
       title: data.title,
       type: data.type,
       date: data.date,
@@ -76,6 +77,7 @@ export class MedicalDocumentRepository {
     return data.map((item: any) => ({
       id: item.id,
       patientId: item.patient_id,
+      familyMemberId: item.family_member_id || undefined,
       title: item.title,
       type: item.type,
       date: item.date,

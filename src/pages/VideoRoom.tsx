@@ -39,7 +39,11 @@ import {
   Mic,
   MicOff,
   VideoOff,
-  PhoneOff
+  PhoneOff,
+  Pill,
+  HeartPulse,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { WaitingExperience } from '../components/video/WaitingExperience';
@@ -48,6 +52,11 @@ const serverUrl = import.meta.env.VITE_LIVEKIT_URL;
 
 interface VideoRoomProps {
   user: User;
+}
+
+interface RxItem {
+  med: string;
+  dose: string;
 }
 
 interface VideoRoomContentProps {
@@ -60,6 +69,10 @@ interface VideoRoomContentProps {
   setNotesPanelOpen: (open: boolean) => void;
   notes: string;
   setNotes: (notes: string) => void;
+  prescription: RxItem[];
+  setPrescription: (items: RxItem[]) => void;
+  recommendations: string;
+  setRecommendations: (val: string) => void;
   handleSaveNotes: () => Promise<void>;
   handleCompleteAppointment: () => Promise<void>;
   isSavingNotes: boolean;
@@ -83,6 +96,10 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
   setNotesPanelOpen,
   notes,
   setNotes,
+  prescription,
+  setPrescription,
+  recommendations,
+  setRecommendations,
   handleSaveNotes,
   handleCompleteAppointment,
   isSavingNotes,
@@ -95,6 +112,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
   isAnalyzing,
   handleAiProfessionalize
 }) => {
+  const [activeTab, setActiveTab] = useState<'evolucion' | 'receta' | 'recomendaciones'>('evolucion');
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const { quality } = useConnectionQualityIndicator({ participant: localParticipant });
 
@@ -384,84 +402,214 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
 
         {isDoctor ? (
           <div className="flex flex-col h-full bg-slate-900/10">
-            {/* Dr Notes */}
-            <div className="p-6 border-b border-white/5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-teal-500/10 text-teal-400 rounded-2xl flex items-center justify-center border border-teal-500/20 shadow-[0_0_20px_rgba(20,184,166,0.1)]">
-                  <FileText size={24} />
+            {/* Header: Patient info + Vault */}
+            <div className="p-4 border-b border-white/5 flex-shrink-0">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-teal-500/10 text-teal-400 rounded-xl flex items-center justify-center border border-teal-500/20">
+                  <FileText size={18} />
                 </div>
-                <div>
-                  <h3 className="font-bold text-white text-xl tracking-tight uppercase">Expediente</h3>
-                  <p className="text-[9px] font-bold text-slate-500 tracking-[0.3em] uppercase">Control Clínico</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[8px] font-bold text-teal-500 uppercase tracking-widest">Paciente</p>
+                  <p className="text-sm font-bold text-white truncate">{appointment?.patientName || 'Cargando...'}</p>
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Identidad Paciente</span>
-                  <p className="text-sm font-bold text-white">{appointment?.patientName || 'Cargando...'}</p>
-                </div>
-                <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">ID Sesión Encriptada</span>
-                  <p className="text-xs font-mono text-slate-400">{appointmentId?.substring(0, 16).toUpperCase()}</p>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setIsVaultOpen(true)}
-                className="mt-4 w-full p-3 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between group transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg group-hover:scale-110 transition-transform">
-                    <Database size={16} />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-[10px] font-bold text-white uppercase tracking-widest">Bóveda Médica</p>
-                    <p className="text-[9px] text-emerald-500/60 font-bold uppercase tracking-widest">Historial Previo</p>
-                  </div>
-                </div>
-                <ChevronRight size={16} className="text-emerald-500/40 group-hover:translate-x-1 transition-transform" />
-              </button>
-            </div>
-
-            <div className="flex-1 p-6 flex flex-col min-h-0">
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em]">Evolución Médica</label>
                 <button 
-                  onClick={handleAiProfessionalize}
-                  disabled={isAnalyzing || !notes.trim()}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${isAnalyzing ? 'bg-white/5 border-white/10 opacity-50' : 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 text-emerald-400 hover:scale-105 shadow-lg shadow-emerald-500/10'}`}
+                  onClick={() => setIsVaultOpen(true)}
+                  className="flex-shrink-0 p-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl flex items-center gap-1.5 group transition-all"
+                  title="Bóveda Médica — Historial Previo"
                 >
-                  <Sparkles size={14} className={isAnalyzing ? 'animate-spin' : ''} />
-                  <span className="text-[9px] font-bold uppercase tracking-widest">{isAnalyzing ? 'PROCESANDO...' : 'AI MAGIC'}</span>
+                  <Database size={14} className="text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest hidden lg:inline">Bóveda</span>
                 </button>
               </div>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Documente hallazgos, diagnóstico y plan terapéutico..."
-                className="flex-1 w-full bg-slate-900/40 border border-white/5 rounded-2xl p-4 text-sm text-slate-300 focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500/30 transition-all duration-500 resize-none font-medium leading-relaxed placeholder:text-slate-700 shadow-inner"
-              />
+
+              {/* Tabs */}
+              <div className="flex gap-1 p-1 bg-slate-950/60 rounded-xl border border-white/5">
+                <button
+                  onClick={() => setActiveTab('evolucion')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all ${
+                    activeTab === 'evolucion'
+                      ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30 shadow-[0_0_15px_rgba(20,184,166,0.15)]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  <FileText size={12} />
+                  <span>Evolución</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('receta')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all ${
+                    activeTab === 'receta'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  <Pill size={12} />
+                  <span>Receta</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('recomendaciones')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all ${
+                    activeTab === 'recomendaciones'
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  <HeartPulse size={12} />
+                  <span>Reco.</span>
+                </button>
+              </div>
             </div>
 
-            <div className="p-6 border-t border-white/5 space-y-3">
+            {/* Tab Content */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+
+              {/* TAB: Evolución */}
+              {activeTab === 'evolucion' && (
+                <div className="flex-1 p-4 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[10px] font-bold text-teal-500/80 uppercase tracking-[0.3em] flex items-center gap-1.5">
+                      <FileText size={12} /> Evolución Médica
+                    </label>
+                    <button 
+                      onClick={handleAiProfessionalize}
+                      disabled={isAnalyzing || !notes.trim()}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all ${
+                        isAnalyzing
+                          ? 'bg-white/5 border-white/10 opacity-50'
+                          : 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 text-emerald-400 hover:scale-105'
+                      }`}
+                    >
+                      <Sparkles size={12} className={isAnalyzing ? 'animate-spin' : ''} />
+                      <span className="text-[9px] font-bold uppercase tracking-widest">{isAnalyzing ? 'IA...' : 'AI'}</span>
+                    </button>
+                  </div>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Motivo de consulta, examen físico, diagnóstico y plan terapéutico..."
+                    className="flex-1 w-full bg-slate-900/60 border border-teal-500/10 focus:border-teal-500/40 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/10 transition-all resize-none font-medium leading-relaxed placeholder:text-slate-700 shadow-inner"
+                  />
+                </div>
+              )}
+
+              {/* TAB: Receta */}
+              {activeTab === 'receta' && (
+                <div className="flex-1 p-4 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.3em] flex items-center gap-1.5">
+                      <Pill size={12} /> Prescripción Médica
+                    </label>
+                    <button
+                      onClick={() => setPrescription([...prescription, { med: '', dose: '' }])}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 hover:scale-105 transition-all"
+                    >
+                      <Plus size={12} />
+                      <span className="text-[9px] font-bold uppercase tracking-widest">Agregar</span>
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                    {prescription.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-8 opacity-40">
+                        <Pill size={32} className="text-slate-600 mb-3" />
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Sin medicamentos</p>
+                        <p className="text-[10px] text-slate-600 mt-1">Presioná "Agregar" para añadir una prescripción</p>
+                      </div>
+                    ) : (
+                      prescription.map((item, idx) => (
+                        <div key={idx} className="group relative bg-slate-900/60 border border-blue-500/10 hover:border-blue-500/30 rounded-xl p-3 transition-all">
+                          <button
+                            onClick={() => setPrescription(prescription.filter((_, i) => i !== idx))}
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500/10 hover:bg-red-500/30 border border-red-500/20 rounded-lg flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+
+                          <div className="space-y-2">
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">
+                                Medicamento #{idx + 1}
+                              </label>
+                              <input
+                                type="text"
+                                value={item.med}
+                                onChange={(e) => {
+                                  const updated = [...prescription];
+                                  updated[idx] = { ...updated[idx], med: e.target.value };
+                                  setPrescription(updated);
+                                }}
+                                placeholder="Ej: Amoxicilina 500mg"
+                                className="w-full bg-slate-950/60 border border-slate-700 focus:border-blue-500/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition-all placeholder:text-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">
+                                Dosis / Posología
+                              </label>
+                              <input
+                                type="text"
+                                value={item.dose}
+                                onChange={(e) => {
+                                  const updated = [...prescription];
+                                  updated[idx] = { ...updated[idx], dose: e.target.value };
+                                  setPrescription(updated);
+                                }}
+                                placeholder="Ej: 1 comp. cada 8hs por 7 días"
+                                className="w-full bg-slate-950/60 border border-slate-700 focus:border-blue-500/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition-all placeholder:text-slate-700"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {prescription.length > 0 && (
+                    <p className="text-[9px] text-blue-500/50 font-bold uppercase tracking-widest text-center mt-2">
+                      {prescription.length} medicamento{prescription.length !== 1 ? 's' : ''} — Se formalizará al cerrar la consulta
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* TAB: Recomendaciones */}
+              {activeTab === 'recomendaciones' && (
+                <div className="flex-1 p-4 flex flex-col min-h-0">
+                  <label className="text-[10px] font-bold text-amber-400/80 uppercase tracking-[0.3em] flex items-center gap-1.5 mb-2">
+                    <HeartPulse size={12} /> Recomendaciones al Paciente
+                  </label>
+                  <textarea
+                    value={recommendations}
+                    onChange={(e) => setRecommendations(e.target.value)}
+                    placeholder="Instrucciones post-consulta, cambios en el estilo de vida, próximos pasos, estudios solicitados..."
+                    className="flex-1 w-full bg-slate-900/60 border border-amber-500/10 focus:border-amber-500/40 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/10 transition-all resize-none font-medium leading-relaxed placeholder:text-slate-700 shadow-inner"
+                  />
+                  <p className="text-[9px] text-amber-500/50 font-bold uppercase tracking-widest text-center mt-2">
+                    Visible para el paciente al finalizar la consulta
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 border-t border-white/5 space-y-2 flex-shrink-0">
               <Button
                 variant="outline"
                 onClick={handleSaveNotes}
                 isLoading={isSavingNotes}
                 disabled={!notes.trim()}
-                className="w-full border-white/10 text-white hover:bg-white/5 h-12 rounded-2xl tracking-[0.25em] uppercase text-[10px] font-bold"
-                icon={<Save size={18} />}
+                className="w-full border-white/10 text-white hover:bg-white/5 h-11 rounded-xl tracking-[0.2em] uppercase text-[9px] font-bold"
+                icon={<Save size={16} />}
               >
-                Actualizar Ficha
+                Guardar Evolución
               </Button>
 
               <Button
                 variant="primary"
                 onClick={handleCompleteAppointment}
                 isLoading={isCompleting}
-                className="w-full bg-teal-600 hover:bg-teal-500 text-white h-12 rounded-2xl shadow-[0_10px_40px_rgba(20,184,166,0.2)] tracking-[0.25em] uppercase text-[10px] font-bold border-none"
-                icon={<CheckCircle size={18} />}
+                className="w-full bg-teal-600 hover:bg-teal-500 text-white h-11 rounded-xl shadow-[0_10px_40px_rgba(20,184,166,0.2)] tracking-[0.2em] uppercase text-[9px] font-bold border-none"
+                icon={<CheckCircle size={16} />}
               >
                 Finalizar Turno
               </Button>
@@ -685,6 +833,8 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
   const [isVaultOpen, setIsVaultOpen] = useState(false);
   const [patientHistory, setPatientHistory] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [prescription, setPrescription] = useState<{ med: string; dose: string }[]>([]);
+  const [recommendations, setRecommendations] = useState('');
 
   const fetchDetails = useCallback(async () => {
     if (!appointmentId) {
@@ -702,6 +852,12 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
         // Fetch patient history for the vault
         const history = await medicalRecordRepository.getRecordsByPatientId(appt.patientId);
         setPatientHistory(history);
+
+        // Si es médico y el turno está confirmado, lo pasamos a 'in_progress'
+        if (isDoctor && appt.status === 'confirmed') {
+          await appointmentRepository.startConsultation(appointmentId);
+          setAppointment(prev => prev ? { ...prev, status: 'in_progress' } : null);
+        }
       }
 
       const response = await fetch('/api/livekit-token', {
@@ -727,7 +883,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
     } catch (err: any) {
       setError(err.message || 'Fallo al obtener credenciales de videollamada');
     }
-  }, [appointmentId]);
+  }, [appointmentId, isDoctor]);
 
   useEffect(() => {
     fetchDetails();
@@ -903,6 +1059,10 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
               setNotesPanelOpen={setNotesPanelOpen}
               notes={notes}
               setNotes={setNotes}
+              prescription={prescription}
+              setPrescription={setPrescription}
+              recommendations={recommendations}
+              setRecommendations={setRecommendations}
               handleSaveNotes={handleSaveNotes}
               handleCompleteAppointment={handleCompleteAppointment}
               isSavingNotes={isSavingNotes}

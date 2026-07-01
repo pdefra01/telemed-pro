@@ -44,6 +44,15 @@ vi.mock('../../../repositories/MedicalDocumentRepository', () => ({
   },
 }));
 
+vi.mock('../../../repositories/FamilyMemberRepository', () => ({
+  familyMemberRepository: {
+    ensureFamilyGroup: vi.fn().mockResolvedValue('mock-family-group-id'),
+    getByFamilyGroup: vi.fn().mockResolvedValue([
+      { id: '1', name: 'Hijo Mock', relation: 'hijo/a', age: 8 }
+    ]),
+  },
+}));
+
 // Mock Contexts
 const mockToast = vi.fn();
 vi.mock('../../../context/ToastContext', () => ({

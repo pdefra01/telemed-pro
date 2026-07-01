@@ -11,6 +11,7 @@ vi.mock('../../repositories/AppointmentRepository', () => ({
   appointmentRepository: {
     saveAppointmentNotes: vi.fn().mockResolvedValue(undefined),
     completeAppointment: vi.fn().mockResolvedValue(undefined),
+    startConsultation: vi.fn().mockResolvedValue(undefined),
     getAppointmentById: vi.fn().mockResolvedValue({
       id: 'app1',
       patientId: 'pat1',
@@ -240,5 +241,16 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
 
     expect(mockFetch).toHaveBeenCalled();
   });
+
+  it('should call startConsultation when the doctor enters a confirmed appointment', async () => {
+    renderVideoRoom(doctorUser);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('livekit-room')).toBeInTheDocument();
+    });
+
+    expect(appointmentRepository.startConsultation).toHaveBeenCalledWith('app1');
+  });
 });
+
 

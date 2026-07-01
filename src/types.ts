@@ -126,6 +126,7 @@ export interface Prescription {
 export interface MedicalDocument {
   id: string;
   patientId: string;
+  familyMemberId?: string;
   title: string;
   type: 'lab_result' | 'imaging' | 'certificate' | 'other';
   date: string;

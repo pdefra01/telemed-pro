@@ -11,6 +11,7 @@ import { medicalRecordRepository } from '../../repositories/MedicalRecordReposit
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
 import { affiliateRepository } from '../../repositories/AffiliateRepository';
+import { familyMemberRepository } from '../../repositories/FamilyMemberRepository';
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { NotificationListener } from '../../components/dashboard/NotificationListener';
 import { notificationRepository } from '../../repositories/NotificationRepository';
@@ -34,6 +35,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
     const [recentPrescriptions, setRecentPrescriptions] = useState<Prescription[]>([]);
     const [isLoadingPrescriptions, setIsLoadingPrescriptions] = useState(true);
     const [quotaStatus, setQuotaStatus] = useState<{ quotaUsed: number; totalBonified: number; isOverQuota: boolean; remaining: number; planName: string } | null>(null);
+    const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+    const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState<string>('');
 
     useEffect(() => {
         const fetchAppointments = async () => {
@@ -80,10 +83,26 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
             }
         };
 
+        const fetchFamily = async () => {
+            try {
+                let groupId = user.familyGroupId;
+                if (!groupId) {
+                    groupId = await familyMemberRepository.ensureFamilyGroup(user.id);
+                }
+                if (groupId) {
+                    const members = await familyMemberRepository.getByFamilyGroup(groupId);
+                    setFamilyMembers(members);
+                }
+            } catch (error) {
+                console.error("Error cargando familiares:", error);
+            }
+        };
+
         fetchAppointments();
         fetchRecentRecords();
         fetchRecentPrescriptions();
         fetchQuotaStatus();
+        fetchFamily();
     }, [user.id, refreshKey]);
 
     // Real-time Sync Hook
@@ -187,7 +206,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                 user.id,
                 selectedFile,
                 uploadTitle,
-                uploadType
+                uploadType,
+                selectedFamilyMemberId || undefined
             );
             
             setUploadSuccess(true);
@@ -198,6 +218,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                 setUploadSuccess(false);
                 setSelectedFile(null);
                 setUploadTitle('');
+                setSelectedFamilyMemberId('');
             }, 2000);
         } catch (error: any) {
             console.error("Error uploading document:", error);
@@ -350,7 +371,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     </p>
                                 </div>
                                 <div className="mt-6 sm:mt-0 relative w-full sm:w-auto">
-                                    {nextAppointment.status === 'confirmed' ? (
+                                    {['confirmed', 'in_progress'].includes(nextAppointment.status) ? (
                                         <Link
                                             to={`/room/${nextAppointment.id}`}
                                             className="group/btn relative bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-8 py-4 rounded-2xl font-bold transition-all block text-center shadow-lg shadow-emerald-500/20 overflow-hidden text-base"
@@ -585,7 +606,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-[0.2em] mt-1">Titular</p>
                                 </div>
                             </div>
-                            {user.familyMembers?.map(member => (
+                            {familyMembers.map(member => (
                                 <div key={member.id} className="flex items-center p-4 bg-white/2 rounded-3xl border border-white/5 group cursor-pointer hover:bg-white/5 transition-all">
                                     <div className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-500 border border-white/5 flex items-center justify-center font-bold mr-4 text-xl">
                                         {member.name.charAt(0)}
@@ -635,6 +656,21 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 </p>
 
                                 <div className="space-y-6 mb-8">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Paciente / Destinatario</label>
+                                        <select 
+                                            value={selectedFamilyMemberId}
+                                            onChange={(e) => setSelectedFamilyMemberId(e.target.value)}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all appearance-none"
+                                        >
+                                            <option value="">Yo ({user.name})</option>
+                                            {familyMembers.map(member => (
+                                                <option key={member.id} value={member.id}>
+                                                    {member.name} ({member.relation})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Título del Estudio</label>
                                         <input 

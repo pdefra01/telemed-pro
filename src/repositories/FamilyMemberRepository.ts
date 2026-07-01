@@ -33,6 +33,8 @@ function mapRowToFamilyMember(row: FamilyMemberRow): FamilyMember & { dni?: stri
 }
 
 export class FamilyMemberRepository {
+  private groupCache: Record<string, string> = {};
+
   /**
    * Retrieves all family members for a given family group.
    */
@@ -128,6 +130,10 @@ export class FamilyMemberRepository {
    * Returns the family_group_id.
    */
   async ensureFamilyGroup(patientId: string): Promise<string> {
+    if (this.groupCache[patientId]) {
+      return this.groupCache[patientId];
+    }
+
     // Check if patient already has a group
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -138,6 +144,7 @@ export class FamilyMemberRepository {
     if (profileError) throw profileError;
 
     if (profile?.family_group_id) {
+      this.groupCache[patientId] = profile.family_group_id;
       return profile.family_group_id as string;
     }
 
@@ -158,6 +165,7 @@ export class FamilyMemberRepository {
 
     if (linkError) throw linkError;
 
+    this.groupCache[patientId] = group.id;
     return group.id as string;
   }
 }
