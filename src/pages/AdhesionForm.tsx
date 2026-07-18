@@ -26,7 +26,8 @@ export const AdhesionForm: React.FC = () => {
 
   // Form states
   const [titular, setTitular] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     dni: '',
     birthDate: '',
     address: '',
@@ -46,7 +47,8 @@ export const AdhesionForm: React.FC = () => {
 
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [newFamilyMember, setNewFamilyMember] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     dni: '',
     birthDate: '',
     parentesco: 'cónyuge',
@@ -67,10 +69,77 @@ export const AdhesionForm: React.FC = () => {
     promotions: false,
   });
 
+  // Email verification OTP states
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [countdown, setCountdown] = useState(0);
+
   // Canvas ref for signature
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
+
+  // Countdown timer para el reenvío de OTP
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  const sendEmailOtp = async () => {
+    if (!titular.email || !titular.email.includes('@')) {
+      toast("Ingresá un correo electrónico válido primero.", "warning");
+      return;
+    }
+
+    setIsSendingOtp(true);
+    try {
+      const res = await fetch('/api/email-verification/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: titular.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setOtpSent(true);
+      setCountdown(60);
+      toast("Código de verificación enviado a tu correo.", "success");
+    } catch (error: any) {
+      toast(error.message || "Error al enviar el código de verificación.", "error");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const verifyEmailOtp = async () => {
+    if (!otpCode || otpCode.length < 6) {
+      toast("Ingresá el código de 6 dígitos.", "warning");
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    try {
+      const res = await fetch('/api/email-verification/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: titular.email, code: otpCode })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setIsEmailVerified(true);
+      toast("¡Correo electrónico verificado exitosamente!", "success");
+    } catch (error: any) {
+      toast(error.message || "Código de verificación inválido.", "error");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
 
   const medicalOptions = [
     'Ninguno', 'Diabetes', 'Obesidad', 'Cardiopatía',
@@ -169,7 +238,7 @@ export const AdhesionForm: React.FC = () => {
   };
 
   const addFamilyMember = () => {
-    if (!newFamilyMember.name || !newFamilyMember.dni || !newFamilyMember.birthDate) {
+    if (!newFamilyMember.firstName || !newFamilyMember.lastName || !newFamilyMember.dni || !newFamilyMember.birthDate) {
       toast("Completá todos los campos del integrante familiar", "warning");
       return;
     }
@@ -179,9 +248,23 @@ export const AdhesionForm: React.FC = () => {
       return;
     }
 
-    setFamilyMembers(prev => [...prev, newFamilyMember]);
+    // Guardar familiar mapeando nombres divididos y también full name para compatibilidad
+    const mappedMember = {
+      firstName: newFamilyMember.firstName,
+      lastName: newFamilyMember.lastName,
+      first_name: newFamilyMember.firstName,
+      last_name: newFamilyMember.lastName,
+      name: `${newFamilyMember.firstName} ${newFamilyMember.lastName}`.trim(),
+      dni: newFamilyMember.dni,
+      birthDate: newFamilyMember.birthDate,
+      parentesco: newFamilyMember.parentesco,
+      sexo: newFamilyMember.sexo
+    };
+
+    setFamilyMembers(prev => [...prev, mappedMember]);
     setNewFamilyMember({
-      name: '',
+      firstName: '',
+      lastName: '',
       dni: '',
       birthDate: '',
       parentesco: 'cónyuge',
@@ -197,12 +280,16 @@ export const AdhesionForm: React.FC = () => {
   const handleNextStep = () => {
     // Validations
     if (step === 1) {
-      if (!titular.name || !titular.dni || !titular.birthDate || !titular.address || !titular.locality || !titular.neighborhood || !titular.email || !titular.phone) {
+      if (!titular.firstName || !titular.lastName || !titular.dni || !titular.birthDate || !titular.address || !titular.locality || !titular.neighborhood || !titular.email || !titular.phone) {
         toast("Por favor completá todos los campos obligatorios del titular", "warning");
         return;
       }
       if (!titular.email.includes('@')) {
         toast("Ingresá un correo electrónico válido", "warning");
+        return;
+      }
+      if (!isEmailVerified) {
+        toast("Por favor verificá tu correo electrónico antes de avanzar", "warning");
         return;
       }
     }
@@ -226,7 +313,9 @@ export const AdhesionForm: React.FC = () => {
       const signature_base64 = canvasRef.current.toDataURL();
       
       const payload: AdhesionRequest = {
-        titular_name: titular.name,
+        titular_first_name: titular.firstName,
+        titular_last_name: titular.lastName,
+        titular_name: `${titular.firstName} ${titular.lastName}`.trim(),
         titular_dni: titular.dni,
         titular_birth_date: titular.birthDate,
         titular_address: titular.address,
@@ -249,7 +338,8 @@ export const AdhesionForm: React.FC = () => {
         consent_data_treatment: consents.dataTreatment,
         consent_promotions: consents.promotions,
         signature_base64,
-        promoter_id: promoterId
+        promoter_id: promoterId,
+        email_verified: isEmailVerified
       };
 
       await adhesionRepository.submitApplication(payload);
@@ -319,16 +409,29 @@ export const AdhesionForm: React.FC = () => {
             <p className="text-slate-400 text-sm mb-8">Completá la información del afiliado titular de la cuenta.</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <div>
-                <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Nombre y Apellido *</label>
-                <input 
-                  type="text" 
-                  placeholder="Juan Pérez"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
-                  value={titular.name}
-                  onChange={(e) => setTitular({ ...titular, name: e.target.value })}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Nombre *</label>
+                  <input 
+                    type="text" 
+                    placeholder="Juan"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                    value={titular.firstName}
+                    onChange={(e) => setTitular({ ...titular, firstName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Apellido *</label>
+                  <input 
+                    type="text" 
+                    placeholder="Pérez"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                    value={titular.lastName}
+                    onChange={(e) => setTitular({ ...titular, lastName: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-slate-400 text-xs font-bold uppercase mb-2">DNI *</label>
@@ -399,16 +502,71 @@ export const AdhesionForm: React.FC = () => {
                   />
                 </div>
               </div>
-              <div>
+              <div className="md:col-span-2 bg-slate-900/40 border border-white/5 p-6 rounded-3xl">
                 <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Correo Electrónico *</label>
-                <input 
-                  type="email" 
-                  placeholder="nombre@ejemplo.com"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
-                  value={titular.email}
-                  onChange={(e) => setTitular({ ...titular, email: e.target.value })}
-                  required
-                />
+                <div className="flex gap-4 items-center">
+                  <input 
+                    type="email" 
+                    placeholder="nombre@ejemplo.com"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    value={titular.email}
+                    onChange={(e) => setTitular({ ...titular, email: e.target.value })}
+                    disabled={isEmailVerified || otpSent}
+                    required
+                  />
+                  {isEmailVerified ? (
+                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm bg-emerald-500/10 px-4 py-2.5 rounded-2xl border border-emerald-500/20">
+                      <CheckCircle2 size={16} />
+                      Verificado
+                    </div>
+                  ) : (
+                    !otpSent && (
+                      <button
+                        type="button"
+                        onClick={sendEmailOtp}
+                        disabled={isSendingOtp || !titular.email.includes('@')}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 px-6 rounded-2xl transition-all text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                      >
+                        {isSendingOtp && <Loader2 size={16} className="animate-spin" />}
+                        Validar Correo
+                      </button>
+                    )
+                  )}
+                </div>
+
+                {otpSent && !isEmailVerified && (
+                  <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-2xl animate-in slide-in-from-top duration-300">
+                    <label className="block text-slate-300 text-xs font-semibold mb-2">Ingresá el código de 6 dígitos enviado:</label>
+                    <div className="flex gap-4">
+                      <input 
+                        type="text" 
+                        maxLength={6}
+                        placeholder="Ej: 123456"
+                        className="w-32 bg-slate-950 border border-white/10 rounded-xl py-2 px-3 text-center text-white tracking-widest text-lg font-bold focus:outline-none focus:border-emerald-400/50"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                      />
+                      <button
+                        type="button"
+                        onClick={verifyEmailOtp}
+                        disabled={isVerifyingOtp || otpCode.length < 6}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-2 px-5 rounded-xl transition-all text-sm active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                      >
+                        {isVerifyingOtp && <Loader2 size={16} className="animate-spin" />}
+                        Confirmar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={sendEmailOtp}
+                        disabled={countdown > 0 || isSendingOtp}
+                        className="border border-white/10 hover:bg-white/5 text-slate-300 font-bold py-2 px-4 rounded-xl transition-all text-xs flex items-center gap-1 active:scale-95 disabled:opacity-50 cursor-pointer"
+                      >
+                        <RefreshCw size={12} className={isSendingOtp ? "animate-spin" : ""} />
+                        {countdown > 0 ? `Reenviar en ${countdown}s` : "Reenviar"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Celular *</label>
@@ -664,15 +822,27 @@ export const AdhesionForm: React.FC = () => {
                   Cargar Nuevo Familiar
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-slate-400 text-[10px] font-bold uppercase mb-2">Nombre y Apellido *</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ej: María Pérez"
-                      className="w-full bg-slate-900 border border-white/5 rounded-2xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50"
-                      value={newFamilyMember.name}
-                      onChange={(e) => setNewFamilyMember({ ...newFamilyMember, name: e.target.value })}
-                    />
+                  <div className="grid grid-cols-2 gap-4 md:col-span-2">
+                    <div>
+                      <label className="block text-slate-400 text-[10px] font-bold uppercase mb-2">Nombre *</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: María"
+                        className="w-full bg-slate-900 border border-white/5 rounded-2xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50"
+                        value={newFamilyMember.firstName}
+                        onChange={(e) => setNewFamilyMember({ ...newFamilyMember, firstName: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-[10px] font-bold uppercase mb-2">Apellido *</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: Pérez"
+                        className="w-full bg-slate-900 border border-white/5 rounded-2xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50"
+                        value={newFamilyMember.lastName}
+                        onChange={(e) => setNewFamilyMember({ ...newFamilyMember, lastName: e.target.value })}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-slate-400 text-[10px] font-bold uppercase mb-2">DNI *</label>

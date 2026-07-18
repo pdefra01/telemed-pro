@@ -350,6 +350,109 @@ app.post('/api/reset-user-password', async (req, res) => {
 });
 
 /**
+ * POST /api/email-verification/send
+ * Genera un código OTP para el correo del pre-afiliado
+ */
+app.post('/api/email-verification/send', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'El campo email es requerido.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('contact_verifications')
+      .insert({
+        channel: 'email',
+        contact_value: cleanEmail,
+        otp_code: otpCode,
+        attempts: 0,
+        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      });
+
+    if (error) {
+      console.error('[email-verification/send] Error inserting verification:', error.message);
+      return res.status(500).json({ error: `Fallo al generar el código: ${error.message}` });
+    }
+
+    console.log(`[SIMULADOR EMAIL OTP] Enviando código para ${cleanEmail}: ${otpCode}`);
+    res.status(200).json({ success: true, message: 'Código enviado exitosamente.' });
+  } catch (err) {
+    console.error('[email-verification/send] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno al generar código OTP.' });
+  }
+});
+
+/**
+ * POST /api/email-verification/verify
+ * Valida el código OTP enviado al correo del pre-afiliado
+ */
+app.post('/api/email-verification/verify', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { email, code } = req.body;
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Faltan los campos email y code.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = code.trim();
+
+  try {
+    // Buscar desafío activo más reciente
+    const { data: challenges, error } = await supabaseAdmin
+      .from('contact_verifications')
+      .select('*')
+      .eq('contact_value', cleanEmail)
+      .eq('channel', 'email')
+      .is('verified_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error || !challenges || challenges.length === 0) {
+      return res.status(400).json({ error: 'El código ha expirado o no existe. Solicitá uno nuevo.' });
+    }
+
+    const challenge = challenges[0];
+
+    if (challenge.attempts >= 5) {
+      return res.status(400).json({ error: 'Superaste el número máximo de intentos. Solicitá un nuevo código.' });
+    }
+
+    if (challenge.otp_code === cleanCode) {
+      // Marcar desafío como verificado
+      await supabaseAdmin
+        .from('contact_verifications')
+        .update({ verified_at: new Date().toISOString() })
+        .eq('id', challenge.id);
+
+      res.status(200).json({ success: true, message: 'Correo verificado con éxito.' });
+    } else {
+      // Incrementar intentos fallidos
+      await supabaseAdmin
+        .from('contact_verifications')
+        .update({ attempts: challenge.attempts + 1 })
+        .eq('id', challenge.id);
+
+      res.status(400).json({ error: 'Código incorrecto.' });
+    }
+  } catch (err) {
+    console.error('[email-verification/verify] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno al validar código OTP.' });
+  }
+});
+
+/**
  * POST /api/approve-adhesion
  * Aprueba una solicitud de adhesión. Crea el usuario paciente en Supabase Auth,
  * inicializa su perfil, crea su grupo familiar (si tiene) e integrantes,
@@ -382,10 +485,17 @@ app.post('/api/approve-adhesion', async (req, res) => {
       return res.status(400).json({ error: `La solicitud ya se encuentra en estado: ${request.status}` });
     }
 
+    // Validar que el email de la solicitud esté verificado
+    if (!request.email_verified) {
+      return res.status(400).json({ error: 'No se puede aprobar una solicitud que no tiene el correo electrónico verificado.' });
+    }
+
     // 2. Crear usuario paciente en Supabase Auth
     const targetEmail = request.titular_email?.trim() || `${request.titular_dni.trim()}@medinex-paciente.com`;
     const password = request.titular_dni.trim(); // DNI como contraseña temporal
     
+    const titularFullName = `${request.titular_first_name || ''} ${request.titular_last_name || ''}`.trim() || request.titular_name;
+
     console.log(`[approve-adhesion] Creando usuario auth para: ${targetEmail}`);
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: targetEmail,
@@ -393,7 +503,7 @@ app.post('/api/approve-adhesion', async (req, res) => {
       email_confirm: true,
       user_metadata: {
         role: 'patient',
-        full_name: request.titular_name,
+        full_name: titularFullName,
         dni: request.titular_dni.trim()
       }
     });
@@ -410,7 +520,8 @@ app.post('/api/approve-adhesion', async (req, res) => {
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({
-        full_name: request.titular_name,
+        first_name: request.titular_first_name || split_part(request.titular_name, ' ', 1),
+        last_name: request.titular_last_name || substring(request.titular_name, ' ', 2),
         email: targetEmail,
         dni: request.titular_dni.trim(),
         phone: request.titular_phone,
@@ -425,7 +536,6 @@ app.post('/api/approve-adhesion', async (req, res) => {
 
     if (profileError) {
       console.error('[approve-adhesion] Profile update failed:', profileError.message);
-      // Intentamos eliminar el usuario auth para que no quede huérfano si falla el perfil
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return res.status(500).json({ error: `Error al crear el perfil: ${profileError.message}` });
     }
@@ -435,12 +545,11 @@ app.post('/api/approve-adhesion', async (req, res) => {
     if (familyMembersList.length > 0) {
       console.log(`[approve-adhesion] Procesando grupo familiar (${familyMembersList.length} miembros)...`);
       
-      // 4a. Crear registro en family_groups
       const { data: famGroup, error: famGroupError } = await supabaseAdmin
         .from('family_groups')
         .insert({
           primary_affiliate_id: userId,
-          name: `Familia de ${request.titular_name}`
+          name: `Familia de ${titularFullName}`
         })
         .select()
         .single();
@@ -450,13 +559,11 @@ app.post('/api/approve-adhesion', async (req, res) => {
       } else {
         const familyGroupId = famGroup.id;
         
-        // 4b. Actualizar perfil del titular con el family_group_id
         await supabaseAdmin
           .from('profiles')
           .update({ family_group_id: familyGroupId })
           .eq('id', userId);
 
-        // 4c. Insertar miembros en family_members
         const insertMembers = familyMembersList.map(member => {
           let relation = 'otro';
           const relLower = (member.parentesco || '').toLowerCase();
@@ -465,9 +572,14 @@ app.post('/api/approve-adhesion', async (req, res) => {
           else if (relLower.includes('padre') || relLower.includes('madre') || relLower.includes('papá') || relLower.includes('mamá')) relation = 'padre/madre';
           else if (relLower.includes('hermano') || relLower.includes('hermana')) relation = 'hermano/a';
           
+          const rawName = member.name || member.fullName || 'Familiar de Prueba';
+          const fName = member.first_name || member.firstName || rawName.split(' ')[0];
+          const lName = member.last_name || member.lastName || rawName.split(' ').slice(1).join(' ');
+
           return {
             family_group_id: familyGroupId,
-            full_name: member.name || member.fullName || 'Familiar de Prueba',
+            first_name: fName,
+            last_name: lName,
             relation: relation,
             birth_date: member.birthDate || member.fechaNac || null,
             dni: member.dni ? String(member.dni).trim() : null
@@ -498,6 +610,20 @@ app.post('/api/approve-adhesion', async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor.' });
   }
 });
+
+// Helpers de strings para mapeos robustos
+function split_part(str, delim, index) {
+  if (!str) return '';
+  const parts = str.split(delim);
+  return parts[index - 1] || '';
+}
+
+function substring(str, delim, startIndex) {
+  if (!str) return '';
+  const idx = str.indexOf(delim);
+  if (idx === -1) return '';
+  return str.substring(idx + delim.length);
+}
 
 // Catch-all middleware to serve index.html for SPA routing
 // This is the most compatible way for Express 5

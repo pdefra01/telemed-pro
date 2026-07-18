@@ -386,8 +386,23 @@ const Affiliates: React.FC = () => {
                 ) : requests.map((req) => (
                   <tr key={req.id} className="group hover:bg-white/5 transition-all duration-200">
                     <td className="px-8 py-5">
-                      <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{req.titular_name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{req.titular_email}</div>
+                      <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                        {req.titular_last_name && req.titular_first_name 
+                          ? `${req.titular_last_name}, ${req.titular_first_name}`
+                          : req.titular_name}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                        <span>{req.titular_email}</span>
+                        {req.email_verified ? (
+                          <span className="text-[8px] font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1 py-0.2 rounded flex items-center gap-0.5 uppercase tracking-wider">
+                            <CheckCircle2 size={8} /> Verified
+                          </span>
+                        ) : (
+                          <span className="text-[8px] font-bold bg-rose-500/10 border border-rose-500/20 text-rose-400 px-1 py-0.2 rounded flex items-center gap-0.5 uppercase tracking-wider">
+                            <AlertCircle size={8} /> Pending
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-5">
                       <div className="text-sm text-slate-300 font-semibold">{req.titular_dni}</div>
@@ -585,7 +600,18 @@ const Affiliates: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase block">Email</span>
-                    <span className="text-sm text-white font-semibold break-all">{selectedRequest.titular_email}</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-sm text-white font-semibold break-all">{selectedRequest.titular_email}</span>
+                      {selectedRequest.email_verified ? (
+                        <span className="text-[8px] font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1 py-0.5 rounded flex items-center gap-0.5 uppercase tracking-wider">
+                          <CheckCircle2 size={8} /> Verified
+                        </span>
+                      ) : (
+                        <span className="text-[8px] font-bold bg-rose-500/10 border border-rose-500/20 text-rose-400 px-1 py-0.5 rounded flex items-center gap-0.5 uppercase tracking-wider">
+                          <AlertCircle size={8} /> Pending
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase block">Celular</span>
