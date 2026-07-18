@@ -30,6 +30,7 @@ import ProducersAdmin from './pages/admin/ProducersAdmin';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
+import { AdhesionForm } from './pages/AdhesionForm';
 
 import { ToastProvider } from './context/ToastContext';
 
@@ -118,6 +119,11 @@ const App: React.FC = () => {
       <Route
         path="/login"
         element={!user ? <Auth onLogin={handleLogin} /> : <Navigate to="/" />}
+      />
+
+      <Route
+        path="/adhesion"
+        element={<AdhesionForm />}
       />
 
       <Route

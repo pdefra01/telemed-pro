@@ -349,6 +349,156 @@ app.post('/api/reset-user-password', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/approve-adhesion
+ * Aprueba una solicitud de adhesión. Crea el usuario paciente en Supabase Auth,
+ * inicializa su perfil, crea su grupo familiar (si tiene) e integrantes,
+ * y marca la solicitud como 'approved'.
+ */
+app.post('/api/approve-adhesion', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { adhesionId } = req.body;
+  if (!adhesionId) {
+    return res.status(400).json({ error: 'Falta el campo adhesionId.' });
+  }
+
+  try {
+    // 1. Obtener la solicitud
+    const { data: request, error: fetchError } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('*')
+      .eq('id', adhesionId)
+      .single();
+
+    if (fetchError || !request) {
+      console.error('[approve-adhesion] Error fetching application:', fetchError);
+      return res.status(404).json({ error: 'Solicitud de adhesión no encontrada.' });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: `La solicitud ya se encuentra en estado: ${request.status}` });
+    }
+
+    // 2. Crear usuario paciente en Supabase Auth
+    const targetEmail = request.titular_email?.trim() || `${request.titular_dni.trim()}@medinex-paciente.com`;
+    const password = request.titular_dni.trim(); // DNI como contraseña temporal
+    
+    console.log(`[approve-adhesion] Creando usuario auth para: ${targetEmail}`);
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: targetEmail,
+      password: password,
+      email_confirm: true,
+      user_metadata: {
+        role: 'patient',
+        full_name: request.titular_name,
+        dni: request.titular_dni.trim()
+      }
+    });
+
+    if (authError) {
+      console.error('[approve-adhesion] Auth creation failed:', authError.message);
+      return res.status(400).json({ error: `Error en autenticación: ${authError.message}` });
+    }
+
+    const userId = authData.user.id;
+
+    // 3. Actualizar perfil del Paciente en public.profiles (que se autogeneró por trigger)
+    console.log(`[approve-adhesion] Actualizando perfil del titular: ${userId}`);
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        full_name: request.titular_name,
+        email: targetEmail,
+        dni: request.titular_dni.trim(),
+        phone: request.titular_phone,
+        address: request.titular_address,
+        birth_date: request.titular_birth_date,
+        plan_name: request.plan_type || 'Plan Familiar',
+        plan_status: 'active',
+        payment_status: 'paid',
+        is_active: true
+      })
+      .eq('id', userId);
+
+    if (profileError) {
+      console.error('[approve-adhesion] Profile update failed:', profileError.message);
+      // Intentamos eliminar el usuario auth para que no quede huérfano si falla el perfil
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      return res.status(500).json({ error: `Error al crear el perfil: ${profileError.message}` });
+    }
+
+    // 4. Crear grupo familiar si la solicitud contiene integrantes
+    const familyMembersList = Array.isArray(request.family_members) ? request.family_members : [];
+    if (familyMembersList.length > 0) {
+      console.log(`[approve-adhesion] Procesando grupo familiar (${familyMembersList.length} miembros)...`);
+      
+      // 4a. Crear registro en family_groups
+      const { data: famGroup, error: famGroupError } = await supabaseAdmin
+        .from('family_groups')
+        .insert({
+          primary_affiliate_id: userId,
+          name: `Familia de ${request.titular_name}`
+        })
+        .select()
+        .single();
+
+      if (famGroupError) {
+        console.error('[approve-adhesion] family_groups creation failed:', famGroupError.message);
+      } else {
+        const familyGroupId = famGroup.id;
+        
+        // 4b. Actualizar perfil del titular con el family_group_id
+        await supabaseAdmin
+          .from('profiles')
+          .update({ family_group_id: familyGroupId })
+          .eq('id', userId);
+
+        // 4c. Insertar miembros en family_members
+        const insertMembers = familyMembersList.map(member => {
+          let relation = 'otro';
+          const relLower = (member.parentesco || '').toLowerCase();
+          if (relLower.includes('conyuge') || relLower.includes('cónyuge') || relLower.includes('espos')) relation = 'cónyuge';
+          else if (relLower.includes('hijo') || relLower.includes('hija')) relation = 'hijo/a';
+          else if (relLower.includes('padre') || relLower.includes('madre') || relLower.includes('papá') || relLower.includes('mamá')) relation = 'padre/madre';
+          else if (relLower.includes('hermano') || relLower.includes('hermana')) relation = 'hermano/a';
+          
+          return {
+            family_group_id: familyGroupId,
+            full_name: member.name || member.fullName || 'Familiar de Prueba',
+            relation: relation,
+            birth_date: member.birthDate || member.fechaNac || null,
+            dni: member.dni ? String(member.dni).trim() : null
+          };
+        });
+
+        const { error: membersError } = await supabaseAdmin
+          .from('family_members')
+          .insert(insertMembers);
+
+        if (membersError) {
+          console.error('[approve-adhesion] family_members insertion failed:', membersError.message);
+        }
+      }
+    }
+
+    // 5. Marcar la solicitud como aprobada
+    console.log(`[approve-adhesion] Marcando solicitud como aprobada...`);
+    await supabaseAdmin
+      .from('adhesion_requests')
+      .update({ status: 'approved' })
+      .eq('id', adhesionId);
+
+    console.log(`[approve-adhesion] Solicitud aprobada con éxito para titular: ${targetEmail}`);
+    res.status(200).json({ message: 'Solicitud aprobada exitosamente y paciente registrado.', userId });
+  } catch (err) {
+    console.error('[approve-adhesion] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno del servidor.' });
+  }
+});
+
 // Catch-all middleware to serve index.html for SPA routing
 // This is the most compatible way for Express 5
 app.use((req, res) => {
