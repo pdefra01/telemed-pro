@@ -50,3 +50,19 @@ TeleMed Pro is a high-end, premium telemedicine platform designed for doctors an
 - **Video**: LiveKit.
 - **AI**: Gemini (for medical notes assistance).
 
+## 5. Advisor Experience (Perfil Asesor)
+
+### 5.1. Dashboard del Asesor
+- **Indicadores de Venta**: Panel visual que muestra las adhesiones capturadas por el asesor mediante su código/ID de promotor, permitiéndole dar seguimiento a sus comisiones e ingresos acumulados.
+- **Cartelera de Anuncios**: Sección para visualizar comunicaciones, instructivos y cambios operativos enviados por la Gerencia y la Administración.
+- **Autogestión**: Panel que permite al asesor actualizar sus datos personales (teléfono, domicilio, correo) y gestionar su contraseña de forma segura.
+
+---
+
+## Pendientes Prioritarios (Backlog)
+
+1. **[PENDIENTE] Perfil "Asesor"**:
+   - Diseñar esquema de base de datos para registrar métricas de ventas y comisiones asociadas a promotores.
+   - Implementar panel de control visual para asesores con indicadores de rendimiento (KPIs).
+   - Crear sistema de anuncios administrativos/gerenciales en el Operational Command Center con destino a la cartelera del Asesor.
+   - Desarrollar la autogestión de perfil y datos personales en la interfaz de asesor.
