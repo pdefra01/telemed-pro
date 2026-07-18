@@ -5,6 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve, join } from 'path';
+import nodemailer from 'nodemailer';
+
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +61,7 @@ app.all('/api/livekit-token', (req, res, next) => {
   }
   next();
 });
+
 
 const APPOINTMENT_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -350,6 +353,37 @@ app.post('/api/reset-user-password', async (req, res) => {
 });
 
 /**
+ * Build a Nodemailer transporter.
+ * Priority:
+ *   1. SMTP_HOST env vars (production corporate account)
+ *   2. Ethereal fake SMTP (automatic dev fallback — preview URL logged to console)
+ */
+async function createMailTransporter() {
+  if (process.env.SMTP_HOST) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true', // true = TLS 465, false = STARTTLS
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+  // Dev fallback: Ethereal (generates a free disposable inbox)
+  const testAccount = await nodemailer.createTestAccount();
+  console.log('[Mailer] Using Ethereal test account:', testAccount.user);
+  return nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
+    auth: { user: testAccount.user, pass: testAccount.pass },
+  });
+}
+
+const FROM_ADDRESS = process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@medinex.com';
+
+/**
  * POST /api/email-verification/send
  * Genera un código OTP para el correo del pre-afiliado
  */
@@ -382,13 +416,60 @@ app.post('/api/email-verification/send', async (req, res) => {
       return res.status(500).json({ error: `Fallo al generar el código: ${error.message}` });
     }
 
-    console.log(`[SIMULADOR EMAIL OTP] Enviando código para ${cleanEmail}: ${otpCode}`);
+    // Send OTP via email using Nodemailer
+    try {
+      const transporter = await createMailTransporter();
+      const info = await transporter.sendMail({
+        from: `"Medinex" <${FROM_ADDRESS}>`,
+        to: cleanEmail,
+        subject: 'Tu código de verificación — Medinex',
+        text: `Tu código de verificación es: ${otpCode}\n\nVálido por 15 minutos. Si no solicitaste este código, ignorá este mensaje.`,
+        html: `
+          <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #0f172a; color: #f1f5f9; border-radius: 16px; overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #10b981, #0d9488); padding: 32px; text-align: center;">
+              <h1 style="margin: 0; font-size: 28px; letter-spacing: 0.05em;">MED<span style="color: #fff;">IN</span>EX</h1>
+              <p style="margin: 4px 0 0; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.8;">Salud Digital</p>
+            </div>
+            <div style="padding: 40px 32px;">
+              <h2 style="margin: 0 0 8px; font-size: 20px; color: #f1f5f9;">Verificación de correo electrónico</h2>
+              <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">Ingresá el siguiente código en el formulario de adhesión para verificar tu correo.</p>
+              <div style="margin: 32px 0; text-align: center; background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px;">
+                <span style="font-size: 42px; font-weight: 900; letter-spacing: 12px; color: #10b981; font-family: monospace;">${otpCode}</span>
+              </div>
+              <p style="color: #64748b; font-size: 12px; text-align: center;">Este código vence en <strong>15 minutos</strong>. Si no solicitaste este código, ignorá este mensaje.</p>
+            </div>
+            <div style="border-top: 1px solid #1e293b; padding: 16px 32px; text-align: center;">
+              <p style="color: #475569; font-size: 11px; margin: 0;">Medinex &mdash; Plataforma de Salud Digital</p>
+            </div>
+          </div>
+        `,
+      });
+
+      const previewUrl = nodemailer.getTestMessageUrl(info);
+      if (previewUrl) {
+        console.log(`[Mailer][DEV] Preview OTP email: ${previewUrl}`);
+      } else {
+        console.log(`[Mailer] OTP enviado a ${cleanEmail} via SMTP.`);
+      }
+    } catch (mailErr) {
+      console.error('[email-verification/send] Fallo al enviar email:', mailErr.message);
+      // OTP ya insertado en DB — loguear código en dev para no bloquear el flujo
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[Mailer][DEV FALLBACK] OTP para ${cleanEmail}: ${otpCode}`);
+      } else {
+        // En producción, eliminar el OTP si no pudo enviarse
+        await supabaseAdmin.from('contact_verifications').delete().eq('contact_value', cleanEmail).is('verified_at', null);
+        return res.status(500).json({ error: 'No se pudo enviar el código. Intentá nuevamente.' });
+      }
+    }
+
     res.status(200).json({ success: true, message: 'Código enviado exitosamente.' });
   } catch (err) {
     console.error('[email-verification/send] Unexpected error:', err);
     res.status(500).json({ error: 'Error interno al generar código OTP.' });
   }
 });
+
 
 /**
  * POST /api/email-verification/verify
