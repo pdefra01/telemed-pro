@@ -31,6 +31,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
 import { AdhesionForm } from './pages/AdhesionForm';
+import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 
 import { ToastProvider } from './context/ToastContext';
 
@@ -141,7 +142,8 @@ const App: React.FC = () => {
           <ProtectedRoute user={user}>
             {user?.role === 'patient' ? <PatientDashboard user={user as Patient} /> :
               user?.role === 'doctor' ? <DoctorDashboard user={user as Doctor} /> :
-                <AdminDashboard />}
+                user?.role === 'advisor' ? <AdvisorDashboard user={user} /> :
+                  <AdminDashboard />}
           </ProtectedRoute>
         }
       />

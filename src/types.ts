@@ -1,4 +1,4 @@
-export type Role = 'patient' | 'doctor' | 'admin';
+export type Role = 'patient' | 'doctor' | 'admin' | 'advisor';
 
 export interface User {
   id: string;
@@ -15,6 +15,7 @@ export interface User {
   isActive?: boolean;
   digitalPublicKey?: string;
   encryptedPrivateKey?: string;
+  promoter_code?: string;
 }
 
 export interface FamilyMember {

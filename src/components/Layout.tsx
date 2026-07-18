@@ -63,6 +63,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       return common;
     }
 
+    if (role === 'advisor') {
+      return [
+        { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' }
+      ];
+    }
+
     if (role === 'admin') {
       return [
         ...common,

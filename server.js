@@ -611,6 +611,141 @@ app.post('/api/approve-adhesion', async (req, res) => {
   }
 });
 
+/**
+ * Middleware para validar autenticación JWT de Supabase
+ */
+const requireAuth = async (req, res, next) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token de autorización requerido.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: 'Token de autenticación inválido o expirado.' });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error('[requireAuth] Authentication error:', err.message);
+    return res.status(401).json({ error: 'Fallo de autenticación.' });
+  }
+};
+
+/**
+ * GET /api/advisor/stats
+ * Devuelve indicadores de ventas y comisiones acumuladas del asesor comercial autenticado
+ */
+app.get('/api/advisor/stats', requireAuth, async (req, res) => {
+  try {
+    // 1. Obtener promoter_code del perfil
+    const { data: profile, error: profError } = await supabaseAdmin
+      .from('profiles')
+      .select('promoter_code')
+      .eq('id', req.user.id)
+      .single();
+    
+    if (profError || !profile || !profile.promoter_code) {
+      return res.status(200).json({
+        totalSales: 0,
+        approvedSales: 0,
+        pendingSales: 0,
+        commissions: 0,
+        sales: []
+      });
+    }
+
+    const promoterCode = profile.promoter_code;
+
+    // 2. Obtener solicitudes de adhesion
+    const { data: sales, error: salesError } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('*')
+      .eq('promoter_id', promoterCode)
+      .order('created_at', { ascending: false });
+
+    if (salesError) throw salesError;
+
+    const totalSales = sales.length;
+    const approvedSales = sales.filter(s => s.status === 'approved').length;
+    const pendingSales = sales.filter(s => s.status === 'pending').length;
+    const commissions = approvedSales * 10000; // $10.000 por afiliado aprobado
+
+    res.status(200).json({
+      totalSales,
+      approvedSales,
+      pendingSales,
+      commissions,
+      sales
+    });
+  } catch (err) {
+    console.error('[advisor/stats] Error:', err);
+    res.status(500).json({ error: 'Error al recuperar estadísticas de venta.' });
+  }
+});
+
+/**
+ * GET /api/announcements
+ * Lista todos los comunicados oficiales mapeando la bandera de leído/no leído
+ */
+app.get('/api/announcements', requireAuth, async (req, res) => {
+  try {
+    const { data: announcements, error: annError } = await supabaseAdmin
+      .from('announcements')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (annError) throw annError;
+
+    const { data: reads, error: readsError } = await supabaseAdmin
+      .from('announcement_reads')
+      .select('announcement_id')
+      .eq('user_id', req.user.id);
+
+    if (readsError) throw readsError;
+
+    const readIds = new Set((reads || []).map(r => r.announcement_id));
+
+    const enrichedAnnouncements = announcements.map(ann => ({
+      ...ann,
+      read: readIds.has(ann.id)
+    }));
+
+    res.status(200).json(enrichedAnnouncements);
+  } catch (err) {
+    console.error('[announcements] Error:', err);
+    res.status(500).json({ error: 'Error al recuperar comunicados.' });
+  }
+});
+
+/**
+ * POST /api/announcements/:id/read
+ * Marca un comunicado como leído para el asesor autenticado
+ */
+app.post('/api/announcements/:id/read', requireAuth, async (req, res) => {
+  const { id: announcementId } = req.params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('announcement_reads')
+      .upsert(
+        { announcement_id: announcementId, user_id: req.user.id },
+        { onConflict: 'announcement_id,user_id' }
+      );
+
+    if (error) throw error;
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[announcements/read] Error:', err);
+    res.status(500).json({ error: 'Error al marcar comunicado como leído.' });
+  }
+});
+
 // Helpers de strings para mapeos robustos
 function split_part(str, delim, index) {
   if (!str) return '';
