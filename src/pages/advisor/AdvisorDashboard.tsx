@@ -14,7 +14,10 @@ import {
   Mail, 
   Lock,
   User as UserIcon,
-  ChevronRight
+  ChevronRight,
+  Share2,
+  Clipboard,
+  Check
 } from 'lucide-react';
 import { User } from '../../types';
 import { createClient } from '@supabase/supabase-js';
@@ -62,6 +65,15 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
   });
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [activeAnn, setActiveAnn] = useState<Announcement | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const affiliateLink = `${window.location.origin}/#/adhesion?promoter=${user.promoter_code || ''}`;
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(affiliateLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   
   // Estados de autogestión
   const [phone, setPhone] = useState(user.phone || '');
@@ -423,6 +435,48 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
               </div>
             </div>
           )}
+
+          {/* Enlace de Afiliación */}
+          <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800 p-6 shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-all duration-500" />
+            <h2 className="text-xl font-bold mb-3 flex items-center gap-2 text-white">
+              <Share2 size={20} className="text-emerald-400" />
+              Enlace de Afiliación QR
+            </h2>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed font-sans">
+              Compartí tu enlace personalizado. Al registrarse desde este link, las comisiones se asignarán automáticamente a tu cuenta.
+            </p>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-2xl border border-slate-800 focus-within:border-emerald-500/40 transition-all">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={affiliateLink}
+                  className="bg-transparent border-0 outline-none text-xs text-slate-300 px-2 py-1.5 w-full font-mono select-all"
+                />
+                <button 
+                  onClick={handleCopyLink}
+                  className={`p-2.5 rounded-xl transition-all duration-300 flex-shrink-0 ${
+                    copied 
+                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                  title="Copiar enlace"
+                >
+                  {copied ? <Check size={16} /> : <Clipboard size={16} />}
+                </button>
+              </div>
+              
+              <a 
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent("¡Hola! Te comparto mi enlace para asociarte a Medinex y acceder a videoconsultas médicas premium al instante: " + affiliateLink)}`}
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 text-sm"
+              >
+                Compartir por WhatsApp
+              </a>
+            </div>
+          </div>
 
           {/* Autogestión de Datos */}
           <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800 p-6 shadow-xl">

@@ -19,7 +19,8 @@ export const AdhesionForm: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const promoterId = searchParams.get('promoter') || '';
+  const [promoterCode, setPromoterCode] = useState(searchParams.get('promoter') || '');
+  const isPromoterLocked = !!searchParams.get('promoter');
 
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -338,7 +339,7 @@ export const AdhesionForm: React.FC = () => {
         consent_data_treatment: consents.dataTreatment,
         consent_promotions: consents.promotions,
         signature_base64,
-        promoter_id: promoterId,
+        promoter_id: promoterCode,
         email_verified: isEmailVerified
       };
 
@@ -587,6 +588,19 @@ export const AdhesionForm: React.FC = () => {
                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
                   value={titular.healthInsurance}
                   onChange={(e) => setTitular({ ...titular, healthInsurance: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-xs font-bold uppercase mb-2">
+                  Código de Promotor / Vendedor {isPromoterLocked && <span className="text-emerald-400 font-semibold">(Asignado)</span>}
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="Ej: PROMO_JUAN_123 (Opcional)"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed font-mono uppercase"
+                  value={promoterCode}
+                  onChange={(e) => !isPromoterLocked && setPromoterCode(e.target.value.toUpperCase())}
+                  disabled={isPromoterLocked}
                 />
               </div>
             </div>
