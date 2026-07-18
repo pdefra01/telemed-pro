@@ -114,6 +114,15 @@ const App: React.FC = () => {
     }
   };
 
+  // Redireccionar accesos directos por pathname a HashRouter para compatibilidad
+  useEffect(() => {
+    if (window.location.pathname === '/adhesion' || window.location.pathname.endsWith('/adhesion')) {
+      window.location.replace(window.location.origin + '/#/adhesion');
+    }
+  }, []);
+
+  const isAdhesionPath = window.location.hash.includes('/adhesion') || window.location.pathname.includes('/adhesion');
+
   const MainContent = (
     <Routes>
       <Route
@@ -328,7 +337,9 @@ const App: React.FC = () => {
     <Router>
       <ErrorBoundary>
         <ToastProvider>
-          {!user || user.role !== 'admin' ? (
+          {isAdhesionPath ? (
+            MainContent
+          ) : !user || user.role !== 'admin' ? (
             <Layout user={user} onLogout={handleLogout}>
               {MainContent}
             </Layout>
@@ -338,8 +349,8 @@ const App: React.FC = () => {
             </AdminLayout>
           )}
 
-          {/* AI Assistant is available for authenticated users */}
-          {user && <AIChatBot />}
+          {/* AI Assistant is available for authenticated users, but not on the adhesion page */}
+          {user && !isAdhesionPath && <AIChatBot />}
         </ToastProvider>
       </ErrorBoundary>
     </Router>
