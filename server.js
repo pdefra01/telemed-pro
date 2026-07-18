@@ -746,6 +746,103 @@ app.post('/api/announcements/:id/read', requireAuth, async (req, res) => {
   }
 });
 
+// Alta y provisión automatizada de asesores comerciales (OCC Admin Only)
+app.post('/api/create-advisor', requireAuth, async (req, res) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Servicio de autenticación no disponible temporalmente.' });
+    }
+
+    // 1. Validar rol de administrador del emisor
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', req.user.id)
+      .single();
+
+    const role = profile?.role || req.user.user_metadata?.role;
+    if (role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
+    }
+
+    const { email, password, name, promoterCode, phone, commissionRate } = req.body;
+
+    // 2. Validaciones de campos requeridos
+    if (!email || !password || !name || !promoterCode) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios para dar de alta al asesor.' });
+    }
+
+    const cleanCode = promoterCode.trim().toUpperCase();
+
+    // 3. Validar duplicidad de código de promotor
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('promoter_code', cleanCode)
+      .maybeSingle();
+
+    if (existingProfile) {
+      return res.status(400).json({ error: `El código de promotor '${cleanCode}' ya se encuentra asignado.` });
+    }
+
+    // 4. Crear usuario en Supabase Auth
+    const { data: newAuthUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+      email: email.trim(),
+      password: password,
+      email_confirm: true,
+      user_metadata: { role: 'advisor', full_name: name.trim() }
+    });
+
+    if (createUserError) {
+      return res.status(400).json({ error: createUserError.message });
+    }
+
+    const newUserId = newAuthUser.user.id;
+
+    // 5. Actualizar el perfil del asesor en `profiles`
+    const { error: updateProfileError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        role: 'advisor',
+        promoter_code: cleanCode,
+        phone: phone || null,
+        is_active: true
+      })
+      .eq('id', newUserId);
+
+    if (updateProfileError) {
+      // Revertir creación de auth ante fallos
+      await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      return res.status(500).json({ error: 'Error al actualizar el perfil de base de datos del asesor.' });
+    }
+
+    // 6. Insertar en tabla comercial `producers`
+    const { error: insertProducerError } = await supabaseAdmin
+      .from('producers')
+      .insert({
+        id: newUserId,
+        name: name.trim(),
+        producer_code: cleanCode,
+        email: email.trim(),
+        phone: phone || null,
+        commission_rate: commissionRate || 10.00,
+        status: 'active'
+      });
+
+    if (insertProducerError) {
+      // Revertir perfil y auth para consistencia total
+      await supabaseAdmin.from('profiles').update({ role: 'patient', promoter_code: null }).eq('id', newUserId);
+      await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      return res.status(500).json({ error: 'Error al registrar la ficha comercial del productor.' });
+    }
+
+    res.status(201).json({ success: true, id: newUserId });
+  } catch (err) {
+    console.error('[create-advisor] Error inesperado:', err);
+    res.status(500).json({ error: 'Error interno en el servidor.' });
+  }
+});
+
 // Helpers de strings para mapeos robustos
 function split_part(str, delim, index) {
   if (!str) return '';

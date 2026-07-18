@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Producer } from '../../types';
 import { producerRepository } from '../../repositories/ProducerRepository';
+import { supabase } from '../../services/supabase';
 import { 
   Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp
 } from 'lucide-react';
@@ -17,6 +18,7 @@ export const ProducersAdmin: React.FC = () => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [commissionRate, setCommissionRate] = useState<number>(10.00);
+  const [password, setPassword] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [toastMsg, setToastMsg] = useState<string>('');
@@ -39,26 +41,47 @@ export const ProducersAdmin: React.FC = () => {
 
   const handleSaveProducer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!password) {
+      alert("La contraseña inicial es requerida.");
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await producerRepository.createProducer({
-        name,
-        producerCode: code,
-        email,
-        phone,
-        commissionRate,
-        status: 'active'
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
+      const res = await fetch('/api/create-advisor', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name,
+          promoterCode: code,
+          email,
+          phone,
+          commissionRate,
+          password
+        })
       });
-      setToastMsg("Asesor comercial registrado correctamente.");
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al procesar la provisión del asesor.');
+      }
+
+      setToastMsg("Asesor comercial registrado y cuenta provisionada con éxito.");
       setShowModal(false);
       setName('');
       setCode('');
       setEmail('');
       setPhone('');
+      setPassword('');
       setCommissionRate(10.00);
       await loadProducers();
-    } catch (err) {
-      alert("Error al crear productor comercial.");
+    } catch (err: any) {
+      alert(err.message || "Error al crear productor comercial.");
     } finally {
       setIsSubmitting(false);
     }
@@ -190,6 +213,10 @@ export const ProducersAdmin: React.FC = () => {
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">% Comisión por Alta / Cobro:</label>
                 <input type="number" step="0.5" required value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Contraseña Inicial Acceso Portal:</label>
+                <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Ej. ClaveFuerte123" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
