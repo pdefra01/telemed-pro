@@ -285,6 +285,11 @@ export const AdhesionForm: React.FC = () => {
         toast("Por favor completá todos los campos obligatorios del titular", "warning");
         return;
       }
+      // DNI must be 7 or 8 numeric digits only (B-6)
+      if (!/^\d{7,8}$/.test(titular.dni.trim())) {
+        toast("El DNI debe contener entre 7 y 8 dígitos numéricos sin espacios ni puntos", "warning");
+        return;
+      }
       if (!titular.email.includes('@')) {
         toast("Ingresá un correo electrónico válido", "warning");
         return;

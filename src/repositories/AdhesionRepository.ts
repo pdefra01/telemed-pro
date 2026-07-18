@@ -35,6 +35,23 @@ export class AdhesionRepository {
    * Envía una solicitud de adhesión de forma pública (para el formulario QR)
    */
   async submitApplication(data: AdhesionRequest): Promise<void> {
+    // Validate promoter_id against active producers to prevent orphan records (B-3)
+    if (data.promoter_id && data.promoter_id.trim() !== '') {
+      const { data: producer, error: producerErr } = await supabase
+        .from('producers')
+        .select('id')
+        .eq('producer_code', data.promoter_id.trim())
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (producerErr) {
+        console.warn('Could not validate promoter_id:', producerErr.message);
+        // Non-blocking: proceed without promoter attribution if validation fails
+      } else if (!producer) {
+        throw new Error('El código de promotor ingresado no es válido o no está activo.');
+      }
+    }
+
     const { error } = await supabase
       .from('adhesion_requests')
       .insert({

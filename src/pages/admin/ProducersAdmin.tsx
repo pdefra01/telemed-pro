@@ -13,11 +13,13 @@ export const ProducersAdmin: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Form states
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [commissionRate, setCommissionRate] = useState<number>(10.00);
+  const [dni, setDni] = useState('');
+  const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -57,11 +59,13 @@ export const ProducersAdmin: React.FC = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          name,
+          firstName,
+          lastName,
           promoterCode: code,
           email,
           phone,
-          commissionRate,
+          dni,
+          address,
           password
         })
       });
@@ -73,12 +77,14 @@ export const ProducersAdmin: React.FC = () => {
 
       setToastMsg("Asesor comercial registrado y cuenta provisionada con éxito.");
       setShowModal(false);
-      setName('');
+      setFirstName('');
+      setLastName('');
       setCode('');
       setEmail('');
       setPhone('');
+      setDni('');
+      setAddress('');
       setPassword('');
-      setCommissionRate(10.00);
       await loadProducers();
     } catch (err: any) {
       alert(err.message || "Error al crear productor comercial.");
@@ -198,21 +204,37 @@ export const ProducersAdmin: React.FC = () => {
           <div className="bg-[#0f172a] border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl relative space-y-6">
             <h3 className="text-xl font-bold text-white">Alta de Asesor Comercial / Productor</h3>
             <form onSubmit={handleSaveProducer} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Nombre:</label>
+                  <input type="text" required value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Ej. Carlos" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Apellido:</label>
+                  <input type="text" required value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Ej. Gómez" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">N° DNI:</label>
+                  <input type="text" required value={dni} onChange={e => setDni(e.target.value.replace(/\D/g, ''))} placeholder="Sin puntos" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">N° Celular:</label>
+                  <input type="tel" required value={phone} onChange={e => setPhone(e.target.value)} placeholder="Ej. 3416123456" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+              </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Nombre Completo:</label>
-                <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="Ej. Carlos Gómez" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Correo Personal:</label>
+                <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Ej. carlos@gmail.com" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Código Único Comercial:</label>
                 <input type="text" required value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Ej. PROD-103" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Email Corporativo:</label>
-                <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="asesor@medinex.com" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">% Comisión por Alta / Cobro:</label>
-                <input type="number" step="0.5" required value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Domicilio Particular:</label>
+                <input type="text" required value={address} onChange={e => setAddress(e.target.value)} placeholder="Ej. Av. Pellegrini 1234, Rosario" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Contraseña Inicial Acceso Portal:</label>

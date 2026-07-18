@@ -17,7 +17,8 @@ import {
   ChevronRight,
   Share2,
   Clipboard,
-  Check
+  Check,
+  Percent
 } from 'lucide-react';
 import { User } from '../../types';
 import { createClient } from '@supabase/supabase-js';
@@ -52,6 +53,7 @@ interface StatsData {
   approvedSales: number;
   pendingSales: number;
   commissions: number;
+  linksSharedCount: number;
   sales: SaleRequest[];
 }
 
@@ -61,6 +63,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
     approvedSales: 0,
     pendingSales: 0,
     commissions: 0,
+    linksSharedCount: 0,
     sales: []
   });
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -69,10 +72,40 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
 
   const affiliateLink = `${window.location.origin}/#/adhesion?promoter=${user.promoter_code || ''}`;
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(affiliateLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const registerLinkShared = async () => {
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/advisor/increment-share', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStats(prev => ({
+          ...prev,
+          linksSharedCount: data.linksSharedCount
+        }));
+      }
+    } catch (err) {
+      console.error("Error registrando compartición de enlace:", err);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!user.promoter_code) return;
+    try {
+      await navigator.clipboard.writeText(affiliateLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard permission denied (common on mobile or iframes)
+      console.error('Clipboard write failed');
+    }
+    // Register share even if clipboard failed — the intent was to share
+    await registerLinkShared();
   };
   
   // Estados de autogestión
@@ -140,7 +173,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
 
   useEffect(() => {
     loadData();
-  }, [user]);
+  }, [user.id]);
 
   const handleMarkAsRead = async (ann: Announcement) => {
     if (ann.read) {
@@ -230,6 +263,13 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
     );
   }
 
+  // Calculated KPIs (outside JSX to avoid IIFE pattern and ease testing)
+  const conversionRate = stats.linksSharedCount > 0
+    ? ((stats.approvedSales / stats.linksSharedCount) * 100).toFixed(1)
+    : '0.0';
+
+  const hasPromoterCode = !!user.promoter_code;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-8 font-sans w-full">
       {/* Header */}
@@ -263,55 +303,75 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
       )}
 
       {/* KPIs Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
         {/* KPI: Comisiones */}
-        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-6 border border-amber-500/20 shadow-xl hover:shadow-amber-500/5 transition-all hover:scale-[1.01] duration-300">
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-slate-400 font-semibold text-sm">Comisiones Acumuladas</span>
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-              <DollarSign size={20} />
+        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-amber-500/20 shadow-xl hover:shadow-amber-500/5 transition-all hover:scale-[1.01] duration-300">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-slate-400 font-semibold text-xs">Comisiones Ganadas</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+              <DollarSign size={16} />
             </div>
           </div>
-          <div className="text-3xl font-black text-amber-400 tracking-tight">
+          <div className="text-2xl font-black text-amber-400 tracking-tight">
             ${stats.commissions.toLocaleString('es-AR')}
           </div>
-          <p className="text-xs text-slate-400 mt-2">Monto estimado por adhesiones aprobadas</p>
+          <p className="text-[10px] text-slate-400 mt-2">Por altas aprobadas ($10k c/u)</p>
         </div>
 
-        {/* KPI: Total Ventas */}
-        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-6 border border-emerald-500/20 shadow-xl hover:shadow-emerald-500/5 transition-all hover:scale-[1.01] duration-300">
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-slate-400 font-semibold text-sm">Ventas Totales (QR)</span>
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-              <TrendingUp size={20} />
+        {/* KPI: Enlaces Compartidos */}
+        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-indigo-500/20 shadow-xl hover:shadow-indigo-500/5 transition-all hover:scale-[1.01] duration-300">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-slate-400 font-semibold text-xs">Links Compartidos</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+              <Share2 size={16} />
             </div>
           </div>
-          <div className="text-3xl font-black text-white tracking-tight">{stats.totalSales}</div>
-          <p className="text-xs text-slate-400 mt-2">Total de solicitudes capturadas</p>
+          <div className="text-2xl font-black text-indigo-400 tracking-tight">
+            {stats.linksSharedCount}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">Veces que se copió o envió el link</p>
         </div>
 
-        {/* KPI: Ventas Aprobadas */}
-        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-6 border border-teal-500/20 shadow-xl hover:shadow-teal-500/5 transition-all hover:scale-[1.01] duration-300">
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-slate-400 font-semibold text-sm">Adhesiones Aprobadas</span>
-            <div className="w-10 h-10 rounded-2xl bg-teal-500/10 flex items-center justify-center text-teal-400">
-              <CheckCircle size={20} />
+        {/* KPI: Total Registros (QR) */}
+        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-emerald-500/20 shadow-xl hover:shadow-emerald-500/5 transition-all hover:scale-[1.01] duration-300">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-slate-400 font-semibold text-xs">Formularios Completados</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+              <TrendingUp size={16} />
             </div>
           </div>
-          <div className="text-3xl font-black text-teal-400 tracking-tight">{stats.approvedSales}</div>
-          <p className="text-xs text-slate-400 mt-2">Afiliados incorporados al padrón</p>
+          <div className="text-2xl font-black text-white tracking-tight">
+            {stats.totalSales}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">Solicitudes totales registradas</p>
         </div>
 
-        {/* KPI: Ventas Pendientes */}
-        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-6 border border-indigo-500/20 shadow-xl hover:shadow-indigo-500/5 transition-all hover:scale-[1.01] duration-300">
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-slate-400 font-semibold text-sm">Adhesiones Pendientes</span>
-            <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-              <Clock size={20} />
+        {/* KPI: Altas Aprobadas */}
+        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-teal-500/20 shadow-xl hover:shadow-teal-500/5 transition-all hover:scale-[1.01] duration-300">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-slate-400 font-semibold text-xs">Altas Acreditadas</span>
+            <div className="w-8 h-8 rounded-xl bg-teal-500/10 flex items-center justify-center text-teal-400">
+              <CheckCircle size={16} />
             </div>
           </div>
-          <div className="text-3xl font-black text-indigo-400 tracking-tight">{stats.pendingSales}</div>
-          <p className="text-xs text-slate-400 mt-2">En revisión por administración</p>
+          <div className="text-2xl font-black text-teal-400 tracking-tight">
+            {stats.approvedSales}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">Afiliados con pago verificado</p>
+        </div>
+
+        {/* KPI: Conversión % */}
+        <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-pink-500/20 shadow-xl hover:shadow-pink-500/5 transition-all hover:scale-[1.01] duration-300">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-slate-400 font-semibold text-xs">Tasa de Conversión</span>
+            <div className="w-8 h-8 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-400">
+              <Percent size={16} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-pink-400 tracking-tight">
+            {conversionRate}%
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">Altas Acreditadas vs Links Compartidos</p>
         </div>
       </div>
 
@@ -446,36 +506,47 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
             <p className="text-xs text-slate-400 mb-4 leading-relaxed font-sans">
               Compartí tu enlace personalizado. Al registrarse desde este link, las comisiones se asignarán automáticamente a tu cuenta.
             </p>
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-2xl border border-slate-800 focus-within:border-emerald-500/40 transition-all">
-                <input 
-                  type="text" 
-                  readOnly 
-                  value={affiliateLink}
-                  className="bg-transparent border-0 outline-none text-xs text-slate-300 px-2 py-1.5 w-full font-mono select-all"
-                />
-                <button 
-                  onClick={handleCopyLink}
-                  className={`p-2.5 rounded-xl transition-all duration-300 flex-shrink-0 ${
-                    copied 
-                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                  }`}
-                  title="Copiar enlace"
-                >
-                  {copied ? <Check size={16} /> : <Clipboard size={16} />}
-                </button>
+
+            {!hasPromoterCode ? (
+              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-amber-400">
+                <AlertCircle size={18} className="flex-shrink-0" />
+                <p className="text-xs font-medium">
+                  Código de promotor no asignado. Contactá a administración para activar tu enlace de afiliación.
+                </p>
               </div>
-              
-              <a 
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent("¡Hola! Te comparto mi enlace para asociarte a Medinex y acceder a videoconsultas médicas premium al instante: " + affiliateLink)}`}
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 text-sm"
-              >
-                Compartir por WhatsApp
-              </a>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-2xl border border-slate-800 focus-within:border-emerald-500/40 transition-all">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={affiliateLink}
+                    className="bg-transparent border-0 outline-none text-xs text-slate-300 px-2 py-1.5 w-full font-mono select-all"
+                  />
+                  <button 
+                    onClick={handleCopyLink}
+                    className={`p-2.5 rounded-xl transition-all duration-300 flex-shrink-0 ${
+                      copied 
+                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
+                    title="Copiar enlace"
+                  >
+                    {copied ? <Check size={16} /> : <Clipboard size={16} />}
+                  </button>
+                </div>
+                
+                <a 
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent("¡Hola! Te comparto mi enlace para asociarte a Medinex y acceder a videoconsultas médicas premium al instante: " + affiliateLink)}`}
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  onClick={registerLinkShared}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 text-sm"
+                >
+                  Compartir por WhatsApp
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Autogestión de Datos */}

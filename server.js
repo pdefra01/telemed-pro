@@ -657,38 +657,117 @@ app.get('/api/advisor/stats', requireAuth, async (req, res) => {
         approvedSales: 0,
         pendingSales: 0,
         commissions: 0,
+        linksSharedCount: 0,
         sales: []
       });
     }
 
     const promoterCode = profile.promoter_code;
 
-    // 2. Obtener solicitudes de adhesion
+    // 2. Obtener solicitudes de adhesion (limitadas a las 100 más recientes para evitar cargas masivas)
     const { data: sales, error: salesError } = await supabaseAdmin
       .from('adhesion_requests')
-      .select('*')
+      .select('id, titular_name, titular_dni, plan_type, status, created_at')
       .eq('promoter_id', promoterCode)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (salesError) throw salesError;
 
-    const totalSales = sales.length;
-    const approvedSales = sales.filter(s => s.status === 'approved').length;
-    const pendingSales = sales.filter(s => s.status === 'pending').length;
-    const commissions = approvedSales * 10000; // $10.000 por afiliado aprobado
+    // 3. Obtener totales reales sin límite (para métricas precisas)
+    const { count: totalCount } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('promoter_id', promoterCode);
+
+    const { count: approvedCount } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('promoter_id', promoterCode)
+      .eq('status', 'approved');
+
+    const { count: pendingCount } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('promoter_id', promoterCode)
+      .eq('status', 'pending');
+
+    // 4. Obtener links_shared_count y commission_rate desde producers
+    const { data: producer } = await supabaseAdmin
+      .from('producers')
+      .select('links_shared_count, commission_rate')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    const linksSharedCount = producer?.links_shared_count || 0;
+    const commissionRate = producer?.commission_rate ?? 10;
+    const approvedSales = approvedCount || 0;
+    const commissions = approvedSales * 10000 * (commissionRate / 10); // base $10k * tasa proporcional
 
     res.status(200).json({
-      totalSales,
+      totalSales: totalCount || 0,
       approvedSales,
-      pendingSales,
+      pendingSales: pendingCount || 0,
       commissions,
-      sales
+      linksSharedCount,
+      sales: sales || []
     });
   } catch (err) {
     console.error('[advisor/stats] Error:', err);
     res.status(500).json({ error: 'Error al recuperar estadísticas de venta.' });
   }
 });
+
+/**
+ * POST /api/advisor/increment-share
+ * Incrementa en 1 el contador de enlaces compartidos del asesor autenticado
+ */
+app.post('/api/advisor/increment-share', requireAuth, async (req, res) => {
+  try {
+    // Role check via JWT metadata (already validated by requireAuth — no extra DB query needed)
+    const role = req.user.user_metadata?.role;
+    if (role !== 'advisor') {
+      return res.status(403).json({ error: 'Acceso denegado. Se requiere rol de asesor comercial.' });
+    }
+
+    // Atomic increment via direct RPC call — PostgreSQL handles the increment server-side
+    const { data: newCount, error: rpcErr } = await supabaseAdmin
+      .rpc('increment_links_shared', { row_id: req.user.id });
+
+    if (rpcErr) {
+      // Fallback: verify row exists, then do a safe read-then-write
+      const { data: existing, error: checkErr } = await supabaseAdmin
+        .from('producers')
+        .select('links_shared_count')
+        .eq('id', req.user.id)
+        .maybeSingle();
+
+      if (checkErr || !existing) {
+        return res.status(404).json({ error: 'Ficha comercial de asesor no encontrada.' });
+      }
+
+      const { error: fallbackErr, data: fallbackData } = await supabaseAdmin
+        .from('producers')
+        .update({ links_shared_count: (existing.links_shared_count || 0) + 1 })
+        .eq('id', req.user.id)
+        .select('links_shared_count')
+        .single();
+
+      if (fallbackErr) throw fallbackErr;
+      return res.status(200).json({ success: true, linksSharedCount: fallbackData.links_shared_count });
+    }
+
+    if (newCount === null || newCount === undefined) {
+      return res.status(404).json({ error: 'Ficha comercial de asesor no encontrada.' });
+    }
+
+    res.status(200).json({ success: true, linksSharedCount: newCount });
+  } catch (err) {
+    console.error('[advisor/increment-share] Error:', err);
+    res.status(500).json({ error: 'Error al registrar compartición de enlace.' });
+  }
+});
+
 
 /**
  * GET /api/announcements
@@ -765,10 +844,10 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
     }
 
-    const { email, password, name, promoterCode, phone, commissionRate } = req.body;
+    const { email, password, firstName, lastName, promoterCode, dni, phone, address } = req.body;
 
     // 2. Validaciones de campos requeridos
-    if (!email || !password || !name || !promoterCode) {
+    if (!email || !password || !firstName || !lastName || !promoterCode || !dni || !phone || !address) {
       return res.status(400).json({ error: 'Faltan campos obligatorios para dar de alta al asesor.' });
     }
 
@@ -786,11 +865,12 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
     }
 
     // 4. Crear usuario en Supabase Auth
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
     const { data: newAuthUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
       email: email.trim(),
       password: password,
       email_confirm: true,
-      user_metadata: { role: 'advisor', full_name: name.trim() }
+      user_metadata: { role: 'advisor', full_name: fullName }
     });
 
     if (createUserError) {
@@ -805,7 +885,11 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
       .update({
         role: 'advisor',
         promoter_code: cleanCode,
-        phone: phone || null,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        dni: dni.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
         is_active: true
       })
       .eq('id', newUserId);
@@ -821,17 +905,29 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
       .from('producers')
       .insert({
         id: newUserId,
-        name: name.trim(),
+        name: fullName,
         producer_code: cleanCode,
         email: email.trim(),
-        phone: phone || null,
-        commission_rate: commissionRate || 10.00,
-        status: 'active'
+        phone: phone.trim(),
+        commission_rate: 10.00, // Comisión fija default 10%
+        status: 'active',
+        links_shared_count: 0
       });
 
     if (insertProducerError) {
       // Revertir perfil y auth para consistencia total
-      await supabaseAdmin.from('profiles').update({ role: 'patient', promoter_code: null }).eq('id', newUserId);
+      await supabaseAdmin
+        .from('profiles')
+        .update({ 
+          role: 'patient', 
+          promoter_code: null,
+          first_name: null,
+          last_name: null,
+          dni: null,
+          phone: null,
+          address: null
+        })
+        .eq('id', newUserId);
       await supabaseAdmin.auth.admin.deleteUser(newUserId);
       return res.status(500).json({ error: 'Error al registrar la ficha comercial del productor.' });
     }
