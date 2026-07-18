@@ -183,6 +183,37 @@ export interface Invoice {
   createdAt: string;
 }
 
+export interface OperatingExpense {
+  id: string;
+  period: string;
+  category: 'infrastructure' | 'medical_fees' | 'marketing' | 'administrative' | 'other';
+  amount: number;
+  description: string;
+  createdAt: string;
+}
+
+export interface PLSummary {
+  period: string;
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+  netMargin: number;
+  breakdown: {
+    revenue: {
+      b2c: number;
+      b2b: number;
+      pharmacy: number;
+    };
+    expenses: {
+      medicalFees: number;
+      infrastructure: number;
+      marketing: number;
+      administrative: number;
+      other: number;
+    };
+  };
+}
+
 export interface SystemSettings {
   key: string;
   value: any;

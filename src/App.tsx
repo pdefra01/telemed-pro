@@ -103,9 +103,14 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await authRepository.logout();
-    setUser(null);
-    localStorage.removeItem('medinex_user');
+    try {
+      await authRepository.logout();
+    } catch (e) {
+      console.error("Error al cerrar sesión en Supabase:", e);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('medinex_user');
+    }
   };
 
   const MainContent = (

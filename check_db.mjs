@@ -9,9 +9,13 @@ async function listProfiles() {
   try {
     await client.connect();
     
-    console.log("--- Todos los perfiles ---");
-    const res = await client.query("SELECT * FROM profiles");
-    console.log(JSON.stringify(res.rows, null, 2));
+    console.log("--- Executing unique active appointments index migration ---");
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS unique_active_doctor_appointment 
+      ON public.appointments (doctor_id, scheduled_at) 
+      WHERE (status != 'cancelled')
+    `);
+    console.log("Migration executed successfully!");
 
   } catch (err) {
     console.error(err);
@@ -21,3 +25,26 @@ async function listProfiles() {
 }
 
 listProfiles();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
