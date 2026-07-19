@@ -186,10 +186,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
           {/* Logo on Mobile */}
           <div className="md:hidden flex flex-col items-center mb-6">
-            <div className="w-16 h-16 bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center p-1.5">
+            <div className="w-20 h-20 bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center p-2">
               <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
             </div>
-            <span className="text-2xl font-extrabold tracking-[0.05em] text-[#002f54] mt-2" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+            <span className="text-3xl font-extrabold tracking-[0.05em] text-[#002f54] mt-2" style={{ fontFamily: "'Montserrat', sans-serif" }}>
               MED<span className="text-[#0dbda9]">IN</span>EX
             </span>
           </div>
