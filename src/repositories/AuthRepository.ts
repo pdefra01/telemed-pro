@@ -103,6 +103,7 @@ export class AuthRepository {
       role: profileData.role as Role,
       avatarUrl: profileData.avatar_url,
       dni: profileData.dni,
+      promoter_code: profileData.promoter_code,
       planName: profileData.plan_name || 'Plan Global',
       bloodType: profileData.blood_type ?? undefined,
       birthDate: profileData.birth_date ?? undefined,
