@@ -408,7 +408,8 @@ app.post('/api/email-verification/send', async (req, res) => {
         contact_value: cleanEmail,
         otp_code: otpCode,
         attempts: 0,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        // TEMPORAL: ventana extendida a 24hs durante pruebas pre-lanzamiento. Volver a 15 min antes de ir a producción real.
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       });
 
     if (error) {
@@ -423,7 +424,7 @@ app.post('/api/email-verification/send', async (req, res) => {
         from: `"Medinex" <${FROM_ADDRESS}>`,
         to: cleanEmail,
         subject: 'Tu código de verificación — Medinex',
-        text: `Tu código de verificación es: ${otpCode}\n\nVálido por 15 minutos. Si no solicitaste este código, ignorá este mensaje.`,
+        text: `Tu código de verificación es: ${otpCode}\n\nVálido por 24 horas. Si no solicitaste este código, ignorá este mensaje.`,
         html: `
           <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #0f172a; color: #f1f5f9; border-radius: 16px; overflow: hidden;">
             <div style="background: linear-gradient(135deg, #10b981, #0d9488); padding: 32px; text-align: center;">
@@ -436,7 +437,7 @@ app.post('/api/email-verification/send', async (req, res) => {
               <div style="margin: 32px 0; text-align: center; background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px;">
                 <span style="font-size: 42px; font-weight: 900; letter-spacing: 12px; color: #10b981; font-family: monospace;">${otpCode}</span>
               </div>
-              <p style="color: #64748b; font-size: 12px; text-align: center;">Este código vence en <strong>15 minutos</strong>. Si no solicitaste este código, ignorá este mensaje.</p>
+              <p style="color: #64748b; font-size: 12px; text-align: center;">Este código vence en <strong>24 horas</strong>. Si no solicitaste este código, ignorá este mensaje.</p>
             </div>
             <div style="border-top: 1px solid #1e293b; padding: 16px 32px; text-align: center;">
               <p style="color: #475569; font-size: 11px; margin: 0;">Medinex &mdash; Plataforma de Salud Digital</p>
