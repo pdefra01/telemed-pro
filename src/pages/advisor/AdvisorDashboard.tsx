@@ -18,10 +18,12 @@ import {
   Share2,
   Clipboard,
   Check,
-  Percent
+  Percent,
+  QrCode
 } from 'lucide-react';
 import { User } from '../../types';
 import { createClient } from '@supabase/supabase-js';
+import { QRCodeSVG } from 'qrcode.react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://fevdxgmtrhvwiuulopcf.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
@@ -30,6 +32,19 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 interface AdvisorDashboardProps {
   user: User;
 }
+
+const AffiliateQrCode = React.memo(function AffiliateQrCode({ value }: { value: string }) {
+  return (
+    <QRCodeSVG
+      value={value}
+      size={140}
+      bgColor="#ffffff"
+      fgColor="#0f172a"
+      level="H"
+      title="Código QR del enlace de afiliación"
+    />
+  );
+});
 
 interface SaleRequest {
   id: string;
@@ -545,6 +560,24 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
                 >
                   Compartir por WhatsApp
                 </a>
+
+                {/* Divider */}
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-800"></div>
+                  <span className="flex-shrink mx-3 text-[10px] text-slate-500 uppercase tracking-widest font-bold">o escaneá el QR</span>
+                  <div className="flex-grow border-t border-slate-800"></div>
+                </div>
+
+                {/* QR Code Container */}
+                <div className="flex flex-col items-center justify-center p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 backdrop-blur-sm">
+                  <div className="p-3 bg-white rounded-xl shadow-lg mb-2">
+                    <AffiliateQrCode value={affiliateLink} />
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                    <QrCode size={12} className="text-emerald-400" />
+                    Código QR de Asociación
+                  </span>
+                </div>
               </div>
             )}
           </div>
