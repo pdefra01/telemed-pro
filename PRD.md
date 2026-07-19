@@ -43,6 +43,12 @@ TeleMed Pro is a high-end, premium telemedicine platform designed for doctors an
 - **Accounting Export**: Ability to generate accounting records/exports for external accounting firms (Estudio Contable).
 - **Revenue Tracking**: Admin must have real-time visibility into MRR (Monthly Recurring Revenue) and delinquency (morosidad).
 
+### 4.4. Duplicate Prevention & Identity Validation (Adhesion Requests)
+- **Problem Solved**: The public adhesion form previously had no duplicate-prevention logic and did not collect the CUIL (Argentine tax/labor ID), which led to duplicate affiliate registrations and manual data cleanup.
+- **Identifiers Collected**: The titular and each family member (up to 4 per request) now provide both DNI and CUIL.
+- **Duplicate Checks**: On submission, both DNI and CUIL are checked independently — a match on either one is enough to block the request — against active affiliates, existing family members, and pending adhesion requests. Requests where the only match is a previously **rejected** application are allowed to resubmit.
+- **Enforcement**: Primary validation runs at the application layer (`POST /api/adhesion/check-duplicates`); partial unique indexes at the database level act as defense-in-depth against race conditions.
+
 ## Technical Stack
 - **Frontend**: React 19, TypeScript, Vite, React Router 7.
 - **Styling**: Vanilla CSS (Cinematic/Zen Dark system).

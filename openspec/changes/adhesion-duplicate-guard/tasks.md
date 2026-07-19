@@ -60,4 +60,4 @@ Chain strategy: stacked-to-main
 
 ## Phase 5: Documentation
 
-- [ ] 5.1 Update root `PRD.md`: document the CUIL identifier, the DNI-OR-CUIL duplicate-prevention flow (app-layer + DB backstop), and the new endpoint contract.
+- [x] 5.1 Update root `PRD.md`: document the CUIL identifier, the DNI-OR-CUIL duplicate-prevention flow (app-layer + DB backstop), and the new endpoint contract.
