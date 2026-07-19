@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, Role } from '../types';
 import { MOCK_PATIENT, MOCK_DOCTORS } from '../constants';
-import { Phone, CreditCard, Mail, Lock, ArrowRight, ShieldCheck, Stethoscope, Building, UserCircle, AlertCircle, User as UserIcon } from 'lucide-react';
+import { Phone, CreditCard, Mail, Lock, ArrowRight, ShieldCheck, Stethoscope, Building, UserCircle, AlertCircle, User as UserIcon, Briefcase } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { dniSchema, phoneSchema } from '../utils/validation';
@@ -122,6 +122,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       case 'patient': return 'Portal del Paciente';
       case 'doctor': return 'Acceso Profesionales';
       case 'admin': return 'Administración';
+      case 'advisor': return 'Portal del Asesor';
     }
   };
 
@@ -130,6 +131,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       case 'patient': return isRegistering ? 'Crea tu cuenta para gestionar tu salud' : 'Ingresa para gestionar turnos y recetas';
       case 'doctor': return 'Accede a tu agenda y pacientes';
       case 'admin': return 'Gestión integral de la plataforma';
+      case 'advisor': return 'Accede a tu consola comercial y comisiones';
     }
   };
 
@@ -161,11 +163,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               {role === 'patient' && "Tu salud, en tus manos."}
               {role === 'doctor' && "Optimiza tu práctica médica."}
               {role === 'admin' && "Gestión eficiente y segura."}
+              {role === 'advisor' && "Hacé crecer tu cartera de afiliados."}
             </h2>
             <p className="text-gray-600 text-sm max-w-sm">
               {role === 'patient' && "Atención médica de calidad desde la comodidad de tu hogar."}
               {role === 'doctor' && "Historia clínica digital, videoconsultas y gestión de turnos simplificada."}
               {role === 'admin' && "Control total de afiliados, prestadores y métricas de rendimiento."}
+              {role === 'advisor' && "Compartí tu enlace, sumá afiliados y seguí tus comisiones en tiempo real."}
             </p>
           </div>
 
@@ -215,6 +219,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 }`}
             >
               <Building size={18} className="mr-2" /> Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRoleChange('advisor')}
+              className={`flex-1 flex items-center justify-center py-2 px-4 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'advisor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              <Briefcase size={18} className="mr-2" /> Asesores
             </button>
           </div>
 
