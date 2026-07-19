@@ -79,13 +79,13 @@ Revertir los cambios de `AdhesionRepository`/`server.js`/`AdhesionForm.tsx`, `DR
 
 ## 8. Criterios de Éxito
 
-- [ ] El formulario recolecta CUIL del titular y de cada familiar (hasta 4), adicional al DNI.
-- [ ] Un envío con **DNI** de afiliado activo, familiar existente o solicitud pendiente es rechazado server-side con el mensaje correcto.
-- [ ] Un envío con **CUIL** de afiliado activo, familiar existente o solicitud pendiente es rechazado server-side con el mensaje correcto.
-- [ ] Un envío donde solo el DNI (y no el CUIL) coincide, o solo el CUIL (y no el DNI), es rechazado igualmente (chequeo independiente).
-- [ ] Un envío con DNI/CUIL de una solicitud `rejected` se acepta.
-- [ ] Un DNI o CUIL de familiar duplicado rechaza la solicitud completa e identifica a la persona y al identificador.
-- [ ] Los índices únicos parciales impiden dos `pending` con el mismo `titular_dni` o el mismo `titular_cuil`.
+- [x] El formulario recolecta CUIL del titular y de cada familiar (hasta 4), adicional al DNI.
+- [x] Un envío con **DNI** de afiliado activo, familiar existente o solicitud pendiente es rechazado server-side con el mensaje correcto.
+- [x] Un envío con **CUIL** de afiliado activo, familiar existente o solicitud pendiente es rechazado server-side con el mensaje correcto.
+- [x] Un envío donde solo el DNI (y no el CUIL) coincide, o solo el CUIL (y no el DNI), es rechazado igualmente (chequeo independiente).
+- [x] Un envío con DNI/CUIL de una solicitud `rejected` se acepta.
+- [x] Un DNI o CUIL de familiar duplicado rechaza la solicitud completa e identifica a la persona y al identificador.
+- [x] Los índices únicos parciales impiden dos `pending` con el mismo `titular_dni` o el mismo `titular_cuil`.
 
 ## 9. Nota de Seguimiento (para fases posteriores)
 
