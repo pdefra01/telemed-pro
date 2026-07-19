@@ -95,8 +95,9 @@ const Doctors: React.FC = () => {
       }
       setShowModal(false);
       loadDoctors();
-    } catch (error) {
-      toast("Error al guardar ficha del médico", "error");
+    } catch (error: any) {
+      console.error('Error al guardar ficha del médico:', error);
+      toast(error?.message || "Error al guardar ficha del médico", "error");
     } finally {
       setIsSubmitting(false);
     }

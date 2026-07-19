@@ -138,8 +138,8 @@ export class DoctorRepository {
     if (data.university !== undefined) profileData.university = data.university;
     if (data.graduationYear !== undefined) profileData.graduation_year = data.graduationYear;
     if (data.consultationFee !== undefined) profileData.consultation_fee = data.consultationFee;
-    if (data.contractStartDate !== undefined) profileData.contract_start_date = data.contractStartDate;
-    if (data.contractEndDate !== undefined) profileData.contract_end_date = data.contractEndDate;
+    if (data.contractStartDate !== undefined) profileData.contract_start_date = data.contractStartDate || null;
+    if (data.contractEndDate !== undefined) profileData.contract_end_date = data.contractEndDate || null;
 
     const { data: result, error } = await supabase
       .from('profiles')
