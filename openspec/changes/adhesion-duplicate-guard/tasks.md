@@ -50,13 +50,13 @@ Chain strategy: stacked-to-main
 
 ## Phase 4: Frontend — Repository & Form
 
-- [ ] 4.1 RED: extend `src/repositories/__tests__/AdhesionRepository.test.ts` asserting `submitApplication()` calls the check endpoint pre-insert, throws the returned message on 409, and includes `titular_cuil` + family `cuil` in the insert payload.
-- [ ] 4.2 GREEN: in `AdhesionRepository.submitApplication()`, add the pre-insert call to `/api/adhesion/check-duplicates`; throw on `!ok`; add `titular_cuil` to the existing hand-built insert and `cuil` to each family jsonb entry — no restructuring.
-- [ ] 4.3 GREEN: add `titularCuil` to `AdhesionForm.tsx` titular state + Step 1 CUIL input, validating `NN-DDDDDDDD-C` like the existing DNI check.
-- [ ] 4.4 GREEN: add `cuil` to `newFamilyMember` state + Step 3 mini-form, included in `addFamilyMember()`'s `mappedMember`.
-- [ ] 4.5 GREEN: wire `handleSubmit()` to surface the 409 conflict message via existing `toast()`, identifying person + identifier.
-- [ ] 4.6 Add/extend an `AdhesionForm` test covering the CUIL input and the duplicate-rejection toast path.
-- [ ] 4.7 Verify Phase 4 tests pass; run full `npm test`.
+- [x] 4.1 RED: extend `src/repositories/__tests__/AdhesionRepository.test.ts` asserting `submitApplication()` calls the check endpoint pre-insert, throws the returned message on 409, and includes `titular_cuil` + family `cuil` in the insert payload.
+- [x] 4.2 GREEN: in `AdhesionRepository.submitApplication()`, add the pre-insert call to `/api/adhesion/check-duplicates`; throw on `!ok`; add `titular_cuil` to the existing hand-built insert and `cuil` to each family jsonb entry — no restructuring.
+- [x] 4.3 GREEN: add `titularCuil` to `AdhesionForm.tsx` titular state + Step 1 CUIL input, validating `NN-DDDDDDDD-C` like the existing DNI check.
+- [x] 4.4 GREEN: add `cuil` to `newFamilyMember` state + Step 3 mini-form, included in `addFamilyMember()`'s `mappedMember`.
+- [x] 4.5 GREEN: wire `handleSubmit()` to surface the 409 conflict message via existing `toast()`, identifying person + identifier.
+- [x] 4.6 Add/extend an `AdhesionForm` test covering the CUIL input and the duplicate-rejection toast path.
+- [x] 4.7 Verify Phase 4 tests pass; run full `npm test`.
 
 ## Phase 5: Documentation
 

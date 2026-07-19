@@ -30,6 +30,7 @@ export const AdhesionForm: React.FC = () => {
     firstName: '',
     lastName: '',
     dni: '',
+    cuil: '',
     birthDate: '',
     address: '',
     locality: '',
@@ -51,6 +52,7 @@ export const AdhesionForm: React.FC = () => {
     firstName: '',
     lastName: '',
     dni: '',
+    cuil: '',
     birthDate: '',
     parentesco: 'cónyuge',
     sexo: 'Femenino',
@@ -239,8 +241,14 @@ export const AdhesionForm: React.FC = () => {
   };
 
   const addFamilyMember = () => {
-    if (!newFamilyMember.firstName || !newFamilyMember.lastName || !newFamilyMember.dni || !newFamilyMember.birthDate) {
+    if (!newFamilyMember.firstName || !newFamilyMember.lastName || !newFamilyMember.dni || !newFamilyMember.cuil || !newFamilyMember.birthDate) {
       toast("Completá todos los campos del integrante familiar", "warning");
+      return;
+    }
+
+    // CUIL must normalize to 11 numeric digits, with or without dashes (NN-DDDDDDDD-C)
+    if (!/^\d{11}$/.test(newFamilyMember.cuil.replace(/\D/g, ''))) {
+      toast("El CUIL del familiar debe tener 11 dígitos, con o sin guiones (formato NN-DDDDDDDD-C)", "warning");
       return;
     }
 
@@ -257,6 +265,7 @@ export const AdhesionForm: React.FC = () => {
       last_name: newFamilyMember.lastName,
       name: `${newFamilyMember.firstName} ${newFamilyMember.lastName}`.trim(),
       dni: newFamilyMember.dni,
+      cuil: newFamilyMember.cuil,
       birthDate: newFamilyMember.birthDate,
       parentesco: newFamilyMember.parentesco,
       sexo: newFamilyMember.sexo
@@ -267,6 +276,7 @@ export const AdhesionForm: React.FC = () => {
       firstName: '',
       lastName: '',
       dni: '',
+      cuil: '',
       birthDate: '',
       parentesco: 'cónyuge',
       sexo: 'Femenino',
@@ -281,13 +291,18 @@ export const AdhesionForm: React.FC = () => {
   const handleNextStep = () => {
     // Validations
     if (step === 1) {
-      if (!titular.firstName || !titular.lastName || !titular.dni || !titular.birthDate || !titular.address || !titular.locality || !titular.neighborhood || !titular.email || !titular.phone) {
+      if (!titular.firstName || !titular.lastName || !titular.dni || !titular.cuil || !titular.birthDate || !titular.address || !titular.locality || !titular.neighborhood || !titular.email || !titular.phone) {
         toast("Por favor completá todos los campos obligatorios del titular", "warning");
         return;
       }
       // DNI must be 7 or 8 numeric digits only (B-6)
       if (!/^\d{7,8}$/.test(titular.dni.trim())) {
         toast("El DNI debe contener entre 7 y 8 dígitos numéricos sin espacios ni puntos", "warning");
+        return;
+      }
+      // CUIL must normalize to 11 numeric digits, with or without dashes (NN-DDDDDDDD-C)
+      if (!/^\d{11}$/.test(titular.cuil.replace(/\D/g, ''))) {
+        toast("El CUIL debe tener 11 dígitos, con o sin guiones (formato NN-DDDDDDDD-C)", "warning");
         return;
       }
       if (!titular.email.includes('@')) {
@@ -323,6 +338,7 @@ export const AdhesionForm: React.FC = () => {
         titular_last_name: titular.lastName,
         titular_name: `${titular.firstName} ${titular.lastName}`.trim(),
         titular_dni: titular.dni,
+        titular_cuil: titular.cuil,
         titular_birth_date: titular.birthDate,
         titular_address: titular.address,
         titular_locality: titular.locality,
@@ -441,12 +457,23 @@ export const AdhesionForm: React.FC = () => {
               </div>
               <div>
                 <label className="block text-slate-400 text-xs font-bold uppercase mb-2">DNI *</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   placeholder="Sin puntos ni espacios"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
                   value={titular.dni}
                   onChange={(e) => setTitular({ ...titular, dni: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold uppercase mb-2">CUIL *</label>
+                <input
+                  type="text"
+                  placeholder="Ej: 20-12345678-9"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                  value={titular.cuil}
+                  onChange={(e) => setTitular({ ...titular, cuil: e.target.value })}
                   required
                 />
               </div>
@@ -800,6 +827,7 @@ export const AdhesionForm: React.FC = () => {
                     <tr className="border-b border-white/10 bg-white/5">
                       <th className="py-4 px-6 text-slate-300 font-bold text-xs uppercase">Nombre</th>
                       <th className="py-4 px-6 text-slate-300 font-bold text-xs uppercase">DNI</th>
+                      <th className="py-4 px-6 text-slate-300 font-bold text-xs uppercase">CUIL</th>
                       <th className="py-4 px-6 text-slate-300 font-bold text-xs uppercase">Parentesco</th>
                       <th className="py-4 px-6 text-slate-300 font-bold text-xs uppercase text-right">Acción</th>
                     </tr>
@@ -809,6 +837,7 @@ export const AdhesionForm: React.FC = () => {
                       <tr key={index} className="hover:bg-white/5 transition-colors">
                         <td className="py-4 px-6 text-white font-bold text-sm">{member.name}</td>
                         <td className="py-4 px-6 text-slate-300 text-sm">{member.dni}</td>
+                        <td className="py-4 px-6 text-slate-300 text-sm">{member.cuil}</td>
                         <td className="py-4 px-6 text-sm">
                           <span className="text-xs uppercase font-bold px-2 py-1 rounded bg-teal-500/15 border border-teal-500/20 text-teal-300">
                             {member.parentesco}
@@ -865,12 +894,22 @@ export const AdhesionForm: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-slate-400 text-[10px] font-bold uppercase mb-2">DNI *</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       placeholder="Sin puntos"
                       className="w-full bg-slate-900 border border-white/5 rounded-2xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50"
                       value={newFamilyMember.dni}
                       onChange={(e) => setNewFamilyMember({ ...newFamilyMember, dni: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 text-[10px] font-bold uppercase mb-2">CUIL *</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 27-31123456-4"
+                      className="w-full bg-slate-900 border border-white/5 rounded-2xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50"
+                      value={newFamilyMember.cuil}
+                      onChange={(e) => setNewFamilyMember({ ...newFamilyMember, cuil: e.target.value })}
                     />
                   </div>
                   <div>
@@ -1183,6 +1222,7 @@ export const AdhesionForm: React.FC = () => {
                 setTitular({
                   name: '',
                   dni: '',
+                  cuil: '',
                   birthDate: '',
                   address: '',
                   locality: '',
