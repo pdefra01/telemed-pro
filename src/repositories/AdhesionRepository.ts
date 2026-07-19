@@ -3,6 +3,8 @@ import { supabase } from '../services/supabase';
 export interface AdhesionRequest {
   id?: string;
   titular_name: string;
+  titular_first_name?: string;
+  titular_last_name?: string;
   titular_dni: string;
   titular_birth_date: string;
   titular_address: string;
@@ -27,6 +29,7 @@ export interface AdhesionRequest {
   signature_base64: string;
   status?: 'pending' | 'approved' | 'rejected';
   promoter_id?: string;
+  email_verified?: boolean;
   created_at?: string;
 }
 
@@ -56,6 +59,8 @@ export class AdhesionRepository {
       .from('adhesion_requests')
       .insert({
         titular_name: data.titular_name,
+        titular_first_name: data.titular_first_name || null,
+        titular_last_name: data.titular_last_name || null,
         titular_dni: data.titular_dni,
         titular_birth_date: data.titular_birth_date,
         titular_address: data.titular_address,
@@ -79,7 +84,8 @@ export class AdhesionRepository {
         consent_promotions: data.consent_promotions,
         signature_base64: data.signature_base64,
         status: 'pending',
-        promoter_id: data.promoter_id || null
+        promoter_id: data.promoter_id || null,
+        email_verified: data.email_verified || false
       });
 
     if (error) {
