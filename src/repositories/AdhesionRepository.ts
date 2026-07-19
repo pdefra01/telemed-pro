@@ -59,8 +59,11 @@ export class AdhesionRepository {
 
     if (!checkResult.ok) {
       const conflictMessages = (checkResult.conflicts || [])
-        .map((conflict: any) => conflict.message)
-        .filter(Boolean);
+        .filter((conflict: any) => conflict.message)
+        .map((conflict: any) => {
+          const who = conflict.person === 'titular' ? 'Titular' : `Familiar ${conflict.name || ''}`.trim();
+          return `${who}: ${conflict.message}`;
+        });
       throw new Error(
         conflictMessages.length > 0
           ? conflictMessages.join(' ')

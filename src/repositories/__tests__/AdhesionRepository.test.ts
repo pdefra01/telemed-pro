@@ -90,7 +90,7 @@ describe('AdhesionRepository', () => {
     }));
   });
 
-  it('throws the conflict message returned by check-duplicates on a 409 response and does not insert', async () => {
+  it('throws a conflict message identifying the titular on a 409 response and does not insert', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: false,
       status: 409,
@@ -115,13 +115,13 @@ describe('AdhesionRepository', () => {
     const request = buildRequest();
 
     await expect(repository.submitApplication(request)).rejects.toThrow(
-      'Este DNI ya se encuentra afiliado a Medinex.'
+      'Titular: Este DNI ya se encuentra afiliado a Medinex.'
     );
 
     expect(insertMock).not.toHaveBeenCalled();
   });
 
-  it('joins multiple conflict messages when check-duplicates returns more than one conflict', async () => {
+  it('joins multiple conflict messages, each identifying the specific person (titular or named family member)', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: false,
       status: 409,
@@ -154,7 +154,7 @@ describe('AdhesionRepository', () => {
     const request = buildRequest();
 
     await expect(repository.submitApplication(request)).rejects.toThrow(
-      'Este DNI ya se encuentra afiliado a Medinex. Ya existe una solicitud pendiente con este CUIL.'
+      'Titular: Este DNI ya se encuentra afiliado a Medinex. Familiar María Pérez: Ya existe una solicitud pendiente con este CUIL.'
     );
 
     expect(insertMock).not.toHaveBeenCalled();
