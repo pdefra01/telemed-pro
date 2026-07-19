@@ -139,7 +139,7 @@ export const ProducersAdmin: React.FC = () => {
       )}
 
       {/* HUD Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div className="bg-slate-900/40 border border-white/5 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Asesores Activos</span>
           <div className="text-3xl font-extrabold text-white font-mono">{producers.length}</div>
@@ -148,11 +148,6 @@ export const ProducersAdmin: React.FC = () => {
         <div className="bg-slate-900/40 border border-teal-500/30 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
           <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest block mb-1">Altas Referidas por Red</span>
           <div className="text-3xl font-extrabold text-white font-mono">{totalAffiliatesAllProducers} <span className="text-xs text-slate-400 font-normal">afiliados</span></div>
-        </div>
-
-        <div className="bg-slate-900/40 border border-emerald-500/30 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
-          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block mb-1">Comisión Promedio</span>
-          <div className="text-3xl font-extrabold text-white font-mono">11.25 %</div>
         </div>
       </div>
 
@@ -194,14 +189,10 @@ export const ProducersAdmin: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/5 text-xs">
+              <div className="pt-3 border-t border-white/5 text-xs">
                 <div>
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Afiliados Traídos</span>
                   <span className="font-mono font-bold text-teal-400 text-lg">{p.totalAffiliatesReferred || 0}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">% Comisión</span>
-                  <span className="font-mono font-bold text-white text-lg">{p.commissionRate}%</span>
                 </div>
               </div>
             </div>
