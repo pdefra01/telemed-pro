@@ -6,7 +6,7 @@ import { useToast } from '../../context/ToastContext';
 interface ResetPasswordModalProps {
   userId: string;
   userName: string;
-  userRole: 'doctor' | 'patient' | 'admin';
+  userRole: 'doctor' | 'patient' | 'admin' | 'advisor';
   userDni?: string;
   onClose: () => void;
 }
@@ -88,7 +88,7 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
           <div className="text-xs text-slate-400 font-medium">Usuario Activo:</div>
           <div className="text-sm font-bold text-white mt-1">{userName}</div>
           <div className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 mt-1 bg-emerald-500/10 inline-block px-2 py-0.5 rounded-md">
-            {userRole === 'doctor' ? 'Médico' : userRole === 'patient' ? 'Afiliado (Paciente)' : 'Administrador'}
+            {userRole === 'doctor' ? 'Médico' : userRole === 'patient' ? 'Afiliado (Paciente)' : userRole === 'advisor' ? 'Asesor Comercial' : 'Administrador'}
           </div>
         </div>
 

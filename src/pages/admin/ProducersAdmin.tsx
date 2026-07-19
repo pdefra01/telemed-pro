@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Producer } from '../../types';
 import { producerRepository } from '../../repositories/ProducerRepository';
 import { supabase } from '../../services/supabase';
-import { 
-  Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp
+import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
+import {
+  Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp, Key
 } from 'lucide-react';
 
 export const ProducersAdmin: React.FC = () => {
@@ -24,6 +25,7 @@ export const ProducersAdmin: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [toastMsg, setToastMsg] = useState<string>('');
+  const [resetPasswordProducer, setResetPasswordProducer] = useState<Producer | null>(null);
 
   useEffect(() => {
     loadProducers();
@@ -178,9 +180,18 @@ export const ProducersAdmin: React.FC = () => {
                   <h3 className="text-lg font-bold text-white tracking-tight">{p.name}</h3>
                   <p className="text-xs text-slate-400">{p.email}</p>
                 </div>
-                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[10px] font-bold uppercase border border-emerald-500/20">
-                  {p.status}
-                </span>
+                <div className="flex items-start gap-2">
+                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[10px] font-bold uppercase border border-emerald-500/20">
+                    {p.status}
+                  </span>
+                  <button
+                    onClick={() => setResetPasswordProducer(p)}
+                    className="p-1.5 bg-white/5 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors border border-white/5"
+                    title="Restablecer Contraseña"
+                  >
+                    <Key size={14} />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/5 text-xs">
@@ -248,6 +259,16 @@ export const ProducersAdmin: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPasswordProducer && (
+        <ResetPasswordModal
+          userId={resetPasswordProducer.id}
+          userName={resetPasswordProducer.name}
+          userRole="advisor"
+          onClose={() => setResetPasswordProducer(null)}
+        />
       )}
     </div>
   );
