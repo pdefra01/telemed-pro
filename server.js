@@ -535,6 +535,135 @@ app.post('/api/email-verification/verify', async (req, res) => {
 });
 
 /**
+ * Normaliza un identificador (DNI o CUIL) a su forma canónica: solo dígitos.
+ * Compartido entre el endpoint de duplicados y la aprobación de adhesión.
+ * NULL/undefined normalizan a cadena vacía — nunca deben "matchear" entre sí.
+ */
+function normalize(value) {
+  if (value === null || value === undefined) return '';
+  return String(value).replace(/\D/g, '');
+}
+
+/**
+ * Arma el mensaje de rechazo correspondiente a un identificador (dni|cuil)
+ * y a la razón de la coincidencia (affiliate|family_member|pending_request).
+ * Función pura — sin efectos secundarios, fácil de testear en aislamiento.
+ */
+function buildConflictMessage(identifier, reason) {
+  const label = identifier === 'cuil' ? 'CUIL' : 'DNI';
+  if (reason === 'affiliate') return `Este ${label} ya se encuentra afiliado a Medinex.`;
+  if (reason === 'family_member') return `Este ${label} ya está registrado como integrante de otro grupo familiar.`;
+  if (reason === 'pending_request') return `Ya existe una solicitud pendiente con este ${label}.`;
+  return `Este ${label} ya se encuentra registrado.`;
+}
+
+/**
+ * POST /api/adhesion/check-duplicates
+ * Valida, antes del insert público, que el DNI y el CUIL del titular y de
+ * cada familiar (hasta 4) no colisionen con afiliados activos (profiles),
+ * integrantes de otro grupo familiar (family_members), o solicitudes
+ * pendientes existentes (adhesion_requests con status='pending'). DNI y CUIL
+ * se evalúan de forma independiente — basta una sola coincidencia. Las
+ * solicitudes rechazadas ('rejected') nunca bloquean. Los identificadores sin
+ * valor (NULL/'') nunca "matchean" entre sí.
+ */
+app.post('/api/adhesion/check-duplicates', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { titularDni, titularCuil, family } = req.body;
+  if (!titularDni) {
+    return res.status(400).json({ error: 'Falta el DNI del titular.' });
+  }
+
+  const familyList = Array.isArray(family) ? family.slice(0, 4) : [];
+
+  // Personas a validar: titular + familiares. Cada una guarda su valor crudo
+  // (para el mensaje) y su valor normalizado (para comparar).
+  const people = [
+    { person: 'titular', name: null, rawDni: titularDni, rawCuil: titularCuil, dni: normalize(titularDni), cuil: normalize(titularCuil) },
+    ...familyList.map(f => ({
+      person: 'family',
+      name: f?.name || null,
+      rawDni: f?.dni,
+      rawCuil: f?.cuil,
+      dni: normalize(f?.dni),
+      cuil: normalize(f?.cuil)
+    }))
+  ];
+
+  const dniSet = [...new Set(people.map(p => p.dni).filter(Boolean))];
+  const cuilSet = [...new Set(people.map(p => p.cuil).filter(Boolean))];
+
+  // Compara una fila existente (con dni/cuil normalizables) contra cada
+  // persona de la solicitud entrante y agrega un conflicto por cada
+  // identificador coincidente.
+  const conflicts = [];
+  function collectConflicts(row, reason) {
+    const rowDni = normalize(row.dni);
+    const rowCuil = normalize(row.cuil);
+    for (const p of people) {
+      if (rowDni && p.dni && rowDni === p.dni) {
+        conflicts.push({ identifier: 'dni', value: p.rawDni, person: p.person, name: p.name, reason, message: buildConflictMessage('dni', reason) });
+      }
+      if (rowCuil && p.cuil && rowCuil === p.cuil) {
+        conflicts.push({ identifier: 'cuil', value: p.rawCuil, person: p.person, name: p.name, reason, message: buildConflictMessage('cuil', reason) });
+      }
+    }
+  }
+
+  try {
+    if (dniSet.length > 0 || cuilSet.length > 0) {
+      // Traemos todas las filas con DNI o CUIL cargado y comparamos
+      // normalizado en JS (via collectConflicts), en vez de filtrar con
+      // dni.in()/cuil.in() por valor exacto: los identificadores existentes
+      // pueden estar guardados con separadores (p. ej. CUIL "20-30111222-3"),
+      // y un filtro .in() de PostgREST hace match de string exacto contra la
+      // columna cruda, por lo que NUNCA encontraría esa fila comparándola con
+      // el valor normalizado "20301112223" — rompiendo el requisito de
+      // normalización del spec. Las tablas son chicas pre-lanzamiento (ver
+      // design.md), así que traer todo y comparar en JS es seguro.
+
+      // 1. Afiliados activos
+      const { data: profileMatches, error: profileErr } = await supabaseAdmin
+        .from('profiles')
+        .select('id,dni,cuil')
+        .or('dni.not.is.null,cuil.not.is.null');
+      if (profileErr) throw profileErr;
+      for (const row of profileMatches || []) collectConflicts(row, 'affiliate');
+
+      // 2. Integrantes de otro grupo familiar
+      const { data: familyMatches, error: familyErr } = await supabaseAdmin
+        .from('family_members')
+        .select('id,dni,cuil,full_name')
+        .or('dni.not.is.null,cuil.not.is.null');
+      if (familyErr) throw familyErr;
+      for (const row of familyMatches || []) collectConflicts(row, 'family_member');
+
+      // 3. Solicitudes pendientes
+      const { data: pendingMatches, error: pendingErr } = await supabaseAdmin
+        .from('adhesion_requests')
+        .select('id,titular_dni,titular_cuil')
+        .eq('status', 'pending');
+      if (pendingErr) throw pendingErr;
+      for (const row of pendingMatches || []) {
+        collectConflicts({ dni: row.titular_dni, cuil: row.titular_cuil }, 'pending_request');
+      }
+    }
+
+    if (conflicts.length > 0) {
+      return res.status(409).json({ ok: false, conflicts });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[adhesion/check-duplicates] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno al validar duplicados.' });
+  }
+});
+
+/**
  * POST /api/approve-adhesion
  * Aprueba una solicitud de adhesión. Crea el usuario paciente en Supabase Auth,
  * inicializa su perfil, crea su grupo familiar (si tiene) e integrantes,
@@ -606,6 +735,7 @@ app.post('/api/approve-adhesion', async (req, res) => {
         last_name: request.titular_last_name || substring(request.titular_name, ' ', 2),
         email: targetEmail,
         dni: request.titular_dni.trim(),
+        cuil: request.titular_cuil?.trim() || null,
         phone: request.titular_phone,
         address: request.titular_address,
         birth_date: request.titular_birth_date,
@@ -664,7 +794,8 @@ app.post('/api/approve-adhesion', async (req, res) => {
             last_name: lName,
             relation: relation,
             birth_date: member.birthDate || member.fechaNac || null,
-            dni: member.dni ? String(member.dni).trim() : null
+            dni: member.dni ? String(member.dni).trim() : null,
+            cuil: member.cuil ? String(member.cuil).trim() : null
           };
         });
 

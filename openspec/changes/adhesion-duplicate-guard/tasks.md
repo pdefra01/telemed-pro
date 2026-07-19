@@ -35,18 +35,18 @@ Chain strategy: stacked-to-main
 
 ## Phase 2: Backend — Duplicate-Check Endpoint (TDD)
 
-- [ ] 2.1 RED: write integration tests covering DNI-only match, CUIL-only match, family_members match, pending match, rejected-reapply allowed, concurrent-insert 23505 propagation.
-- [ ] 2.2 GREEN: add shared `normalize(value)` helper in `server.js` (digits-only), reused by endpoint and `approve-adhesion`.
-- [ ] 2.3 GREEN: implement `POST /api/adhesion/check-duplicates` in `server.js` (`supabaseAdmin`-backed) — 3 `.or()` queries per design; return 200 `{ok:true}` or 409 `{ok:false, conflicts:[]}` with `identifier`/`reason`/`message`.
-- [ ] 2.4 REFACTOR: extract the conflict-message builder (affiliate/family_member/pending_request × dni/cuil) into a pure, testable function.
-- [ ] 2.5 Verify Phase 2 tests pass.
+- [x] 2.1 RED: write integration tests covering DNI-only match, CUIL-only match, family_members match, pending match, rejected-reapply allowed, concurrent-insert 23505 propagation.
+- [x] 2.2 GREEN: add shared `normalize(value)` helper in `server.js` (digits-only), reused by endpoint and `approve-adhesion`.
+- [x] 2.3 GREEN: implement `POST /api/adhesion/check-duplicates` in `server.js` (`supabaseAdmin`-backed) — 3 `.or()` queries per design; return 200 `{ok:true}` or 409 `{ok:false, conflicts:[]}` with `identifier`/`reason`/`message`.
+- [x] 2.4 REFACTOR: extract the conflict-message builder (affiliate/family_member/pending_request × dni/cuil) into a pure, testable function.
+- [x] 2.5 Verify Phase 2 tests pass.
 
 ## Phase 3: Backend — Approve-Adhesion CUIL Persistence
 
-- [ ] 3.1 RED: extend tests asserting `/api/approve-adhesion` writes `cuil` into the `profiles.update()` call and into each `family_members` insert row.
-- [ ] 3.2 GREEN: add `cuil: request.titular_cuil?.trim() || null` to the `profiles.update()` (~line 608).
-- [ ] 3.3 GREEN: add `cuil: member.cuil ? String(member.cuil).trim() : null` to the `insertMembers` mapping (~line 667).
-- [ ] 3.4 Verify Phase 3 tests pass.
+- [x] 3.1 RED: extend tests asserting `/api/approve-adhesion` writes `cuil` into the `profiles.update()` call and into each `family_members` insert row.
+- [x] 3.2 GREEN: add `cuil: request.titular_cuil?.trim() || null` to the `profiles.update()` (~line 608).
+- [x] 3.3 GREEN: add `cuil: member.cuil ? String(member.cuil).trim() : null` to the `insertMembers` mapping (~line 667).
+- [x] 3.4 Verify Phase 3 tests pass.
 
 ## Phase 4: Frontend — Repository & Form
 
