@@ -6,6 +6,7 @@ export interface AdhesionRequest {
   titular_first_name?: string;
   titular_last_name?: string;
   titular_dni: string;
+  titular_cuil?: string;
   titular_birth_date: string;
   titular_address: string;
   titular_locality: string;
@@ -38,6 +39,38 @@ export class AdhesionRepository {
    * Envía una solicitud de adhesión de forma pública (para el formulario QR)
    */
   async submitApplication(data: AdhesionRequest): Promise<void> {
+    // Pre-insert duplicate check (DNI + CUIL) against affiliates, family members
+    // and pending requests, for the titular and every family member.
+    const checkResponse = await fetch('/api/adhesion/check-duplicates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        titularDni: data.titular_dni,
+        titularCuil: data.titular_cuil,
+        family: (data.family_members || []).map((member: any) => ({
+          dni: member.dni,
+          cuil: member.cuil,
+          name: member.name
+        }))
+      })
+    });
+
+    const checkResult = await checkResponse.json().catch(() => ({}));
+
+    if (!checkResult.ok) {
+      const conflictMessages = (checkResult.conflicts || [])
+        .filter((conflict: any) => conflict.message)
+        .map((conflict: any) => {
+          const who = conflict.person === 'titular' ? 'Titular' : `Familiar ${conflict.name || ''}`.trim();
+          return `${who}: ${conflict.message}`;
+        });
+      throw new Error(
+        conflictMessages.length > 0
+          ? conflictMessages.join(' ')
+          : 'Ya existe una solicitud con datos duplicados.'
+      );
+    }
+
     // Validate promoter_id against active producers to prevent orphan records (B-3)
     if (data.promoter_id && data.promoter_id.trim() !== '') {
       const { data: producer, error: producerErr } = await supabase
@@ -62,6 +95,7 @@ export class AdhesionRepository {
         titular_first_name: data.titular_first_name || null,
         titular_last_name: data.titular_last_name || null,
         titular_dni: data.titular_dni,
+        titular_cuil: data.titular_cuil || null,
         titular_birth_date: data.titular_birth_date,
         titular_address: data.titular_address,
         titular_locality: data.titular_locality,
