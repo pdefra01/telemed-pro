@@ -199,34 +199,38 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <button
               type="button"
               onClick={() => handleRoleChange('patient')}
-              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'patient' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              aria-label="Pacientes"
+              className={`flex-1 flex items-center justify-center py-2 px-1 sm:px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'patient' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <UserCircle size={16} className="mr-1.5 shrink-0" /> Pacientes
+              <UserCircle size={16} className="shrink-0" aria-hidden="true" /> <span className="hidden sm:inline ml-1.5">Pacientes</span>
             </button>
             <button
               type="button"
               onClick={() => handleRoleChange('doctor')}
-              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'doctor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              aria-label="Médicos"
+              className={`flex-1 flex items-center justify-center py-2 px-1 sm:px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'doctor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <Stethoscope size={16} className="mr-1.5 shrink-0" /> Médicos
+              <Stethoscope size={16} className="shrink-0" aria-hidden="true" /> <span className="hidden sm:inline ml-1.5">Médicos</span>
             </button>
             <button
               type="button"
               onClick={() => handleRoleChange('admin')}
-              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'admin' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              aria-label="Admin"
+              className={`flex-1 flex items-center justify-center py-2 px-1 sm:px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'admin' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <Building size={16} className="mr-1.5 shrink-0" /> Admin
+              <Building size={16} className="shrink-0" aria-hidden="true" /> <span className="hidden sm:inline ml-1.5">Admin</span>
             </button>
             <button
               type="button"
               onClick={() => handleRoleChange('advisor')}
-              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'advisor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              aria-label="Asesores"
+              className={`flex-1 flex items-center justify-center py-2 px-1 sm:px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'advisor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <Briefcase size={16} className="mr-1.5 shrink-0" /> Asesores
+              <Briefcase size={16} className="shrink-0" aria-hidden="true" /> <span className="hidden sm:inline ml-1.5">Asesores</span>
             </button>
           </div>
 
