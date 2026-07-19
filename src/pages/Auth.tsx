@@ -195,38 +195,38 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           </div>
 
           {/* Role Tabs */}
-          <div className="flex p-1 bg-gray-100 rounded-xl mb-8 self-center w-full max-w-md">
+          <div className="flex p-1 bg-gray-100 rounded-xl mb-8 self-center w-full max-w-lg">
             <button
               type="button"
               onClick={() => handleRoleChange('patient')}
-              className={`flex-1 flex items-center justify-center py-2 px-4 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'patient' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'patient' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <UserCircle size={18} className="mr-2" /> Pacientes
+              <UserCircle size={16} className="mr-1.5 shrink-0" /> Pacientes
             </button>
             <button
               type="button"
               onClick={() => handleRoleChange('doctor')}
-              className={`flex-1 flex items-center justify-center py-2 px-4 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'doctor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'doctor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <Stethoscope size={18} className="mr-2" /> Médicos
+              <Stethoscope size={16} className="mr-1.5 shrink-0" /> Médicos
             </button>
             <button
               type="button"
               onClick={() => handleRoleChange('admin')}
-              className={`flex-1 flex items-center justify-center py-2 px-4 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'admin' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'admin' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <Building size={18} className="mr-2" /> Admin
+              <Building size={16} className="mr-1.5 shrink-0" /> Admin
             </button>
             <button
               type="button"
               onClick={() => handleRoleChange('advisor')}
-              className={`flex-1 flex items-center justify-center py-2 px-4 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'advisor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-lg text-sm font-semibold transition-all duration-200 ${role === 'advisor' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <Briefcase size={18} className="mr-2" /> Asesores
+              <Briefcase size={16} className="mr-1.5 shrink-0" /> Asesores
             </button>
           </div>
 
