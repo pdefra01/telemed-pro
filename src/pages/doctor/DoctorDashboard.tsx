@@ -12,7 +12,7 @@ import { notificationRepository, Notification } from '../../repositories/Notific
 import { doctorShiftRepository } from '../../repositories/DoctorShiftRepository';
 import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, Download, ExternalLink, History, FolderOpen, Pill } from 'lucide-react';
-import { supabase, supabaseUrl, supabaseAnonKey } from '../../services/supabase';
+import { supabase } from '../../services/supabase';
 
 interface Props {
     user: Doctor;
@@ -154,59 +154,6 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             setIsShiftLoading(false);
         }
     };
-
-    // Best-effort clock-out on tab close/hide. Not the correctness guarantee —
-    // the 8h abandoned-shift fallback in DoctorShiftRepository is the deterministic
-    // backstop. sendBeacon is NOT used here because it cannot set the apikey/
-    // Authorization headers Supabase REST + RLS require.
-    useEffect(() => {
-        if (!activeShift) return;
-
-        const fireBestEffortClockOut = () => {
-            const shift = activeShift;
-            supabase.auth.getSession().then(({ data: { session } }) => {
-                if (!session?.access_token) return;
-
-                const now = new Date();
-                const clockInDate = new Date(shift.clockIn);
-                const durationMinutes = Math.max(1, Math.round((now.getTime() - clockInDate.getTime()) / (1000 * 60)));
-
-                fetch(`${supabaseUrl}/rest/v1/doctor_work_shifts?id=eq.${shift.id}`, {
-                    method: 'PATCH',
-                    keepalive: true,
-                    headers: {
-                        apikey: supabaseAnonKey,
-                        Authorization: `Bearer ${session.access_token}`,
-                        'Content-Type': 'application/json',
-                        Prefer: 'return=minimal',
-                    },
-                    body: JSON.stringify({
-                        clock_out: now.toISOString(),
-                        duration_minutes: durationMinutes,
-                        status: 'completed',
-                    }),
-                }).catch(() => {
-                    // Best-effort only: any failure here is silently absorbed.
-                });
-            }).catch(() => {
-                // Best-effort only: any failure here is silently absorbed.
-            });
-        };
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'hidden') {
-                fireBestEffortClockOut();
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('pagehide', fireBestEffortClockOut);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('pagehide', fireBestEffortClockOut);
-        };
-    }, [activeShift]);
 
     const [kpiTimeframe, setKpiTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
     const [dynamicKPIs, setDynamicKPIs] = useState<{
