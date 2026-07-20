@@ -264,13 +264,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <div className="mb-4">
                 <Input
                   label={role === 'patient'
-                    ? 'DNI, Celular o Correo Electrónico'
+                    ? 'Celular N°'
                     : 'Correo Electrónico'
                   }
                   type={role === 'patient' ? 'text' : 'text'}
                   placeholder={
                     role === 'patient'
-                      ? 'Ej: 32111222 o juan@gmail.com'
+                      ? 'Ej: 3876123899'
                       : 'nombre@ejemplo.com'
                   }
                   value={inputValue}
@@ -342,7 +342,21 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </Button>
             </form>
 
-            {(role === 'patient' || role === 'admin') && (
+            {role === 'patient' && (
+              <div className="mt-8 text-center animate-fade-in">
+                <p className="text-gray-600">
+                  ¿Sos nuevo?
+                  <a
+                    href="#/adhesion?promoter=LANDING"
+                    className="ml-2 text-teal-600 font-bold hover:underline"
+                  >
+                    Adherite al servicio
+                  </a>
+                </p>
+              </div>
+            )}
+
+            {role === 'admin' && (
               <div className="mt-8 text-center animate-fade-in">
                 <p className="text-gray-600">
                   {isRegistering ? '¿Ya tenés cuenta?' : '¿Sos nuevo?'}
