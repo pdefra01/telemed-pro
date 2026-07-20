@@ -412,17 +412,17 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             {/* Metrics HUD */}
             <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
                 {/* Consultas Pendientes Card */}
-                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-amber-500/20 transition-all duration-700 overflow-hidden">
-                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"></div>
-                    <div className="flex justify-between items-start mb-6">
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-4 rounded-[1.25rem] border border-white/5 relative group hover:border-amber-500/20 transition-all duration-700 overflow-hidden">
+                    <div className="absolute -right-3 -top-3 w-16 h-16 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"></div>
+                    <div className="flex justify-between items-start mb-3">
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Consultas Pendientes</p>
-                        <Clock className="text-amber-500/60 group-hover:rotate-12 transition-transform" size={20} />
+                        <Clock className="text-amber-500/60 group-hover:rotate-12 transition-transform" size={14} />
                     </div>
                     <div className="flex items-baseline gap-3">
-                        <h3 className="text-5xl font-bold text-white tracking-tighter group-hover:scale-105 transition-transform origin-left duration-700">{dynamicKPIs.pendingConsultations}</h3>
+                        <h3 className="text-2xl font-bold text-white tracking-tighter group-hover:scale-105 transition-transform origin-left duration-700">{dynamicKPIs.pendingConsultations}</h3>
                         <span className="text-xs font-bold text-amber-400 tracking-wider uppercase">En Cola</span>
                     </div>
-                    <div className="mt-8 flex items-center gap-3">
+                    <div className="mt-4 flex items-center gap-3">
                          <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
                             <div className="bg-amber-500 h-full w-[100%] rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>
                          </div>
@@ -430,42 +430,42 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 </div>
 
                 {/* Consultas Efectivas Card */}
-                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-emerald-500/20 transition-all duration-700 overflow-hidden">
-                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
-                    <div className="flex justify-between items-start mb-6">
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-4 rounded-[1.25rem] border border-white/5 relative group hover:border-emerald-500/20 transition-all duration-700 overflow-hidden">
+                    <div className="absolute -right-3 -top-3 w-16 h-16 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
+                    <div className="flex justify-between items-start mb-3">
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Consultas Efectivas</p>
-                        <CheckCircle className="text-emerald-500/60" size={20} />
+                        <CheckCircle className="text-emerald-500/60" size={14} />
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <h3 className="text-5xl font-bold text-white tracking-tighter">{dynamicKPIs.effectiveConsultations}</h3>
+                        <h3 className="text-2xl font-bold text-white tracking-tighter">{dynamicKPIs.effectiveConsultations}</h3>
                         <span className="text-xs font-bold text-emerald-400 tracking-wider uppercase">Completadas</span>
                     </div>
-                    <div className="mt-8 flex items-center justify-between">
+                    <div className="mt-4 flex items-center justify-between">
                         <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Atenciones Exitosas</span>
                         <span className="text-[10px] font-bold text-emerald-400">100% Registro</span>
                     </div>
                 </div>
 
                 {/* Tiempo Promedio de Sesión Card (Con Selector Diaria / Semanal / Mensual) */}
-                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-blue-500/20 transition-all duration-700 overflow-hidden md:col-span-2 lg:col-span-1">
-                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
-                    <div className="flex justify-between items-start mb-4">
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-4 rounded-[1.25rem] border border-white/5 relative group hover:border-blue-500/20 transition-all duration-700 overflow-hidden md:col-span-2 lg:col-span-1">
+                    <div className="absolute -right-3 -top-3 w-16 h-16 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
+                    <div className="flex justify-between items-start mb-2">
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Promedio Sesión</p>
-                        <Activity className="text-blue-500/60" size={20} />
+                        <Activity className="text-blue-500/60" size={14} />
                     </div>
-                    <div className="flex items-baseline gap-2 mb-4">
-                        <h3 className="text-5xl font-bold text-white tracking-tighter">
+                    <div className="flex items-baseline gap-2 mb-2">
+                        <h3 className="text-2xl font-bold text-white tracking-tighter">
                             {dynamicKPIs.effectiveConsultations > 0
-                                ? <>{dynamicKPIs.avgSessionMinutes} <span className="text-xl font-normal text-slate-400">min</span></>
+                                ? <>{dynamicKPIs.avgSessionMinutes} <span className="text-base font-normal text-slate-400">min</span></>
                                 : '—'}
                         </h3>
                     </div>
-                    
+
                     {/* Botonera de Selector Rango Temporal */}
                     <div className="flex p-1 bg-slate-950/60 rounded-xl border border-white/5 gap-1">
                         <button
                             onClick={() => setKpiTimeframe('daily')}
-                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                            className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
                                 kpiTimeframe === 'daily' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
                             }`}
                         >
@@ -473,7 +473,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                         </button>
                         <button
                             onClick={() => setKpiTimeframe('weekly')}
-                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                            className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
                                 kpiTimeframe === 'weekly' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
                             }`}
                         >
@@ -481,7 +481,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                         </button>
                         <button
                             onClick={() => setKpiTimeframe('monthly')}
-                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                            className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
                                 kpiTimeframe === 'monthly' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
                             }`}
                         >
