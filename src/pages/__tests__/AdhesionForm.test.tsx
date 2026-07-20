@@ -38,16 +38,13 @@ const fillTitularStep1 = (options?: { skipCuil?: boolean; cuilValue?: string }) 
   fireEvent.change(screen.getByPlaceholderText('3416123456'), { target: { value: '3416123456' } });
 };
 
-/** Drives the wizard from Step 1 through email verification into Step 5, ready to submit. */
+/**
+ * Drives the wizard from Step 1 into Step 5, ready to submit. Email OTP
+ * verification is currently suspended (EMAIL_VERIFICATION_REQUIRED = false
+ * in AdhesionForm.tsx), so Step 1 advances without it.
+ */
 const advanceToSignatureStep = async () => {
   fillTitularStep1();
-
-  fireEvent.click(screen.getByRole('button', { name: /Validar Correo/i }));
-  await waitFor(() => expect(screen.getByPlaceholderText('Ej: 123456')).toBeInTheDocument());
-
-  fireEvent.change(screen.getByPlaceholderText('Ej: 123456'), { target: { value: '123456' } });
-  fireEvent.click(screen.getByRole('button', { name: /Confirmar/i }));
-  await waitFor(() => expect(screen.getByText(/Verificado/i)).toBeInTheDocument());
 
   fireEvent.click(screen.getByRole('button', { name: /Siguiente/i })); // -> Step 2
   fireEvent.click(screen.getByRole('button', { name: /Siguiente/i })); // -> Step 3

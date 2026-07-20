@@ -8,6 +8,10 @@ import { useToast } from '../context/ToastContext';
 import { adhesionRepository, AdhesionRequest } from '../repositories/AdhesionRepository';
 import logoMedinex from '../logo_medinex.jpeg';
 
+// Toggle to suspend email OTP verification without removing the feature.
+// Mirrored by EMAIL_VERIFICATION_REQUIRED in server.js — flip both together.
+const EMAIL_VERIFICATION_REQUIRED = false;
+
 // Glass Container for Step Card
 const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl ${className}`}>
@@ -309,7 +313,7 @@ export const AdhesionForm: React.FC = () => {
         toast("Ingresá un correo electrónico válido", "warning");
         return;
       }
-      if (!isEmailVerified) {
+      if (EMAIL_VERIFICATION_REQUIRED && !isEmailVerified) {
         toast("Por favor verificá tu correo electrónico antes de avanzar", "warning");
         return;
       }
@@ -361,7 +365,7 @@ export const AdhesionForm: React.FC = () => {
         consent_promotions: consents.promotions,
         signature_base64,
         promoter_id: promoterCode,
-        email_verified: isEmailVerified
+        email_verified: EMAIL_VERIFICATION_REQUIRED ? isEmailVerified : true
       };
 
       await adhesionRepository.submitApplication(payload);
@@ -547,27 +551,29 @@ export const AdhesionForm: React.FC = () => {
                     disabled={isEmailVerified || otpSent}
                     required
                   />
-                  {isEmailVerified ? (
-                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm bg-emerald-500/10 px-4 py-2.5 rounded-2xl border border-emerald-500/20">
-                      <CheckCircle2 size={16} />
-                      Verificado
-                    </div>
-                  ) : (
-                    !otpSent && (
-                      <button
-                        type="button"
-                        onClick={sendEmailOtp}
-                        disabled={isSendingOtp || !titular.email.includes('@')}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 px-6 rounded-2xl transition-all text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
-                      >
-                        {isSendingOtp && <Loader2 size={16} className="animate-spin" />}
-                        Validar Correo
-                      </button>
+                  {EMAIL_VERIFICATION_REQUIRED && (
+                    isEmailVerified ? (
+                      <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm bg-emerald-500/10 px-4 py-2.5 rounded-2xl border border-emerald-500/20">
+                        <CheckCircle2 size={16} />
+                        Verificado
+                      </div>
+                    ) : (
+                      !otpSent && (
+                        <button
+                          type="button"
+                          onClick={sendEmailOtp}
+                          disabled={isSendingOtp || !titular.email.includes('@')}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 px-6 rounded-2xl transition-all text-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                        >
+                          {isSendingOtp && <Loader2 size={16} className="animate-spin" />}
+                          Validar Correo
+                        </button>
+                      )
                     )
                   )}
                 </div>
 
-                {otpSent && !isEmailVerified && (
+                {EMAIL_VERIFICATION_REQUIRED && otpSent && !isEmailVerified && (
                   <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-2xl animate-in slide-in-from-top duration-300">
                     <label className="block text-slate-300 text-xs font-semibold mb-2">Ingresá el código de 6 dígitos enviado:</label>
                     <div className="flex gap-4">

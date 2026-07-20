@@ -19,6 +19,10 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 
+// Toggle to suspend email OTP verification without removing the feature.
+// Mirrored by EMAIL_VERIFICATION_REQUIRED in src/pages/AdhesionForm.tsx — flip both together.
+const EMAIL_VERIFICATION_REQUIRED = false;
+
 // Health check endpoint for Coolify
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime() });
@@ -779,7 +783,7 @@ app.post('/api/approve-adhesion', async (req, res) => {
     }
 
     // Validar que el email de la solicitud esté verificado
-    if (!request.email_verified) {
+    if (EMAIL_VERIFICATION_REQUIRED && !request.email_verified) {
       return res.status(400).json({ error: 'No se puede aprobar una solicitud que no tiene el correo electrónico verificado.' });
     }
 
