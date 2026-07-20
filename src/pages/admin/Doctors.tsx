@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { doctorRepository } from '../../repositories/DoctorRepository';
+import { supabase } from '../../services/supabase';
 import { Doctor } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 
@@ -20,6 +21,7 @@ const GlassTableContainer: React.FC<{ children: React.ReactNode }> = ({ children
 const Doctors: React.FC = () => {
   const { toast } = useToast();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [appointmentsToday, setAppointmentsToday] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -46,7 +48,23 @@ const Doctors: React.FC = () => {
 
   useEffect(() => {
     loadDoctors();
+    loadAppointmentsToday();
   }, []);
+
+  const loadAppointmentsToday = async () => {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { count } = await supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .gte('scheduled_at', startOfDay.toISOString())
+      .lte('scheduled_at', endOfDay.toISOString());
+
+    setAppointmentsToday(count || 0);
+  };
 
   const loadDoctors = async () => {
     try {
@@ -184,7 +202,7 @@ const Doctors: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Atenciones Hoy</p>
-            <h4 className="text-xl font-bold text-white">124</h4>
+            <h4 className="text-xl font-bold text-white">{appointmentsToday}</h4>
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 p-5 rounded-3xl flex items-center space-x-4 transition-all hover:border-amber-500/30">
@@ -193,7 +211,7 @@ const Doctors: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Satisfacción Media</p>
-            <h4 className="text-xl font-bold text-white">4.9/5.0</h4>
+            <h4 className="text-xl font-bold text-white">—</h4>
           </div>
         </div>
       </div>
