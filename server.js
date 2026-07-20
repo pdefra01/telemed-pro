@@ -812,6 +812,20 @@ app.post('/api/approve-adhesion', async (req, res) => {
 
     const userId = authData.user.id;
 
+    // 2b. Resolver promoter_id (código de texto, ej. "LANDING") al UUID real
+    // del productor, para poblar profiles.producer_id — sin esto, "Afiliados
+    // Traídos" en Asesores Comerciales queda siempre en 0 aunque la solicitud
+    // tenga el código bien guardado.
+    let resolvedProducerId = null;
+    if (request.promoter_id && request.promoter_id.trim() !== '') {
+      const { data: producer } = await supabaseAdmin
+        .from('producers')
+        .select('id')
+        .eq('producer_code', request.promoter_id.trim().toUpperCase())
+        .maybeSingle();
+      resolvedProducerId = producer?.id || null;
+    }
+
     // 3. Actualizar perfil del Paciente en public.profiles (que se autogeneró por trigger)
     console.log(`[approve-adhesion] Actualizando perfil del titular: ${userId}`);
     const { error: profileError } = await supabaseAdmin
@@ -828,7 +842,8 @@ app.post('/api/approve-adhesion', async (req, res) => {
         plan_name: request.plan_type || 'Plan Familiar',
         plan_status: 'active',
         payment_status: 'paid',
-        is_active: true
+        is_active: true,
+        producer_id: resolvedProducerId
       })
       .eq('id', userId);
 

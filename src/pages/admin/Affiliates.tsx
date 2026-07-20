@@ -39,6 +39,7 @@ const Affiliates: React.FC = () => {
   const [requests, setRequests] = useState<AdhesionRequest[]>([]);
   const [isRequestsLoading, setIsRequestsLoading] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<AdhesionRequest | null>(null);
+  const [promoterFilter, setPromoterFilter] = useState<string>('all');
 
   useEffect(() => {
     loadAffiliates();
@@ -169,6 +170,14 @@ const Affiliates: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  const promoterOptions = Array.from(
+    new Set(requests.map(r => r.promoter_id?.trim().toUpperCase() || 'SIN_PROMOTOR'))
+  ).sort();
+
+  const filteredRequests = promoterFilter === 'all'
+    ? requests
+    : requests.filter(r => (r.promoter_id?.trim().toUpperCase() || 'SIN_PROMOTOR') === promoterFilter);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -366,6 +375,23 @@ const Affiliates: React.FC = () => {
           </div>
         </GlassTableContainer>
       ) : (
+        <>
+          <div className="flex items-center gap-3 mb-4">
+            <Award size={16} className="text-slate-500" />
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Promotor:</label>
+            <select
+              value={promoterFilter}
+              onChange={(e) => setPromoterFilter(e.target.value)}
+              className="bg-slate-900/80 border border-white/10 text-white rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-emerald-500/50"
+            >
+              <option value="all">Todos ({requests.length})</option>
+              {promoterOptions.map(code => (
+                <option key={code} value={code}>
+                  {code === 'SIN_PROMOTOR' ? 'Sin promotor' : code} ({requests.filter(r => (r.promoter_id?.trim().toUpperCase() || 'SIN_PROMOTOR') === code).length})
+                </option>
+              ))}
+            </select>
+          </div>
         <GlassTableContainer>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -374,20 +400,21 @@ const Affiliates: React.FC = () => {
                   <th className="px-8 py-5">Titular</th>
                   <th className="px-6 py-5">DNI / Contacto</th>
                   <th className="px-6 py-5">Plan Solicitado</th>
+                  <th className="px-6 py-5">Promotor</th>
                   <th className="px-6 py-5">Fecha</th>
                   <th className="px-8 py-5 text-right">Gestión</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {isRequestsLoading ? (
-                  <tr><td colSpan={5} className="px-8 py-20 text-center text-slate-500 italic animate-pulse">Sincronizando solicitudes del QR...</td></tr>
-                ) : requests.length === 0 ? (
-                  <tr><td colSpan={5} className="px-8 py-20 text-center text-slate-500 italic">No hay solicitudes de adhesión pendientes en este momento.</td></tr>
-                ) : requests.map((req) => (
+                  <tr><td colSpan={6} className="px-8 py-20 text-center text-slate-500 italic animate-pulse">Sincronizando solicitudes del QR...</td></tr>
+                ) : filteredRequests.length === 0 ? (
+                  <tr><td colSpan={6} className="px-8 py-20 text-center text-slate-500 italic">No hay solicitudes de adhesión que coincidan con este filtro.</td></tr>
+                ) : filteredRequests.map((req) => (
                   <tr key={req.id} className="group hover:bg-white/5 transition-all duration-200">
                     <td className="px-8 py-5">
                       <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
-                        {req.titular_last_name && req.titular_first_name 
+                        {req.titular_last_name && req.titular_first_name
                           ? `${req.titular_last_name}, ${req.titular_first_name}`
                           : req.titular_name}
                       </div>
@@ -413,6 +440,15 @@ const Affiliates: React.FC = () => {
                         {req.plan_type}
                       </span>
                     </td>
+                    <td className="px-6 py-5">
+                      {req.promoter_id ? (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest bg-teal-500/10 text-teal-400 border border-teal-500/20 font-mono">
+                          {req.promoter_id}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-600 italic">Sin promotor</span>
+                      )}
+                    </td>
                     <td className="px-6 py-5 text-slate-400 text-xs font-semibold">
                       {req.created_at ? new Date(req.created_at).toLocaleDateString() : '-'}
                     </td>
@@ -430,6 +466,7 @@ const Affiliates: React.FC = () => {
             </table>
           </div>
         </GlassTableContainer>
+        </>
       )}
 
       {/* Premium Modal ABM */}
