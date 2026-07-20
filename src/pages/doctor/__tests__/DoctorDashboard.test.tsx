@@ -1,5 +1,5 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import DoctorDashboard from '../DoctorDashboard';
 import { appointmentRepository } from '../../../repositories/AppointmentRepository';
@@ -8,7 +8,9 @@ import { prescriptionRepository } from '../../../repositories/PrescriptionReposi
 import { dashboardRepository } from '../../../repositories/DashboardRepository';
 import { notificationRepository } from '../../../repositories/NotificationRepository';
 import { medicalDocumentRepository } from '../../../repositories/MedicalDocumentRepository';
-import { Doctor, Appointment, MedicalRecord, Prescription } from '../../../types';
+import { doctorShiftRepository } from '../../../repositories/DoctorShiftRepository';
+import { supabase } from '../../../services/supabase';
+import { Doctor, Appointment, MedicalRecord, Prescription, DoctorWorkShift } from '../../../types';
 
 // Mock dependencies
 vi.mock('../../../repositories/AppointmentRepository', () => ({
@@ -45,6 +47,14 @@ vi.mock('../../../repositories/NotificationRepository', () => ({
 vi.mock('../../../repositories/MedicalDocumentRepository', () => ({
   medicalDocumentRepository: {
     getDocumentsByPatientId: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+vi.mock('../../../repositories/DoctorShiftRepository', () => ({
+  doctorShiftRepository: {
+    getActiveShift: vi.fn().mockResolvedValue(null),
+    clockIn: vi.fn(),
+    clockOut: vi.fn(),
   },
 }));
 
@@ -193,5 +203,116 @@ describe('DoctorDashboard - Consultation History', () => {
 
     expect(screen.getByText(/Sin diagnóstico registrado en este nodo/i)).toBeInTheDocument();
     expect(screen.getByText(/Sin prescripciones en este registro/i)).toBeInTheDocument();
+  });
+});
+
+describe('DoctorDashboard - Best-Effort Clock-Out on Tab Close', () => {
+  const mockShift: DoctorWorkShift = {
+    id: 'shift-1',
+    doctorId: 'doc1',
+    clockIn: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    status: 'active',
+    officeName: 'Sede Central',
+  };
+
+  const renderComponent = () => {
+    render(
+      <MemoryRouter>
+        <DoctorDashboard user={mockDoctor} />
+      </MemoryRouter>
+    );
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(appointmentRepository.getDoctorAppointments).mockResolvedValue([]);
+    vi.mocked(doctorShiftRepository.getActiveShift).mockResolvedValue(null);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+    vi.spyOn(supabase.auth, 'getSession').mockResolvedValue({
+      data: { session: { access_token: 'test-access-token' } },
+    } as any);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  });
+
+  it('fires a keepalive PATCH fetch to the doctor_work_shifts REST endpoint on visibilitychange(hidden) when a shift is active', async () => {
+    vi.mocked(doctorShiftRepository.getActiveShift).mockResolvedValue(mockShift);
+
+    renderComponent();
+
+    // Wait for the active shift to be loaded into state
+    await screen.findByText('Fichar Salida');
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+
+    const [url, options] = (global.fetch as any).mock.calls[0];
+    expect(url).toContain('/rest/v1/doctor_work_shifts');
+    expect(url).toContain('id=eq.shift-1');
+    expect(options).toMatchObject({
+      method: 'PATCH',
+      keepalive: true,
+    });
+    expect(options.headers).toMatchObject({
+      apikey: expect.any(String),
+      Authorization: 'Bearer test-access-token',
+    });
+
+    const body = JSON.parse(options.body);
+    expect(body.status).toBe('completed');
+  });
+
+  it('fires a keepalive PATCH fetch on pagehide when a shift is active', async () => {
+    vi.mocked(doctorShiftRepository.getActiveShift).mockResolvedValue(mockShift);
+
+    renderComponent();
+
+    await screen.findByText('Fichar Salida');
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+
+    const [, options] = (global.fetch as any).mock.calls[0];
+    expect(options).toMatchObject({ method: 'PATCH', keepalive: true });
+  });
+
+  it('does NOT fire a fetch on visibilitychange(hidden) when there is no active shift', async () => {
+    vi.mocked(doctorShiftRepository.getActiveShift).mockResolvedValue(null);
+
+    renderComponent();
+
+    await screen.findByText('Fichar Entrada');
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    // Give any pending microtasks a chance to run
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fire a fetch on pagehide when there is no active shift', async () => {
+    vi.mocked(doctorShiftRepository.getActiveShift).mockResolvedValue(null);
+
+    renderComponent();
+
+    await screen.findByText('Fichar Entrada');
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
