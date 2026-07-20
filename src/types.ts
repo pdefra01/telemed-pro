@@ -429,6 +429,9 @@ export interface Producer {
   producerCode: string;
   email: string;
   phone?: string;
+  dni?: string;
+  address?: string;
+  hasAccount?: boolean;
   commissionRate: number;
   status: 'active' | 'inactive';
   createdAt?: string;

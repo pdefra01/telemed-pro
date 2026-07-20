@@ -4,7 +4,7 @@ import { producerRepository } from '../../repositories/ProducerRepository';
 import { supabase } from '../../services/supabase';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 import {
-  Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp, Key
+  Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp, Key, Pencil
 } from 'lucide-react';
 
 export const ProducersAdmin: React.FC = () => {
@@ -26,6 +26,16 @@ export const ProducersAdmin: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [toastMsg, setToastMsg] = useState<string>('');
   const [resetPasswordProducer, setResetPasswordProducer] = useState<Producer | null>(null);
+
+  // Edit form state
+  const [editingProducer, setEditingProducer] = useState<Producer | null>(null);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDni, setEditDni] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false);
 
   useEffect(() => {
     loadProducers();
@@ -95,7 +105,41 @@ export const ProducersAdmin: React.FC = () => {
     }
   };
 
-  const filteredProducers = producers.filter(p => 
+  const handleOpenEdit = (p: Producer) => {
+    const [first, ...rest] = p.name.split(' ');
+    setEditFirstName(first || '');
+    setEditLastName(rest.join(' '));
+    setEditEmail(p.email);
+    setEditPhone(p.phone || '');
+    setEditDni(p.dni || '');
+    setEditAddress(p.address || '');
+    setEditingProducer(p);
+  };
+
+  const handleUpdateProducer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProducer) return;
+    setIsSubmittingEdit(true);
+    try {
+      await producerRepository.updateProducer(editingProducer.id, {
+        firstName: editFirstName,
+        lastName: editLastName,
+        email: editEmail,
+        phone: editPhone,
+        dni: editDni,
+        address: editAddress,
+      });
+      setToastMsg("Datos del asesor actualizados con éxito.");
+      setEditingProducer(null);
+      await loadProducers();
+    } catch (err: any) {
+      alert(err.message || "Error al actualizar el asesor.");
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
+
+  const filteredProducers = producers.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.producerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -179,13 +223,24 @@ export const ProducersAdmin: React.FC = () => {
                   <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[10px] font-bold uppercase border border-emerald-500/20">
                     {p.status}
                   </span>
-                  <button
-                    onClick={() => setResetPasswordProducer(p)}
-                    className="p-1.5 bg-white/5 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors border border-white/5"
-                    title="Restablecer Contraseña"
-                  >
-                    <Key size={14} />
-                  </button>
+                  {p.hasAccount && (
+                    <>
+                      <button
+                        onClick={() => handleOpenEdit(p)}
+                        className="p-1.5 bg-white/5 hover:bg-teal-500/20 text-teal-400 rounded-xl transition-colors border border-white/5"
+                        title="Editar Datos"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => setResetPasswordProducer(p)}
+                        className="p-1.5 bg-white/5 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors border border-white/5"
+                        title="Restablecer Contraseña"
+                      >
+                        <Key size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -246,6 +301,50 @@ export const ProducersAdmin: React.FC = () => {
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 bg-white/5 text-slate-400 rounded-xl text-xs font-bold">Cancelar</button>
                 <button type="submit" disabled={isSubmitting} className="px-6 py-3 bg-teal-500 text-slate-950 rounded-xl text-xs font-bold">{isSubmitting ? 'Guardando...' : 'Guardar Productor'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Asesor */}
+      {editingProducer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#0f172a] border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl relative space-y-6">
+            <h3 className="text-xl font-bold text-white">Editar Asesor: {editingProducer.name}</h3>
+            <form onSubmit={handleUpdateProducer} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Nombre:</label>
+                  <input type="text" required value={editFirstName} onChange={e => setEditFirstName(e.target.value)} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Apellido:</label>
+                  <input type="text" required value={editLastName} onChange={e => setEditLastName(e.target.value)} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">N° DNI:</label>
+                  <input type="text" required value={editDni} onChange={e => setEditDni(e.target.value.replace(/\D/g, ''))} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">N° Celular:</label>
+                  <input type="tel" required value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Correo Personal:</label>
+                <input type="email" required value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Domicilio Particular:</label>
+                <input type="text" required value={editAddress} onChange={e => setEditAddress(e.target.value)} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setEditingProducer(null)} className="px-6 py-3 bg-white/5 text-slate-400 rounded-xl text-xs font-bold">Cancelar</button>
+                <button type="submit" disabled={isSubmittingEdit} className="px-6 py-3 bg-teal-500 text-slate-950 rounded-xl text-xs font-bold">{isSubmittingEdit ? 'Guardando...' : 'Guardar Cambios'}</button>
               </div>
             </form>
           </div>
