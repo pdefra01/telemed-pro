@@ -54,6 +54,51 @@ if (supabaseUrl && serviceRoleKey) {
   console.warn("⚠️ WARNING: Missing SUPABASE_SERVICE_ROLE_KEY. Staff creation endpoint will fail.");
 }
 
+/**
+ * Middleware para validar autenticación JWT de Supabase
+ */
+const requireAuth = async (req, res, next) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token de autorización requerido.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: 'Token de autenticación inválido o expirado.' });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error('[requireAuth] Authentication error:', err.message);
+    return res.status(401).json({ error: 'Fallo de autenticación.' });
+  }
+};
+
+/**
+ * Middleware para exigir rol admin. Debe usarse después de requireAuth
+ * (depende de req.user).
+ */
+const requireAdmin = async (req, res, next) => {
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', req.user.id)
+    .single();
+
+  const role = profile?.role || req.user.user_metadata?.role;
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
+  }
+  next();
+};
+
 // Rechazar métodos distintos a POST explícitamente
 app.all('/api/livekit-token', (req, res, next) => {
   if (req.method !== 'POST') {
@@ -318,7 +363,7 @@ app.post('/api/create-patient-bulk', async (req, res) => {
  * POST /api/reset-user-password
  * Restablece la contraseña de cualquier usuario (médico o paciente) en Supabase Auth de forma administrativa.
  */
-app.post('/api/reset-user-password', async (req, res) => {
+app.post('/api/reset-user-password', requireAuth, requireAdmin, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(503).json({ error: 'Servicio de administración no configurado.' });
   }
@@ -359,7 +404,7 @@ app.post('/api/reset-user-password', async (req, res) => {
  * — editar solo profiles.email deja al usuario sin poder loguearse con el
  * nuevo email, porque Auth nunca se entera del cambio.
  */
-app.post('/api/update-user-email', async (req, res) => {
+app.post('/api/update-user-email', requireAuth, requireAdmin, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(503).json({ error: 'Servicio de administración no configurado.' });
   }
@@ -860,33 +905,6 @@ app.post('/api/approve-adhesion', async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor.' });
   }
 });
-
-/**
- * Middleware para validar autenticación JWT de Supabase
- */
-const requireAuth = async (req, res, next) => {
-  if (!supabaseAdmin) {
-    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
-  }
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token de autorización requerido.' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !user) {
-      return res.status(401).json({ error: 'Token de autenticación inválido o expirado.' });
-    }
-    req.user = user;
-    next();
-  } catch (err) {
-    console.error('[requireAuth] Authentication error:', err.message);
-    return res.status(401).json({ error: 'Fallo de autenticación.' });
-  }
-};
 
 /**
  * GET /api/advisor/stats

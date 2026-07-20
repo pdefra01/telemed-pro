@@ -120,10 +120,12 @@ export class AuthRepository {
   }
 
   async resetPasswordFromAdmin(userId: string, newPassword: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/api/reset-user-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
       },
       body: JSON.stringify({ userId, newPassword }),
     });
@@ -140,10 +142,12 @@ export class AuthRepository {
    * email de login distinto al que ve en su ficha.
    */
   async updateEmailFromAdmin(userId: string, newEmail: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/api/update-user-email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
       },
       body: JSON.stringify({ userId, newEmail }),
     });
