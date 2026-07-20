@@ -419,7 +419,7 @@ export interface DoctorWorkShift {
   clockOut?: string;
   durationMinutes?: number;
   ipAddress?: string;
-  status: 'active' | 'completed';
+  status: 'active' | 'completed' | 'abandoned';
   officeName?: string;
 }
 
