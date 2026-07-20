@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import { Patient } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { authRepository } from './AuthRepository';
 
 export class AffiliateRepository {
   /**
@@ -185,6 +186,12 @@ export class AffiliateRepository {
     if (data.phone !== undefined) profileData.phone = data.phone;
     if (data.bloodType !== undefined) profileData.blood_type = data.bloodType || null;
     if (data.birthDate !== undefined) profileData.birth_date = data.birthDate || null;
+
+    // Sync the real Supabase Auth login email — updating profiles.email alone
+    // leaves the account unable to log in with the new address.
+    if (data.email !== undefined) {
+      await authRepository.updateEmailFromAdmin(id, data.email);
+    }
 
     const { data: result, error } = await supabase
       .from('profiles')

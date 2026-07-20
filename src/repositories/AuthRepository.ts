@@ -134,6 +134,26 @@ export class AuthRepository {
     }
   }
 
+  /**
+   * Actualiza el email de acceso (Supabase Auth) de un usuario. Necesario
+   * además de actualizar profiles.email — si no, el usuario queda con un
+   * email de login distinto al que ve en su ficha.
+   */
+  async updateEmailFromAdmin(userId: string, newEmail: string): Promise<void> {
+    const response = await fetch('/api/update-user-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId, newEmail }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al actualizar el email en el servidor.');
+    }
+  }
+
   async logout(): Promise<void> {
     await supabase.auth.signOut();
   }

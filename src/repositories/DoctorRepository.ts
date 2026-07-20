@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import { Doctor } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { authRepository } from './AuthRepository';
 
 export class DoctorRepository {
   /**
@@ -140,6 +141,12 @@ export class DoctorRepository {
     if (data.consultationFee !== undefined) profileData.consultation_fee = data.consultationFee;
     if (data.contractStartDate !== undefined) profileData.contract_start_date = data.contractStartDate || null;
     if (data.contractEndDate !== undefined) profileData.contract_end_date = data.contractEndDate || null;
+
+    // Sync the real Supabase Auth login email — updating profiles.email alone
+    // leaves the account unable to log in with the new address.
+    if (data.email !== undefined) {
+      await authRepository.updateEmailFromAdmin(id, data.email);
+    }
 
     const { data: result, error } = await supabase
       .from('profiles')

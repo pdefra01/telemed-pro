@@ -353,6 +353,43 @@ app.post('/api/reset-user-password', async (req, res) => {
 });
 
 /**
+ * POST /api/update-user-email
+ * Actualiza el email de acceso (Supabase Auth) de cualquier usuario de forma
+ * administrativa. Debe llamarse junto con la actualización de profiles.email
+ * — editar solo profiles.email deja al usuario sin poder loguearse con el
+ * nuevo email, porque Auth nunca se entera del cambio.
+ */
+app.post('/api/update-user-email', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
+  }
+
+  const { userId, newEmail } = req.body;
+
+  if (!userId || !newEmail) {
+    return res.status(400).json({ error: 'Campos requeridos: userId, newEmail.' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { email: newEmail, email_confirm: true }
+    );
+
+    if (error) {
+      console.error('[update-user-email] Supabase error:', error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.log(`[update-user-email] Email actualizado exitosamente para usuario ID: ${userId}`);
+    res.status(200).json({ message: 'Email actualizado exitosamente' });
+  } catch (err) {
+    console.error('[update-user-email] Unexpected error:', err);
+    res.status(500).json({ error: 'Error interno del servidor.' });
+  }
+});
+
+/**
  * Build a Nodemailer transporter.
  * Priority:
  *   1. SMTP_HOST env vars (production corporate account)
