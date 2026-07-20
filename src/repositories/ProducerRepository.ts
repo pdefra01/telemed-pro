@@ -84,37 +84,42 @@ export class ProducerRepository {
     phone?: string;
     dni?: string;
     address?: string;
+    producerCode?: string;
   }): Promise<Producer> {
     if (data.email !== undefined) {
       await authRepository.updateEmailFromAdmin(id, data.email);
+    }
+
+    let cleanCode: string | undefined;
+    if (data.producerCode !== undefined) {
+      cleanCode = data.producerCode.trim().toUpperCase();
+      // Check against producers.producer_code (the actual UNIQUE-constrained
+      // source of truth) rather than profiles.promoter_code — placeholder
+      // rows like "Landing Directo (sin asesor)" have a producer_code but no
+      // linked profile, so checking profiles alone misses those collisions.
+      const { data: existing } = await supabase
+        .from('producers')
+        .select('id')
+        .eq('producer_code', cleanCode)
+        .neq('id', id)
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error(`El código de promotor '${cleanCode}' ya se encuentra asignado a otro asesor.`);
+      }
     }
 
     const fullName = data.firstName !== undefined || data.lastName !== undefined
       ? `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim()
       : undefined;
 
-    const profileData: any = {};
-    if (data.firstName !== undefined) profileData.first_name = data.firstName;
-    if (data.lastName !== undefined) profileData.last_name = data.lastName;
-    if (fullName !== undefined) profileData.full_name = fullName;
-    if (data.email !== undefined) profileData.email = data.email;
-    if (data.phone !== undefined) profileData.phone = data.phone;
-    if (data.dni !== undefined) profileData.dni = data.dni;
-    if (data.address !== undefined) profileData.address = data.address;
-
-    if (Object.keys(profileData).length > 0) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(profileData)
-        .eq('id', id);
-
-      if (profileError) throw profileError;
-    }
-
+    // Write producers first: it carries the UNIQUE constraint on producer_code,
+    // so if anything still fails here, profiles is never touched.
     const producerData: any = {};
     if (fullName !== undefined) producerData.name = fullName;
     if (data.email !== undefined) producerData.email = data.email;
     if (data.phone !== undefined) producerData.phone = data.phone;
+    if (cleanCode !== undefined) producerData.producer_code = cleanCode;
 
     const { data: result, error } = await supabase
       .from('producers')
@@ -124,6 +129,25 @@ export class ProducerRepository {
       .single();
 
     if (error) throw error;
+
+    const profileData: any = {};
+    if (data.firstName !== undefined) profileData.first_name = data.firstName;
+    if (data.lastName !== undefined) profileData.last_name = data.lastName;
+    if (fullName !== undefined) profileData.full_name = fullName;
+    if (data.email !== undefined) profileData.email = data.email;
+    if (data.phone !== undefined) profileData.phone = data.phone;
+    if (data.dni !== undefined) profileData.dni = data.dni;
+    if (data.address !== undefined) profileData.address = data.address;
+    if (cleanCode !== undefined) profileData.promoter_code = cleanCode;
+
+    if (Object.keys(profileData).length > 0) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update(profileData)
+        .eq('id', id);
+
+      if (profileError) throw profileError;
+    }
 
     return {
       id: result.id,

@@ -35,6 +35,7 @@ export const ProducersAdmin: React.FC = () => {
   const [editPhone, setEditPhone] = useState('');
   const [editDni, setEditDni] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editCode, setEditCode] = useState('');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false);
 
   useEffect(() => {
@@ -113,6 +114,7 @@ export const ProducersAdmin: React.FC = () => {
     setEditPhone(p.phone || '');
     setEditDni(p.dni || '');
     setEditAddress(p.address || '');
+    setEditCode(p.producerCode);
     setEditingProducer(p);
   };
 
@@ -128,6 +130,7 @@ export const ProducersAdmin: React.FC = () => {
         phone: editPhone,
         dni: editDni,
         address: editAddress,
+        producerCode: editCode,
       });
       setToastMsg("Datos del asesor actualizados con éxito.");
       setEditingProducer(null);
@@ -340,6 +343,10 @@ export const ProducersAdmin: React.FC = () => {
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Domicilio Particular:</label>
                 <input type="text" required value={editAddress} onChange={e => setEditAddress(e.target.value)} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Código Único Comercial:</label>
+                <input type="text" required value={editCode} onChange={e => setEditCode(e.target.value.toUpperCase())} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
