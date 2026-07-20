@@ -2,6 +2,8 @@ import { supabase } from '../services/supabase';
 import { DoctorWorkShift, OfficeLocation } from '../types';
 import { officeLocationRepository } from './OfficeLocationRepository';
 
+const MAX_SHIFT_HOURS = 8;
+
 export class DoctorShiftRepository {
   async getActiveShift(doctorId: string): Promise<DoctorWorkShift | null> {
     const { data, error } = await supabase
@@ -18,6 +20,22 @@ export class DoctorShiftRepository {
     }
 
     if (!data) return null;
+
+    const clockInDate = new Date(data.clock_in);
+    const shiftAgeHours = (Date.now() - clockInDate.getTime()) / (1000 * 60 * 60);
+
+    if (shiftAgeHours > MAX_SHIFT_HOURS) {
+      await supabase
+        .from('doctor_work_shifts')
+        .update({
+          status: 'abandoned',
+          clock_out: new Date().toISOString(),
+          duration_minutes: null,
+        })
+        .eq('id', data.id);
+
+      return null;
+    }
 
     return {
       id: data.id,
@@ -130,29 +148,6 @@ export class DoctorShiftRepository {
     };
   }
 
-  async getAllDoctorShifts(): Promise<any[]> {
-    const { data, error } = await supabase
-      .from('doctor_work_shifts')
-      .select('*, profiles:doctor_id(full_name, email, specialty), office_locations(name)')
-      .order('clock_in', { ascending: false });
-
-    if (error) throw error;
-
-    return (data || []).map(row => ({
-      id: row.id,
-      doctorId: row.doctor_id,
-      doctorName: row.profiles?.full_name || 'Médico',
-      doctorEmail: row.profiles?.email || '',
-      specialty: row.profiles?.specialty || 'General',
-      officeName: row.office_locations?.name || 'Oficina Registrada',
-      clockIn: row.clock_in,
-      clockOut: row.clock_out,
-      durationMinutes: row.duration_minutes,
-      ipAddress: row.ip_address,
-      status: row.status
-    }));
-  }
-
   private async autoCloseOldShifts(doctorId: string): Promise<void> {
     const { data } = await supabase
       .from('doctor_work_shifts')
@@ -165,6 +160,15 @@ export class DoctorShiftRepository {
       const updates = data.map(old => {
         const clockInDate = new Date(old.clock_in);
         const diffMs = now.getTime() - clockInDate.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        if (diffHours > MAX_SHIFT_HOURS) {
+          return supabase
+            .from('doctor_work_shifts')
+            .update({ clock_out: now.toISOString(), duration_minutes: null, status: 'abandoned' })
+            .eq('id', old.id);
+        }
+
         const durationMinutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
         return supabase
           .from('doctor_work_shifts')

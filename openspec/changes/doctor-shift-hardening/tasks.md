@@ -38,12 +38,12 @@ Chain strategy: pending
 
 ## Phase 2: Abandoned-Shift Logic (TDD)
 
-- [ ] 2.1 RED: create `src/repositories/__tests__/DoctorShiftRepository.test.ts` (new file — none exists today) mocking `supabase`; cover: `getActiveShift()` returns `null` + fires abandon-UPDATE when `clock_in` > 8h old; returns shift unchanged when within 8h; `autoCloseOldShifts()` marks >8h-old open rows `abandoned`/`duration_minutes=NULL` and <8h-old rows `completed` as today.
-- [ ] 2.2 GREEN: add `const MAX_SHIFT_HOURS = 8;` to `DoctorShiftRepository.ts`.
-- [ ] 2.3 GREEN: extend `getActiveShift()` — after fetch, if `now - clock_in > MAX_SHIFT_HOURS`, UPDATE row to `status='abandoned'`, `clock_out=now`, `duration_minutes=NULL`, return `null`.
-- [ ] 2.4 GREEN: extend `autoCloseOldShifts()` (lines 156-176) to classify by age: rows older than 8h → `abandoned`/`duration_minutes=NULL`; rows within 8h → existing `completed`/computed-duration path.
-- [ ] 2.5 Delete `getAllDoctorShifts()` (lines 133-154) — zero callers confirmed by grep in this session.
-- [ ] 2.6 Verify Phase 2 tests pass; run `npm test -- DoctorShiftRepository`.
+- [x] 2.1 RED: created `src/repositories/__tests__/DoctorShiftRepository.test.ts` (new file — none existed before). 4 tests: `getActiveShift()` auto-abandons + returns `null` when `clock_in` > 8h old (asserts UPDATE payload `status:'abandoned'`, `duration_minutes:null`, `clock_out` set, and `.eq('id', ...)`); returns shift unchanged (no UPDATE call) when within 8h; `autoCloseOldShifts()` (invoked via `(repository as any).autoCloseOldShifts(...)` since it's TS-private only) classifies >8h rows `abandoned`/`duration_minutes:null` and <8h rows `completed`/computed-duration unchanged. Ran against pre-change code: 2 of 4 failed exactly as expected (the 2 unchanged-behavior tests passed against old code, confirming they capture real pre-existing behavior).
+- [x] 2.2 GREEN: added `const MAX_SHIFT_HOURS = 8;` module-level constant in `DoctorShiftRepository.ts`.
+- [x] 2.3 GREEN: extended `getActiveShift()` — after fetch, computes `shiftAgeHours`; if `> MAX_SHIFT_HOURS`, fires `UPDATE ... status='abandoned', clock_out=now, duration_minutes=NULL` filtered by `.eq('id', data.id)`, returns `null`; otherwise returns the shift unchanged.
+- [x] 2.4 GREEN: extended `autoCloseOldShifts()` to branch by `diffHours > MAX_SHIFT_HOURS`: older rows → `abandoned`/`duration_minutes:null`; rows within the window → unchanged existing `completed`/computed-duration path (verified byte-identical behavior via the RED test that passed even before this task's edits).
+- [x] 2.5 Deleted `getAllDoctorShifts()` entirely. Confirmed zero callers via fresh grep of `src/` both before and after deletion (only self-reference in the method's own definition, now gone).
+- [x] 2.6 Ran `npm test -- DoctorShiftRepository --run`: 4/4 passed. Ran full `npm test --run` twice: failures were confined to the known pre-existing rotating baseline (`VideoRoom.test.tsx`, `AppointmentRepository.test.ts` `createAppointment`, `crypto.test.ts`, `MedicalHistory.test.tsx`/`Profile.test.tsx` — 7-9 flaky failures across runs, unrelated to this change and unchanged in identity between runs). No new failures introduced by Phase 2 changes. Also updated `DoctorWorkShift.status` type in `src/types.ts` to include `'abandoned'` (necessary since the repository now produces/reads that value).
 
 ## Phase 3: Best-Effort Clock-Out on Tab Close
 
