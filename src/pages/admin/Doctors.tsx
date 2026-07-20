@@ -401,6 +401,22 @@ const Doctors: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Contraseña solo al crear */}
+                  {!editId && (
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-rose-400 ml-1">Contraseña Temporal de Acceso</label>
+                      <input
+                        type="password"
+                        required={!editId}
+                        minLength={6}
+                        placeholder="Mínimo 6 caracteres"
+                        className="w-full bg-white/5 border border-rose-500/30 rounded-2xl p-3.5 text-white outline-none focus:border-rose-500 transition-colors placeholder-slate-600"
+                        value={formData.password}
+                        onChange={e => setFormData({ ...formData, password: e.target.value })}
+                      />
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">CUIT / CUIL Fiscal</label>
@@ -516,22 +532,6 @@ const Doctors: React.FC = () => {
                       onChange={e => setFormData({ ...formData, consultationFee: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
-
-                  {/* Contraseña solo al crear */}
-                  {!editId && (
-                    <div className="space-y-1.5 pt-2 border-t border-white/5">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-rose-400 ml-1">Contraseña Temporal de Acceso</label>
-                      <input
-                        type="password"
-                        required={!editId}
-                        minLength={6}
-                        placeholder="Mínimo 6 caracteres"
-                        className="w-full bg-white/5 border border-rose-500/30 rounded-2xl p-3.5 text-white outline-none focus:border-rose-500 transition-colors placeholder-slate-600"
-                        value={formData.password}
-                        onChange={e => setFormData({ ...formData, password: e.target.value })}
-                      />
-                    </div>
-                  )}
                 </div>
               )}
 
