@@ -330,7 +330,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
           <div className="text-2xl font-black text-amber-400 tracking-tight">
             ${stats.commissions.toLocaleString('es-AR')}
           </div>
-          <p className="text-[10px] text-slate-400 mt-2">Por altas aprobadas ($10k c/u)</p>
+          <p className="text-[10px] text-slate-400 mt-2">Por altas aprobadas</p>
         </div>
 
         {/* KPI: Enlaces Compartidos */}
