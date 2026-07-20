@@ -200,11 +200,11 @@ export class DashboardRepository {
 
       let avgMinutes = 0;
       if (effectiveCount > 0) {
-        const totalMinutes = completedData.reduce((acc, row) => acc + (row.duration_minutes || 15), 0);
+        const totalMinutes = completedData.reduce((acc, row) => acc + (row.duration_minutes || 0), 0);
         avgMinutes = Math.round(totalMinutes / effectiveCount);
-      } else {
-        avgMinutes = 15; // Valor por defecto de referencia cuando no hay atenciones en el período
       }
+      // Sin atenciones completadas en el período: avgMinutes queda en 0,
+      // la UI lo muestra como "—" en vez de un valor de referencia inventado.
 
       return {
         pendingConsultations: pendingCount || 0,

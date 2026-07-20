@@ -163,7 +163,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     }>({
         pendingConsultations: 0,
         effectiveConsultations: 0,
-        avgSessionMinutes: 15
+        avgSessionMinutes: 0
     });
 
     useEffect(() => {
@@ -454,7 +454,11 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                         <Activity className="text-blue-500/60" size={20} />
                     </div>
                     <div className="flex items-baseline gap-2 mb-4">
-                        <h3 className="text-5xl font-bold text-white tracking-tighter">{dynamicKPIs.avgSessionMinutes} <span className="text-xl font-normal text-slate-400">min</span></h3>
+                        <h3 className="text-5xl font-bold text-white tracking-tighter">
+                            {dynamicKPIs.effectiveConsultations > 0
+                                ? <>{dynamicKPIs.avgSessionMinutes} <span className="text-xl font-normal text-slate-400">min</span></>
+                                : '—'}
+                        </h3>
                     </div>
                     
                     {/* Botonera de Selector Rango Temporal */}
