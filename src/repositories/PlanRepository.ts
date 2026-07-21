@@ -9,7 +9,7 @@ export class PlanRepository {
       .order('name');
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map(row => this.mapRowToPlan(row));
   }
 
   async getById(id: string): Promise<Plan | null> {
@@ -20,30 +20,30 @@ export class PlanRepository {
       .single();
 
     if (error) throw error;
-    return data;
+    return data ? this.mapRowToPlan(data) : null;
   }
 
   async create(plan: Omit<Plan, 'id'>): Promise<Plan> {
     const { data, error } = await supabase
       .from('plans')
-      .insert([plan])
+      .insert([this.mapPlanToRow(plan)])
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return this.mapRowToPlan(data);
   }
 
   async update(id: string, plan: Partial<Plan>): Promise<Plan> {
     const { data, error } = await supabase
       .from('plans')
-      .update(plan)
+      .update(this.mapPlanToRow(plan))
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return this.mapRowToPlan(data);
   }
 
   async delete(id: string): Promise<void> {
@@ -53,6 +53,29 @@ export class PlanRepository {
       .eq('id', id);
 
     if (error) throw error;
+  }
+
+  private mapRowToPlan(row: any): Plan {
+    return {
+      id: row.id,
+      name: row.name,
+      monthlyCost: row.monthly_cost,
+      bonifiedConsultations: row.bonified_consultations,
+      isUnlimited: row.is_unlimited,
+      maxFamilyMembers: row.max_family_members,
+      metadata: row.metadata,
+    };
+  }
+
+  private mapPlanToRow(plan: Partial<Plan>): Record<string, any> {
+    const row: Record<string, any> = {};
+    if (plan.name !== undefined) row.name = plan.name;
+    if (plan.monthlyCost !== undefined) row.monthly_cost = plan.monthlyCost;
+    if (plan.bonifiedConsultations !== undefined) row.bonified_consultations = plan.bonifiedConsultations;
+    if (plan.isUnlimited !== undefined) row.is_unlimited = plan.isUnlimited;
+    if (plan.maxFamilyMembers !== undefined) row.max_family_members = plan.maxFamilyMembers;
+    if (plan.metadata !== undefined) row.metadata = plan.metadata;
+    return row;
   }
 }
 

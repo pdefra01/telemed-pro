@@ -20,6 +20,49 @@ interface Props {
     user: Patient;
 }
 
+interface QuotaStatus {
+    quotaUsed: number;
+    totalBonified: number | null;
+    remaining: number | null;
+    isUnlimited: boolean;
+    hasPlan: boolean;
+    isOverQuota: boolean;
+    planName: string;
+}
+
+/**
+ * Resuelve el estilo y la etiqueta del badge de cupo de consultas a partir del
+ * estado devuelto por `getConsultationQuotaStatus`. Sin plan asignado y planes
+ * ilimitados tienen su propia presentación explícita (nunca un número inventado).
+ */
+export function getQuotaBadgeContent(quotaStatus: QuotaStatus): { className: string; label: string } {
+    if (!quotaStatus.hasPlan) {
+        return {
+            className: 'bg-slate-500/10 border-slate-500/30 text-slate-300',
+            label: 'Sin plan asignado',
+        };
+    }
+
+    if (quotaStatus.isUnlimited) {
+        return {
+            className: 'bg-teal-500/10 border-teal-500/30 text-teal-300',
+            label: `Consultas Bonificadas: ${quotaStatus.quotaUsed}/∞`,
+        };
+    }
+
+    if (quotaStatus.isOverQuota) {
+        return {
+            className: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+            label: `⚠️ Cupo Mensual Cubierto (${quotaStatus.quotaUsed}/${quotaStatus.totalBonified})`,
+        };
+    }
+
+    return {
+        className: 'bg-teal-500/10 border-teal-500/30 text-teal-300',
+        label: `Consultas Bonificadas: ${quotaStatus.quotaUsed}/${quotaStatus.totalBonified}`,
+    };
+}
+
 const PatientDashboard: React.FC<Props> = ({ user }) => {
     const { toast } = useToast();
     const [nextAppointment, setNextAppointment] = useState<Appointment | null>(null);
@@ -34,7 +77,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
     const [recentPrescriptions, setRecentPrescriptions] = useState<Prescription[]>([]);
     const [isLoadingPrescriptions, setIsLoadingPrescriptions] = useState(true);
-    const [quotaStatus, setQuotaStatus] = useState<{ quotaUsed: number; totalBonified: number; isOverQuota: boolean; remaining: number; planName: string } | null>(null);
+    const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
     const [familyMembers, setFamilyMembers] = useState<any[]>([]);
     const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState<string>('');
 
@@ -299,19 +342,14 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                                 <span className="text-xs font-semibold text-emerald-400">Sistema Operativo</span>
                             </div>
-                            {quotaStatus && (
-                                <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border shadow-sm ${
-                                    quotaStatus.isOverQuota
-                                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                                        : 'bg-teal-500/10 border-teal-500/30 text-teal-300'
-                                }`}>
-                                    <span className="text-xs font-semibold">
-                                        {quotaStatus.isOverQuota
-                                            ? `⚠️ Cupo Mensual Cubierto (${quotaStatus.quotaUsed}/${quotaStatus.totalBonified})`
-                                            : `Consultas Bonificadas: ${quotaStatus.quotaUsed}/${quotaStatus.totalBonified}`}
-                                    </span>
-                                </div>
-                            )}
+                            {quotaStatus && (() => {
+                                const badge = getQuotaBadgeContent(quotaStatus);
+                                return (
+                                    <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border shadow-sm ${badge.className}`}>
+                                        <span className="text-xs font-semibold">{badge.label}</span>
+                                    </div>
+                                );
+                            })()}
                         </div>
                         <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight text-white mb-4 leading-tight">
                             Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 bg-[length:200%_auto] animate-gradient-x">{(user.name || 'Paciente').split(' ')[0]}</span>
