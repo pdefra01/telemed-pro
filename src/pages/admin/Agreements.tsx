@@ -102,6 +102,22 @@ const Agreements: React.FC = () => {
         return;
       }
 
+      // `agreements.base_plan_id` also FK-references plans(id) — a plan used
+      // only as a convenio's base plan has 0 affiliates and would otherwise
+      // pass the check above, then fail on delete() with a raw Postgres
+      // FK-violation surfaced verbatim to the admin.
+      const { count: agreementCount, error: agreementCountError } = await supabase
+        .from('agreements')
+        .select('id', { count: 'exact', head: true })
+        .eq('base_plan_id', plan.id);
+
+      if (agreementCountError) throw agreementCountError;
+
+      if (agreementCount && agreementCount > 0) {
+        toast(`No se puede eliminar: ${agreementCount} convenio(s) todavía usan este plan como plan base.`, 'error');
+        return;
+      }
+
       await planRepo.delete(plan.id);
       toast('Plan eliminado con éxito.', 'success');
       await refreshPlans();

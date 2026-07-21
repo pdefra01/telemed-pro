@@ -5,6 +5,7 @@ import { supabase } from '../../services/supabase';
 vi.mock('../../services/supabase', () => ({
   supabase: {
     from: vi.fn(),
+    rpc: vi.fn(),
   },
 }));
 
@@ -148,6 +149,37 @@ describe('PlanRepository', () => {
       ]);
       expect(plan.monthlyCost).toBe(30000);
       expect(plan.isUnlimited).toBe(false);
+    });
+  });
+
+  describe('setDefault', () => {
+    it('delegates to the atomic set_default_plan RPC with the target id', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({
+        data: { id: 'plan-1', is_default: true },
+        error: null,
+      } as any);
+
+      await repository.setDefault('plan-1');
+
+      expect(supabase.rpc).toHaveBeenCalledWith('set_default_plan', { p_plan_id: 'plan-1' });
+      // Proves this is no longer two sequential non-transactional UPDATEs —
+      // a single atomic call replaces the old unset-then-set pattern.
+      expect(supabase.from).not.toHaveBeenCalled();
+    });
+
+    it('throws when the RPC reports an error instead of silently succeeding', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({
+        data: null,
+        error: { message: 'Acceso denegado: Solo administradores pueden cambiar el plan por defecto.' },
+      } as any);
+
+      await expect(repository.setDefault('plan-1')).rejects.toBeTruthy();
+    });
+
+    it('throws when the RPC returns no row, proving a stale/deleted id is never silently accepted', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({ data: null, error: null } as any);
+
+      await expect(repository.setDefault('deleted-plan-id')).rejects.toThrow();
     });
   });
 });
