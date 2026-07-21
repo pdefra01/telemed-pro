@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Building2, Plus, Search, Edit2, Trash2, 
-  ChevronRight, Filter, Briefcase, Users, 
+import {
+  Building2, Plus, Search, Edit2, Trash2,
+  ChevronRight, Filter, Briefcase, Users,
   Calendar, CheckCircle2, XCircle, Loader2
 } from 'lucide-react';
 import { AgreementRepository } from '../../repositories/AgreementRepository';
@@ -9,6 +9,17 @@ import { PlanRepository } from '../../repositories/PlanRepository';
 import { bulkImportService } from '../../services/BulkImportService';
 import { useToast } from '../../context/ToastContext';
 import { Agreement, Plan } from '../../types';
+import { supabase } from '../../services/supabase';
+import PlanFormModal from './PlanFormModal';
+
+/**
+ * Formatea el cupo de consultas bonificadas de un plan para su visualización,
+ * distinguiendo explícitamente "ilimitado" (∞) de cualquier valor finito,
+ * incluido 0, que nunca debe confundirse con ilimitado.
+ */
+export function formatPlanQuota(plan: Pick<Plan, 'isUnlimited' | 'bonifiedConsultations'>): string {
+  return plan.isUnlimited ? '∞' : String(plan.bonifiedConsultations);
+}
 
 const OCC_COLORS = {
   emerald: '#10b981',
@@ -39,6 +50,51 @@ const Agreements: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'agreements' | 'plans'>('agreements');
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
+  const [planModal, setPlanModal] = useState<{ mode: 'create' | 'edit'; plan: Plan | null } | null>(null);
+  const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+
+  const refreshPlans = async () => {
+    try {
+      const plansData = await planRepo.getAll();
+      setPlans(plansData);
+    } catch (error) {
+      console.error("Error refreshing plans", error);
+    }
+  };
+
+  const handlePlanSaved = () => {
+    setPlanModal(null);
+    refreshPlans();
+  };
+
+  const handleDeletePlan = async (plan: Plan) => {
+    if (!window.confirm(`¿Eliminar el plan "${plan.name}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+    setDeletingPlanId(plan.id);
+    try {
+      const { count, error: countError } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('plan_id', plan.id);
+
+      if (countError) throw countError;
+
+      if (count && count > 0) {
+        toast(`No se puede eliminar: ${count} afiliado(s) todavía tienen asignado este plan.`, 'error');
+        return;
+      }
+
+      await planRepo.delete(plan.id);
+      toast('Plan eliminado con éxito.', 'success');
+      await refreshPlans();
+    } catch (error: any) {
+      console.error("Error deleting plan", error);
+      toast(error.message || 'Error al eliminar el plan.', 'error');
+    } finally {
+      setDeletingPlanId(null);
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, agreement: Agreement) => {
     const file = e.target.files?.[0];
@@ -113,7 +169,12 @@ const Agreements: React.FC = () => {
           >
             Planes
           </button>
-          <button className="p-3 rounded-2xl bg-white text-slate-900 hover:bg-slate-100 transition-colors shadow-xl">
+          <button
+            onClick={() => activeTab === 'plans' && setPlanModal({ mode: 'create', plan: null })}
+            disabled={activeTab !== 'plans'}
+            title={activeTab === 'plans' ? 'Nuevo Plan' : undefined}
+            className="p-3 rounded-2xl bg-white text-slate-900 hover:bg-slate-100 transition-colors shadow-xl disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             <Plus size={20} />
           </button>
         </div>
@@ -225,7 +286,11 @@ const Agreements: React.FC = () => {
               <div className="space-y-3 mb-6">
                 <div className="flex items-center text-sm text-slate-400">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
-                  {plan.bonifiedConsultations} Consultas bonificadas
+                  {plan.isUnlimited ? (
+                    <span>Consultas bonificadas <span className="text-emerald-400 font-bold">ilimitadas (∞)</span></span>
+                  ) : (
+                    <span>{formatPlanQuota(plan)} Consultas bonificadas</span>
+                  )}
                 </div>
                 <div className="flex items-center text-sm text-slate-400">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
@@ -234,17 +299,18 @@ const Agreements: React.FC = () => {
               </div>
 
               <div className="pt-6 border-t border-white/5 flex justify-between items-center">
-                <div className="flex -space-x-2">
-                  {[1,2,3].map(i => (
-                    <div key={i} className="w-8 h-8 rounded-full border-2 border-[#020617] bg-white/10 flex items-center justify-center text-[10px] font-bold text-white">
-                      {i}
-                    </div>
-                  ))}
-                  <div className="w-8 h-8 rounded-full border-2 border-[#020617] bg-white/5 flex items-center justify-center text-[10px] font-bold text-slate-500">
-                    +12
-                  </div>
-                </div>
-                <button className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-colors">
+                <button
+                  onClick={() => handleDeletePlan(plan)}
+                  disabled={deletingPlanId === plan.id}
+                  className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-rose-400 transition-colors disabled:opacity-40"
+                  title="Eliminar Plan"
+                >
+                  <Trash2 size={16} />
+                </button>
+                <button
+                  onClick={() => setPlanModal({ mode: 'edit', plan })}
+                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-colors"
+                >
                   Editar Plan
                 </button>
               </div>
@@ -266,6 +332,15 @@ const Agreements: React.FC = () => {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Plan Create/Edit Modal */}
+      {planModal && (
+        <PlanFormModal
+          plan={planModal.plan}
+          onClose={() => setPlanModal(null)}
+          onSaved={handlePlanSaved}
+        />
       )}
     </div>
   );
