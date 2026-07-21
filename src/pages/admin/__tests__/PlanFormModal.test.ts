@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveBonifiedConsultations } from '../PlanFormModal';
+import { resolveBonifiedConsultations, isValidPaidMonths, isValidBonusMonths } from '../PlanFormModal';
 
 describe('resolveBonifiedConsultations', () => {
   it('forces 0 when the plan is unlimited, regardless of the raw field value', () => {
@@ -23,5 +23,30 @@ describe('resolveBonifiedConsultations', () => {
 
   it('truncates fractional input to a whole number', () => {
     expect(resolveBonifiedConsultations(false, 6.9)).toBe(6);
+  });
+});
+
+describe('isValidPaidMonths', () => {
+  it('accepts 1 and any greater whole number, matching the DB CHECK(paid_months >= 1)', () => {
+    expect(isValidPaidMonths(1)).toBe(true);
+    expect(isValidPaidMonths(12)).toBe(true);
+  });
+
+  it('rejects 0, negative values, and non-finite values', () => {
+    expect(isValidPaidMonths(0)).toBe(false);
+    expect(isValidPaidMonths(-1)).toBe(false);
+    expect(isValidPaidMonths(NaN)).toBe(false);
+  });
+});
+
+describe('isValidBonusMonths', () => {
+  it('accepts 0 and any greater whole number, matching the DB CHECK(bonus_months >= 0)', () => {
+    expect(isValidBonusMonths(0)).toBe(true);
+    expect(isValidBonusMonths(2)).toBe(true);
+  });
+
+  it('rejects negative values and non-finite values', () => {
+    expect(isValidBonusMonths(-1)).toBe(false);
+    expect(isValidBonusMonths(NaN)).toBe(false);
   });
 });

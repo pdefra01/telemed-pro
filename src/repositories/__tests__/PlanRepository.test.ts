@@ -27,6 +27,8 @@ describe('PlanRepository', () => {
           bonified_consultations: 6,
           is_unlimited: false,
           max_family_members: 4,
+          paid_months: 12,
+          bonus_months: 2,
           metadata: { foo: 'bar' },
         },
       ];
@@ -44,6 +46,8 @@ describe('PlanRepository', () => {
         bonifiedConsultations: 6,
         isUnlimited: false,
         maxFamilyMembers: 4,
+        paidMonths: 12,
+        bonusMonths: 2,
         metadata: { foo: 'bar' },
       });
     });
@@ -57,6 +61,8 @@ describe('PlanRepository', () => {
           bonified_consultations: 0,
           is_unlimited: true,
           max_family_members: 6,
+          paid_months: 1,
+          bonus_months: 0,
           metadata: null,
         },
       ];
@@ -68,6 +74,32 @@ describe('PlanRepository', () => {
 
       expect(plans[0].isUnlimited).toBe(true);
       expect(plans[0].monthlyCost).toBe(90000);
+      expect(plans[0].paidMonths).toBe(1);
+      expect(plans[0].bonusMonths).toBe(0);
+    });
+
+    it('defaults paidMonths/bonusMonths to 1/0 for rows predating the billing-period migration', async () => {
+      const rows = [
+        {
+          id: 'plan-legacy',
+          name: 'Plan Legacy',
+          monthly_cost: 40000,
+          bonified_consultations: 4,
+          is_unlimited: false,
+          max_family_members: 3,
+          paid_months: null,
+          bonus_months: undefined,
+          metadata: null,
+        },
+      ];
+      const orderMock = vi.fn().mockResolvedValue({ data: rows, error: null });
+      const selectMock = vi.fn().mockReturnValue({ order: orderMock });
+      vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+
+      const plans = await repository.getAll();
+
+      expect(plans[0].paidMonths).toBe(1);
+      expect(plans[0].bonusMonths).toBe(0);
     });
   });
 
@@ -80,6 +112,8 @@ describe('PlanRepository', () => {
         bonified_consultations: 6,
         is_unlimited: false,
         max_family_members: 4,
+        paid_months: 6,
+        bonus_months: 1,
         metadata: {},
       };
       const singleMock = vi.fn().mockResolvedValue({ data: row, error: null });
@@ -96,6 +130,8 @@ describe('PlanRepository', () => {
         bonifiedConsultations: 6,
         isUnlimited: false,
         maxFamilyMembers: 4,
+        paidMonths: 6,
+        bonusMonths: 1,
         metadata: {},
       });
     });
@@ -122,6 +158,8 @@ describe('PlanRepository', () => {
         is_unlimited: false,
         max_family_members: 2,
         is_default: false,
+        paid_months: 12,
+        bonus_months: 2,
         metadata: {},
       };
       const singleMock = vi.fn().mockResolvedValue({ data: insertedRow, error: null });
@@ -136,6 +174,8 @@ describe('PlanRepository', () => {
         isUnlimited: false,
         maxFamilyMembers: 2,
         isDefault: false,
+        paidMonths: 12,
+        bonusMonths: 2,
       });
 
       expect(insertMock).toHaveBeenCalledWith([
@@ -145,10 +185,42 @@ describe('PlanRepository', () => {
           bonified_consultations: 3,
           is_unlimited: false,
           max_family_members: 2,
+          paid_months: 12,
+          bonus_months: 2,
         }),
       ]);
       expect(plan.monthlyCost).toBe(30000);
       expect(plan.isUnlimited).toBe(false);
+      expect(plan.paidMonths).toBe(12);
+      expect(plan.bonusMonths).toBe(2);
+    });
+  });
+
+  describe('update', () => {
+    it('sends only the provided camelCase fields as snake_case columns, including paidMonths/bonusMonths', async () => {
+      const updatedRow = {
+        id: 'plan-1',
+        name: 'Plan Familiar Medinex',
+        monthly_cost: 50000,
+        bonified_consultations: 6,
+        is_unlimited: false,
+        max_family_members: 4,
+        is_default: false,
+        paid_months: 6,
+        bonus_months: 1,
+        metadata: {},
+      };
+      const singleMock = vi.fn().mockResolvedValue({ data: updatedRow, error: null });
+      const selectChainMock = vi.fn().mockReturnValue({ single: singleMock });
+      const eqMock = vi.fn().mockReturnValue({ select: selectChainMock });
+      const updateMock = vi.fn().mockReturnValue({ eq: eqMock });
+      vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+
+      const plan = await repository.update('plan-1', { paidMonths: 6, bonusMonths: 1 });
+
+      expect(updateMock).toHaveBeenCalledWith({ paid_months: 6, bonus_months: 1 });
+      expect(plan.paidMonths).toBe(6);
+      expect(plan.bonusMonths).toBe(1);
     });
   });
 

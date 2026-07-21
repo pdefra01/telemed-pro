@@ -78,6 +78,11 @@ export class PlanRepository {
       isUnlimited: row.is_unlimited,
       maxFamilyMembers: row.max_family_members,
       isDefault: row.is_default,
+      // Rows predating the billing-period migration may still come back as
+      // null/undefined even though the DB column now has a NOT NULL DEFAULT —
+      // default defensively rather than propagate null, per spec.
+      paidMonths: row.paid_months ?? 1,
+      bonusMonths: row.bonus_months ?? 0,
       metadata: row.metadata,
     };
   }
@@ -89,6 +94,8 @@ export class PlanRepository {
     if (plan.bonifiedConsultations !== undefined) row.bonified_consultations = plan.bonifiedConsultations;
     if (plan.isUnlimited !== undefined) row.is_unlimited = plan.isUnlimited;
     if (plan.maxFamilyMembers !== undefined) row.max_family_members = plan.maxFamilyMembers;
+    if (plan.paidMonths !== undefined) row.paid_months = plan.paidMonths;
+    if (plan.bonusMonths !== undefined) row.bonus_months = plan.bonusMonths;
     if (plan.metadata !== undefined) row.metadata = plan.metadata;
     return row;
   }

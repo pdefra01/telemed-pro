@@ -21,6 +21,19 @@ export function resolveBonifiedConsultations(isUnlimited: boolean, rawValue: num
   return Math.trunc(rawValue);
 }
 
+/**
+ * Mirrors the DB CHECK(paid_months >= 1) — billing duration applies to every
+ * plan regardless of quota being unlimited, so this is never skipped.
+ */
+export function isValidPaidMonths(value: number): boolean {
+  return Number.isFinite(value) && value >= 1;
+}
+
+/** Mirrors the DB CHECK(bonus_months >= 0). */
+export function isValidBonusMonths(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
 const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved }) => {
   const { toast } = useToast();
   const isEditing = !!plan;
@@ -32,6 +45,8 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
     plan ? String(plan.bonifiedConsultations) : ''
   );
   const [maxFamilyMembers, setMaxFamilyMembers] = useState(plan ? String(plan.maxFamilyMembers) : '');
+  const [paidMonths, setPaidMonths] = useState(plan ? String(plan.paidMonths) : '1');
+  const [bonusMonths, setBonusMonths] = useState(plan ? String(plan.bonusMonths) : '0');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -60,6 +75,16 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
         return;
       }
     }
+    const parsedPaidMonths = Number(paidMonths);
+    if (!isValidPaidMonths(parsedPaidMonths)) {
+      setError('Los meses pagos deben ser un número válido mayor o igual a 1.');
+      return;
+    }
+    const parsedBonusMonths = Number(bonusMonths);
+    if (!isValidBonusMonths(parsedBonusMonths)) {
+      setError('Los meses bonificados deben ser un número válido mayor o igual a 0.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -69,6 +94,8 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
         isUnlimited,
         bonifiedConsultations: resolveBonifiedConsultations(isUnlimited, Number(bonifiedConsultations)),
         maxFamilyMembers: Math.trunc(parsedFamilyMembers),
+        paidMonths: Math.trunc(parsedPaidMonths),
+        bonusMonths: Math.trunc(parsedBonusMonths),
         // isDefault is never set here — PlanRepository.mapPlanToRow() ignores it
         // deliberately; use the dedicated "Marcar como Plan por Defecto" action
         // instead, which unsets the previous default atomically.
@@ -162,6 +189,43 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                Meses Pagos:
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                required
+                value={paidMonths}
+                onChange={(e) => setPaidMonths(e.target.value)}
+                placeholder="Ej. 12"
+                className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                Meses Bonificados:
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                required
+                value={bonusMonths}
+                onChange={(e) => setBonusMonths(e.target.value)}
+                placeholder="Ej. 2"
+                className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-500 -mt-3">
+            Duración total de cobertura: {(Number(paidMonths) || 0) + (Number(bonusMonths) || 0)} meses
+            (ej. Plan 12+2 = 12 meses pagos + 2 meses de regalo).
+          </p>
 
           <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3">
             <input
