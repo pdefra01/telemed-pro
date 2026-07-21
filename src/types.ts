@@ -142,6 +142,7 @@ export interface Plan {
   bonifiedConsultations: number;
   isUnlimited: boolean;
   maxFamilyMembers: number;
+  isDefault: boolean;
   metadata?: Record<string, any>;
 }
 

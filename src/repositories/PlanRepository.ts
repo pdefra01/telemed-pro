@@ -55,6 +55,27 @@ export class PlanRepository {
     if (error) throw error;
   }
 
+  /**
+   * Marca `id` como el plan por defecto, desmarcando el anterior. Dos pasos
+   * porque el índice único parcial en `is_default` rechazaría un segundo
+   * `true` si se intentaran en un solo UPDATE masivo.
+   */
+  async setDefault(id: string): Promise<void> {
+    const { error: unsetError } = await supabase
+      .from('plans')
+      .update({ is_default: false })
+      .eq('is_default', true);
+
+    if (unsetError) throw unsetError;
+
+    const { error: setError } = await supabase
+      .from('plans')
+      .update({ is_default: true })
+      .eq('id', id);
+
+    if (setError) throw setError;
+  }
+
   private mapRowToPlan(row: any): Plan {
     return {
       id: row.id,
@@ -63,6 +84,7 @@ export class PlanRepository {
       bonifiedConsultations: row.bonified_consultations,
       isUnlimited: row.is_unlimited,
       maxFamilyMembers: row.max_family_members,
+      isDefault: row.is_default,
       metadata: row.metadata,
     };
   }

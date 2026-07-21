@@ -120,6 +120,7 @@ describe('PlanRepository', () => {
         bonified_consultations: 3,
         is_unlimited: false,
         max_family_members: 2,
+        is_default: false,
         metadata: {},
       };
       const singleMock = vi.fn().mockResolvedValue({ data: insertedRow, error: null });
@@ -133,6 +134,7 @@ describe('PlanRepository', () => {
         bonifiedConsultations: 3,
         isUnlimited: false,
         maxFamilyMembers: 2,
+        isDefault: false,
       });
 
       expect(insertMock).toHaveBeenCalledWith([

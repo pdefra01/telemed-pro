@@ -87,6 +87,62 @@ describe('AffiliateRepository', () => {
     expect(result.name).toBe('Juan Pérez');
   });
 
+  it('assigns plan_id with a follow-up write when creating an affiliate with a real plan selected', async () => {
+    const mockPatientData: Partial<Patient> = {
+      name: 'Ana Gómez',
+      dni: '30111222',
+      email: 'ana@test.com',
+      planId: 'plan-real-id',
+    };
+
+    const mockApiResponse = { id: 'mock-patient-id-2', email: 'ana@test.com', dni: '30111222' };
+
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockApiResponse,
+    } as Response);
+
+    // Chain 1: initial profile fetch right after the trigger creates the row (no plan yet)
+    const initialSingle = vi.fn().mockResolvedValue({
+      data: { id: 'mock-patient-id-2', full_name: 'Ana Gómez', email: 'ana@test.com', dni: '30111222', plan_id: null, role: 'patient' },
+      error: null,
+    });
+    const initialSelectChain = { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: initialSingle }) }) };
+
+    // Chain 2: the follow-up update().eq().select().single() assigning plan_id
+    const updateSingle = vi.fn().mockResolvedValue({
+      data: { id: 'mock-patient-id-2', full_name: 'Ana Gómez', email: 'ana@test.com', dni: '30111222', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
+      error: null,
+    });
+    const updateChain = { update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) }) };
+
+    vi.mocked(supabase.from)
+      .mockReturnValueOnce(initialSelectChain as any)
+      .mockReturnValueOnce(updateChain as any);
+
+    const result = await affiliateRepository.createAffiliate(mockPatientData);
+
+    // Proves the follow-up write set plan_id (not a free-text plan_name)
+    expect(updateChain.update).toHaveBeenCalledWith({ plan_id: 'plan-real-id' });
+    expect(result.planId).toBe('plan-real-id');
+    expect(result.planName).toBe('Plan Familiar Medinex');
+  });
+
+  it('writes plan_id (never a free-text plan_name) when updating an affiliate with a plan selection', async () => {
+    const updateSingle = vi.fn().mockResolvedValue({
+      data: { id: 'test-id', full_name: 'Juan Pérez', email: 'juan@test.com', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
+      error: null,
+    });
+    const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
+    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+
+    const result = await affiliateRepository.updateAffiliate('test-id', { planId: 'plan-real-id' });
+
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ plan_id: 'plan-real-id' }));
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ plan_name: expect.anything() }));
+    expect(result.planId).toBe('plan-real-id');
+  });
+
   it('should call /api/create-patient-bulk and fetch profiles on createBulk', async () => {
     const mockBulkData: Partial<Patient>[] = [
       { name: 'Patient 1', dni: '11111111', email: 'p1@test.com' },

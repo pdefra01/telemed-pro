@@ -826,6 +826,36 @@ app.post('/api/approve-adhesion', async (req, res) => {
       resolvedProducerId = producer?.id || null;
     }
 
+    // 2c. Resolver plan_id real a partir del nombre de plan enviado en la solicitud
+    // (request.plan_type). Nunca escribimos plan_name directo — el trigger
+    // sync_profile_plan_name_trigger lo sincroniza automáticamente a partir de plan_id.
+    const requestedPlanName = (request.plan_type || '').trim();
+    let resolvedPlanId = null;
+    if (requestedPlanName) {
+      const { data: matchedPlan } = await supabaseAdmin
+        .from('plans')
+        .select('id')
+        .eq('name', requestedPlanName)
+        .maybeSingle();
+      resolvedPlanId = matchedPlan?.id || null;
+    }
+    if (!resolvedPlanId) {
+      // El plan_type solicitado no coincide con ningún plan real (typo, dato
+      // legado, etc.) — en vez de dejar plan_id null en silencio, caemos al
+      // plan marcado is_default por un admin (sin nombres hardcodeados).
+      const { data: fallbackPlan } = await supabaseAdmin
+        .from('plans')
+        .select('id, name')
+        .eq('is_default', true)
+        .maybeSingle();
+      resolvedPlanId = fallbackPlan?.id || null;
+      if (resolvedPlanId) {
+        console.warn(`[approve-adhesion] plan_type "${request.plan_type}" no coincide con ningún plan real; usando el plan por defecto "${fallbackPlan.name}".`);
+      } else {
+        console.error(`[approve-adhesion] No se encontró ni el plan solicitado ("${request.plan_type}") ni ningún plan marcado como default. plan_id quedará sin asignar.`);
+      }
+    }
+
     // 3. Actualizar perfil del Paciente en public.profiles (que se autogeneró por trigger)
     console.log(`[approve-adhesion] Actualizando perfil del titular: ${userId}`);
     const { error: profileError } = await supabaseAdmin
@@ -839,7 +869,7 @@ app.post('/api/approve-adhesion', async (req, res) => {
         phone: request.titular_phone,
         address: request.titular_address,
         birth_date: request.titular_birth_date,
-        plan_name: request.plan_type || 'Plan Familiar',
+        plan_id: resolvedPlanId,
         plan_status: 'active',
         payment_status: 'paid',
         is_active: true,
