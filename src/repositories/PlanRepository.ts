@@ -56,24 +56,17 @@ export class PlanRepository {
   }
 
   /**
-   * Marca `id` como el plan por defecto, desmarcando el anterior. Dos pasos
-   * porque el índice único parcial en `is_default` rechazaría un segundo
-   * `true` si se intentaran en un solo UPDATE masivo.
+   * Marca `id` como el plan por defecto, desmarcando el anterior. Delegado a
+   * la RPC `set_default_plan` (SECURITY DEFINER) que hace el toggle en una
+   * única sentencia UPDATE atómica — evita la ventana de dos UPDATEs
+   * secuenciales que podía dejar la tabla sin ningún plan por defecto si el
+   * segundo paso fallaba o el id ya no existía.
    */
   async setDefault(id: string): Promise<void> {
-    const { error: unsetError } = await supabase
-      .from('plans')
-      .update({ is_default: false })
-      .eq('is_default', true);
+    const { data, error } = await supabase.rpc('set_default_plan', { p_plan_id: id });
 
-    if (unsetError) throw unsetError;
-
-    const { error: setError } = await supabase
-      .from('plans')
-      .update({ is_default: true })
-      .eq('id', id);
-
-    if (setError) throw setError;
+    if (error) throw error;
+    if (!data) throw new Error(`No se pudo marcar el plan ${id} como predeterminado: no encontrado.`);
   }
 
   private mapRowToPlan(row: any): Plan {

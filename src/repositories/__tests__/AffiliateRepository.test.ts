@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { affiliateRepository } from '../AffiliateRepository';
+import { affiliateRepository, PlanAssignmentFailedError } from '../AffiliateRepository';
 import { supabase } from '../../services/supabase';
 import { Patient } from '../../types';
 
@@ -126,6 +126,101 @@ describe('AffiliateRepository', () => {
     expect(updateChain.update).toHaveBeenCalledWith({ plan_id: 'plan-real-id' });
     expect(result.planId).toBe('plan-real-id');
     expect(result.planName).toBe('Plan Familiar Medinex');
+  });
+
+  it('never fabricates "Plan Base" when the trigger sync fails and no real plan name is available (createAffiliate simulated fallback)', async () => {
+    const mockPatientData: Partial<Patient> = {
+      name: 'Sin Plan',
+      dni: '40111222',
+      email: 'sinplan@test.com',
+    };
+
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'mock-id-noplan', email: 'sinplan@test.com', dni: '40111222' }),
+    } as Response);
+
+    // Simulates the trigger not having synced yet — profile fetch errors out.
+    const selectMock = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } }),
+      }),
+    });
+    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+
+    const result = await affiliateRepository.createAffiliate(mockPatientData);
+
+    expect(result.planName).toBe('Sin plan asignado');
+    expect(result.planName).not.toBe('Plan Base');
+  });
+
+  it('never fabricates "Plan Base" in the createBulk simulated fallback when profile fetch fails', async () => {
+    const mockBulkData: Partial<Patient>[] = [
+      { name: 'Bulk Sin Plan', dni: '50111222', email: 'bulk@test.com' },
+    ];
+
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        summary: { total: 1, success: 1, failed: 0 },
+        successful: [{ dni: '50111222', id: 'bulk-id-1' }],
+        failures: [],
+      }),
+    } as Response);
+
+    const inMock = vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } });
+    const selectMock = vi.fn().mockReturnValue({ in: inMock });
+    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+
+    const result = await affiliateRepository.createBulk(mockBulkData);
+
+    expect(result[0].planName).toBe('Sin plan asignado');
+    expect(result[0].planName).not.toBe('Plan Base');
+  });
+
+  it('never fabricates "Plan Base" when mapping a profile row with no plan_name (mapProfileToPatient via getAllAffiliates)', async () => {
+    const orderMock = vi.fn().mockResolvedValue({
+      data: [{ id: 'p1', full_name: 'Sin Plan', role: 'patient', plan_id: null, plan_name: null }],
+      error: null,
+    });
+    const eqMock = vi.fn().mockReturnValue({ order: orderMock });
+    const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
+    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+
+    const result = await affiliateRepository.getAllAffiliates();
+
+    expect(result[0].planName).toBe('Sin plan asignado');
+    expect(result[0].planName).not.toBe('Plan Base');
+  });
+
+  it('throws PlanAssignmentFailedError (instead of silently succeeding) when the follow-up plan_id write fails', async () => {
+    const mockPatientData: Partial<Patient> = {
+      name: 'Falla Plan',
+      dni: '60111222',
+      email: 'fallaplan@test.com',
+      planId: 'plan-real-id',
+    };
+
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'mock-id-fallaplan', email: 'fallaplan@test.com', dni: '60111222' }),
+    } as Response);
+
+    const initialSingle = vi.fn().mockResolvedValue({
+      data: { id: 'mock-id-fallaplan', full_name: 'Falla Plan', email: 'fallaplan@test.com', dni: '60111222', plan_id: null, role: 'patient' },
+      error: null,
+    });
+    const initialSelectChain = { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: initialSingle }) }) };
+
+    // The follow-up plan_id UPDATE fails.
+    const updateSingle = vi.fn().mockResolvedValue({ data: null, error: { message: 'update failed' } });
+    const updateChain = { update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) }) };
+
+    vi.mocked(supabase.from)
+      .mockReturnValueOnce(initialSelectChain as any)
+      .mockReturnValueOnce(updateChain as any);
+
+    await expect(affiliateRepository.createAffiliate(mockPatientData)).rejects.toBeInstanceOf(PlanAssignmentFailedError);
   });
 
   it('writes plan_id (never a free-text plan_name) when updating an affiliate with a plan selection', async () => {

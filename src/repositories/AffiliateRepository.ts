@@ -3,6 +3,20 @@ import { Patient } from '../types';
 import { generateUUID } from '../utils/uuid';
 import { authRepository } from './AuthRepository';
 
+/**
+ * El paciente base ya fue creado con éxito (vía /api/create-patient), pero el
+ * segundo write que le asigna el plan_id elegido falló. Se propaga como error
+ * en vez de devolver silenciosamente un perfil sin plan, para que la UI
+ * pueda mostrar un mensaje honesto en lugar de un "registrado" genérico.
+ */
+export class PlanAssignmentFailedError extends Error {
+  constructor(public readonly patient: Patient, cause: unknown) {
+    super('El afiliado se registró, pero no se pudo asignar el plan seleccionado.');
+    this.name = 'PlanAssignmentFailedError';
+    this.cause = cause as Error | undefined;
+  }
+}
+
 export class AffiliateRepository {
   /**
    * Obtiene todos los afiliados activos
@@ -92,7 +106,7 @@ export class AffiliateRepository {
         role: 'patient',
         dni: data.dni,
         planId: data.planId,
-        planName: data.planName || 'Plan Base',
+        planName: data.planName || 'Sin plan asignado',
         planStatus: data.planStatus || 'active',
         address: data.address,
         phone: data.phone,
@@ -115,6 +129,7 @@ export class AffiliateRepository {
 
       if (planAssignError) {
         console.error(`Error asignando plan al afiliado recién creado ${result.id}:`, planAssignError);
+        throw new PlanAssignmentFailedError(this.mapProfileToPatient(profile), planAssignError);
       } else {
         return this.mapProfileToPatient(withPlan);
       }
@@ -175,7 +190,7 @@ export class AffiliateRepository {
           email: source.email || '',
           role: 'patient',
           dni: s.dni,
-          planName: source.planName || 'Plan Base',
+          planName: source.planName || 'Sin plan asignado',
           planStatus: source.planStatus || 'active',
           address: source.address,
           phone: source.phone,
@@ -384,7 +399,7 @@ export class AffiliateRepository {
       role: 'patient',
       dni: row.dni,
       planId: row.plan_id ?? undefined,
-      planName: row.plan_name || 'Plan Base',
+      planName: row.plan_name || 'Sin plan asignado',
       planStatus: row.plan_status || 'active',
       avatarUrl: row.avatar_url,
       address: row.address,

@@ -5,7 +5,7 @@ import {
   Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2 
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
-import { affiliateRepository } from '../../repositories/AffiliateRepository';
+import { affiliateRepository, PlanAssignmentFailedError } from '../../repositories/AffiliateRepository';
 import { adhesionRepository, AdhesionRequest } from '../../repositories/AdhesionRepository';
 import { planRepository } from '../../repositories/PlanRepository';
 import { Patient, Plan } from '../../types';
@@ -93,7 +93,10 @@ const Affiliates: React.FC = () => {
       name: '',
       email: '',
       dni: '',
-      planId: plans[0]?.id || '',
+      // Pre-select the plan flagged isDefault, not plans[0] (alphabetically-
+      // first, since PlanRepository.getAll() orders by name) — an admin who
+      // doesn't touch the dropdown must get the intended default plan.
+      planId: plans.find(p => p.isDefault)?.id || '',
       planStatus: 'active'
     });
     setShowModal(true);
@@ -116,7 +119,16 @@ const Affiliates: React.FC = () => {
       setShowModal(false);
       loadAffiliates();
     } catch (error) {
-      toast("Error al guardar afiliado", "error");
+      if (error instanceof PlanAssignmentFailedError) {
+        // El afiliado sí se creó — solo falló el segundo write que le asigna
+        // el plan. No es un error genérico: avisar al admin con precisión
+        // para que no quede un paciente sin cupo sin que nadie lo note.
+        toast(`Afiliado ${formData.name} registrado, pero no se pudo asignar el plan — reintentá desde Editar.`, "error");
+        setShowModal(false);
+        loadAffiliates();
+      } else {
+        toast("Error al guardar afiliado", "error");
+      }
     } finally {
       setIsSubmitting(false);
     }

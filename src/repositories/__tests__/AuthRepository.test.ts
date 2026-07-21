@@ -57,6 +57,41 @@ describe('AuthRepository', () => {
     expect(user.name).toBe('Juan Perez');
   });
 
+  it('never fabricates a fake plan name ("Plan Global") when profile.plan_name is absent — reports the honest "Sin plan asignado" state', async () => {
+    const mockAuthUser = {
+      user: {
+        id: 'no-plan-user-id',
+        email: 'noplan@medinex.com'
+      }
+    };
+
+    const mockProfileData = {
+      id: 'no-plan-user-id',
+      full_name: 'Sin Plan',
+      email: 'noplan@medinex.com',
+      role: 'patient',
+      is_active: true,
+      plan_status: 'active',
+      payment_status: 'paid',
+      plan_name: null
+    };
+
+    vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+      data: mockAuthUser,
+      error: null
+    } as any);
+
+    const singleMock = vi.fn().mockResolvedValueOnce({ data: mockProfileData, error: null });
+    const eqMock = vi.fn().mockReturnValue({ single: singleMock });
+    const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
+    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+
+    const user: any = await authRepository.login('noplan@medinex.com', 'password123', 'patient');
+
+    expect(user.planName).toBe('Sin plan asignado');
+    expect(user.planName).not.toBe('Plan Global');
+  });
+
   it('should throw an error during login if user is inactive (is_active = false)', async () => {
     const mockAuthUser = {
       user: {
