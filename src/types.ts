@@ -439,21 +439,3 @@ export interface Producer {
   createdAt?: string;
   totalAffiliatesReferred?: number;
 }
-
-export interface LegalTerm {
-  id: string;
-  version: string;
-  title: string;
-  contentMarkdown: string;
-  isActive: boolean;
-  createdAt?: string;
-}
-
-export interface LegalAcceptance {
-  id: string;
-  userId: string;
-  termsVersion: string;
-  acceptedAt: string;
-  ipAddress?: string;
-  userAgent?: string;
-}

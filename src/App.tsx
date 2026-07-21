@@ -25,7 +25,6 @@ import { PharmacyCatalog } from './pages/patient/PharmacyCatalog';
 import { PatientOrderTracking } from './pages/patient/PatientOrderTracking';
 import { PharmacyInventoryAdmin } from './pages/admin/PharmacyInventoryAdmin';
 import { PharmacySalesAdmin } from './pages/admin/PharmacySalesAdmin';
-import SubscriptionWizard from './pages/patient/SubscriptionWizard';
 import ProducersAdmin from './pages/admin/ProducersAdmin';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
@@ -228,14 +227,6 @@ const App: React.FC = () => {
         element={
           <ProtectedRoute user={user} allowedRoles={['patient']}>
             <Payments user={user as Patient} />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/subscription-wizard"
-        element={
-          <ProtectedRoute user={user} allowedRoles={['patient']}>
-            <SubscriptionWizard user={user as Patient} />
           </ProtectedRoute>
         }
       />
