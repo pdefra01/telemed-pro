@@ -75,7 +75,7 @@ export class AffiliateRepository {
     }
 
     const result = await response.json();
-    
+
     // Obtener los datos del perfil que el trigger handle_new_user acaba de crear
     const { data: profile, error } = await supabase
       .from('profiles')
@@ -91,6 +91,7 @@ export class AffiliateRepository {
         email: result.email,
         role: 'patient',
         dni: data.dni,
+        planId: data.planId,
         planName: data.planName || 'Plan Base',
         planStatus: data.planStatus || 'active',
         address: data.address,
@@ -98,6 +99,25 @@ export class AffiliateRepository {
         paymentStatus: 'paid',
         currentPeriodQuotaUsed: 0
       };
+    }
+
+    // El endpoint /api/create-patient no acepta plan_id (solo crea el auth user +
+    // el perfil base vía trigger). Si el admin eligió un plan al crear el afiliado,
+    // lo asignamos acá con un segundo write — el trigger de profiles sincroniza
+    // plan_name automáticamente a partir de plan_id.
+    if (data.planId) {
+      const { data: withPlan, error: planAssignError } = await supabase
+        .from('profiles')
+        .update({ plan_id: data.planId })
+        .eq('id', result.id)
+        .select()
+        .single();
+
+      if (planAssignError) {
+        console.error(`Error asignando plan al afiliado recién creado ${result.id}:`, planAssignError);
+      } else {
+        return this.mapProfileToPatient(withPlan);
+      }
     }
 
     return this.mapProfileToPatient(profile);
@@ -180,7 +200,10 @@ export class AffiliateRepository {
     if (data.name !== undefined) profileData.full_name = data.name;
     if (data.email !== undefined) profileData.email = data.email;
     if (data.dni !== undefined) profileData.dni = data.dni;
-    if (data.planName !== undefined) profileData.plan_name = data.planName;
+    // Solo escribimos plan_id — el trigger sync_profile_plan_name_trigger sincroniza
+    // plan_name automáticamente. Nunca se escribe plan_name directo (evita el drift
+    // que causaba el bug original de esta feature).
+    if (data.planId !== undefined) profileData.plan_id = data.planId;
     if (data.planStatus !== undefined) profileData.plan_status = data.planStatus;
     if (data.address !== undefined) profileData.address = data.address;
     if (data.phone !== undefined) profileData.phone = data.phone;
@@ -360,6 +383,7 @@ export class AffiliateRepository {
       email: row.email || '',
       role: 'patient',
       dni: row.dni,
+      planId: row.plan_id ?? undefined,
       planName: row.plan_name || 'Plan Base',
       planStatus: row.plan_status || 'active',
       avatarUrl: row.avatar_url,

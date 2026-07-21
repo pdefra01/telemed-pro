@@ -83,15 +83,24 @@ export class BillingService {
     const individualInvoices: Partial<Invoice>[] = [];
 
     for (const affiliate of activeDirects) {
-      // Buscar costo en la tabla de planes según el nombre del plan
-      const plan = plans.find(p => p.name === affiliate.planName);
-      const baseCost = plan?.monthlyCost || 5000;
+      // Resolver el plan por id (nunca por nombre — el nombre es solo un cache
+      // de display y puede quedar desactualizado si el admin renombra un plan).
+      const plan = plans.find(p => p.id === affiliate.planId);
+
+      if (!plan) {
+        // Nunca fabricamos un costo por defecto: sin un plan_id real resuelto,
+        // no sabemos cuánto cobrarle a este afiliado. Se omite su factura de
+        // este período (queda pendiente hasta que un admin le asigne un plan)
+        // en vez de facturar un monto inventado.
+        console.warn(`[BillingService] Afiliado ${affiliate.id} no tiene un plan válido asignado (planId: ${affiliate.planId ?? 'ninguno'}); se omite su facturación para el período ${period}.`);
+        continue;
+      }
 
       individualInvoices.push(billingEngine.generateInvoiceData(
         affiliate.id,
         'affiliate',
         period,
-        baseCost,
+        plan.monthlyCost,
         taxes
       ));
     }

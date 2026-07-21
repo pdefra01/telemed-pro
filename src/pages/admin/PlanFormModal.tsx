@@ -69,6 +69,10 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
         isUnlimited,
         bonifiedConsultations: resolveBonifiedConsultations(isUnlimited, Number(bonifiedConsultations)),
         maxFamilyMembers: Math.trunc(parsedFamilyMembers),
+        // isDefault is never set here — PlanRepository.mapPlanToRow() ignores it
+        // deliberately; use the dedicated "Marcar como Plan por Defecto" action
+        // instead, which unsets the previous default atomically.
+        isDefault: plan?.isDefault ?? false,
       };
 
       if (isEditing && plan) {

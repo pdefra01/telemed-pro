@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Building2, Plus, Search, Edit2, Trash2,
   ChevronRight, Filter, Briefcase, Users,
-  Calendar, CheckCircle2, XCircle, Loader2
+  Calendar, CheckCircle2, XCircle, Loader2, Star
 } from 'lucide-react';
 import { AgreementRepository } from '../../repositories/AgreementRepository';
 import { PlanRepository } from '../../repositories/PlanRepository';
@@ -65,6 +65,23 @@ const Agreements: React.FC = () => {
   const handlePlanSaved = () => {
     setPlanModal(null);
     refreshPlans();
+  };
+
+  const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
+
+  const handleSetDefaultPlan = async (plan: Plan) => {
+    if (plan.isDefault) return;
+    setSettingDefaultId(plan.id);
+    try {
+      await planRepo.setDefault(plan.id);
+      toast(`"${plan.name}" es ahora el plan por defecto.`, 'success');
+      await refreshPlans();
+    } catch (error: any) {
+      console.error("Error setting default plan", error);
+      toast(error.message || 'Error al marcar el plan por defecto.', 'error');
+    } finally {
+      setSettingDefaultId(null);
+    }
   };
 
   const handleDeletePlan = async (plan: Plan) => {
@@ -281,8 +298,15 @@ const Agreements: React.FC = () => {
                 </div>
               </div>
 
-              <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-              
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+                {plan.isDefault && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                    <Star size={10} className="fill-amber-400" /> Predeterminado
+                  </span>
+                )}
+              </div>
+
               <div className="space-y-3 mb-6">
                 <div className="flex items-center text-sm text-slate-400">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
@@ -298,15 +322,27 @@ const Agreements: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-white/5 flex justify-between items-center">
-                <button
-                  onClick={() => handleDeletePlan(plan)}
-                  disabled={deletingPlanId === plan.id}
-                  className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-rose-400 transition-colors disabled:opacity-40"
-                  title="Eliminar Plan"
-                >
-                  <Trash2 size={16} />
-                </button>
+              <div className="pt-6 border-t border-white/5 flex justify-between items-center gap-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDeletePlan(plan)}
+                    disabled={deletingPlanId === plan.id}
+                    className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-rose-400 transition-colors disabled:opacity-40"
+                    title="Eliminar Plan"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  {!plan.isDefault && (
+                    <button
+                      onClick={() => handleSetDefaultPlan(plan)}
+                      disabled={settingDefaultId === plan.id}
+                      className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-amber-400 transition-colors disabled:opacity-40"
+                      title="Marcar como Plan por Defecto"
+                    >
+                      <Star size={16} />
+                    </button>
+                  )}
+                </div>
                 <button
                   onClick={() => setPlanModal({ mode: 'edit', plan })}
                   className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-colors"

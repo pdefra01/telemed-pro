@@ -7,7 +7,8 @@ import {
 import { useToast } from '../../context/ToastContext';
 import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { adhesionRepository, AdhesionRequest } from '../../repositories/AdhesionRepository';
-import { Patient } from '../../types';
+import { planRepository } from '../../repositories/PlanRepository';
+import { Patient, Plan } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 
 // Glass Card for Table Container
@@ -30,9 +31,11 @@ const Affiliates: React.FC = () => {
     name: '',
     email: '',
     dni: '',
-    planName: 'Plan Básico',
+    planId: '',
     planStatus: 'active' as const
   });
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
 
   // Solicitudes QR states
   const [activeTab, setActiveTab] = useState<'active' | 'requests'>('active');
@@ -44,7 +47,21 @@ const Affiliates: React.FC = () => {
   useEffect(() => {
     loadAffiliates();
     loadRequests();
+    loadPlans();
   }, []);
+
+  const loadPlans = async () => {
+    try {
+      setIsLoadingPlans(true);
+      const data = await planRepository.getAll();
+      setPlans(data);
+    } catch (error) {
+      console.error("Error cargando planes disponibles:", error);
+      toast("Error cargando planes disponibles", "error");
+    } finally {
+      setIsLoadingPlans(false);
+    }
+  };
 
   const loadRequests = async () => {
     try {
@@ -76,7 +93,7 @@ const Affiliates: React.FC = () => {
       name: '',
       email: '',
       dni: '',
-      planName: 'Plan Básico',
+      planId: plans[0]?.id || '',
       planStatus: 'active'
     });
     setShowModal(true);
@@ -86,11 +103,14 @@ const Affiliates: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      // formData.planId is '' when no plan is selected (or no plans exist) —
+      // never send an empty string as a foreign key, leave plan_id untouched/null instead.
+      const payload = { ...formData, planId: formData.planId || undefined };
       if (editId) {
-        await affiliateRepository.updateAffiliate(editId, formData);
+        await affiliateRepository.updateAffiliate(editId, payload);
         toast(`Afiliado ${formData.name} actualizado`, "success");
       } else {
-        await affiliateRepository.createAffiliate(formData);
+        await affiliateRepository.createAffiliate(payload);
         toast(`Afiliado ${formData.name} registrado`, "success");
       }
       setShowModal(false);
@@ -108,7 +128,7 @@ const Affiliates: React.FC = () => {
       name: patient.name,
       email: patient.email,
       dni: patient.dni || '',
-      planName: patient.planName || 'Plan Básico',
+      planId: patient.planId || '',
       planStatus: (patient.planStatus as any) || 'active'
     });
     setShowModal(true);
@@ -514,14 +534,31 @@ const Affiliates: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Nivel de Cobertura</label>
                 <select
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors appearance-none"
-                  value={formData.planName}
-                  onChange={e => setFormData({ ...formData, planName: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={formData.planId}
+                  onChange={e => setFormData({ ...formData, planId: e.target.value })}
+                  disabled={isLoadingPlans || plans.length === 0}
                 >
-                  <option value="Plan Básico" className="bg-[#0f172a]">Plan Básico (Esencial)</option>
-                  <option value="Plan Premium" className="bg-[#0f172a]">Plan Premium (Recomendado)</option>
-                  <option value="Plan Platino" className="bg-[#0f172a]">Plan Platino (Full Coverage)</option>
+                  {isLoadingPlans ? (
+                    <option value="" className="bg-[#0f172a]">Cargando planes...</option>
+                  ) : plans.length === 0 ? (
+                    <option value="" className="bg-[#0f172a]">No hay planes disponibles</option>
+                  ) : (
+                    <>
+                      <option value="" className="bg-[#0f172a]">Sin plan asignado</option>
+                      {plans.map(plan => (
+                        <option key={plan.id} value={plan.id} className="bg-[#0f172a]">
+                          {plan.name} ({plan.isUnlimited ? '∞' : `${plan.bonifiedConsultations} consultas`})
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
+                {!isLoadingPlans && plans.length === 0 && (
+                  <p className="text-[10px] text-amber-500 mt-1 ml-1">
+                    No hay planes cargados. Creá uno primero en la pestaña "Planes" de Convenios.
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-end space-x-4 pt-4">
