@@ -224,7 +224,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
                 <Input
                   id="planName"
                   label="Plan de Cobertura"
-                  value={user.planName || 'Plan Base'}
+                  value={user.planName || 'Sin plan asignado'}
                   readOnly
                   disabled
                   icon={<Shield size={18} />}

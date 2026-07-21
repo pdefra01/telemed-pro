@@ -203,4 +203,26 @@ describe('DoctorDashboard - Consultation History', () => {
     expect(screen.getByText(/Sin diagnóstico registrado en este nodo/i)).toBeInTheDocument();
     expect(screen.getByText(/Sin prescripciones en este registro/i)).toBeInTheDocument();
   });
+
+  it('never fabricates "Plan Global" in the queue when patient_plan is null (same fallback bug fixed elsewhere in AuthRepository)', async () => {
+    vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValue([
+      {
+        appointment_id: 'appt-queue-1',
+        patient_id: 'pat-noplan',
+        patient_name: 'Sin Plan Queue',
+        patient_avatar: null,
+        patient_plan: null,
+        doctor_id: 'doc1',
+        scheduled_at: '2024-05-10T10:00:00Z',
+        status: 'confirmed',
+        consultation_metadata: {},
+      },
+    ] as any);
+
+    renderComponent();
+
+    expect(await screen.findByText('Sin Plan Queue')).toBeInTheDocument();
+    expect(screen.getByText('Sin plan asignado')).toBeInTheDocument();
+    expect(screen.queryByText('Plan Global')).not.toBeInTheDocument();
+  });
 });

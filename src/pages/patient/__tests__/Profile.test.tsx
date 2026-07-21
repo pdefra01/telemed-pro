@@ -58,6 +58,15 @@ describe('Patient Profile Screen', () => {
     expect(addressInput.value).toBe(MOCK_PATIENT.address || '');
   });
 
+  it('never fabricates "Plan Base" when the user has no planName — shows the honest "Sin plan asignado" instead', () => {
+    const userWithoutPlan = { ...MOCK_PATIENT, planName: undefined };
+
+    renderWithRouter(<Profile user={userWithoutPlan} onLogin={mockOnLogin} />);
+
+    const planInput = screen.getByLabelText(/Plan de Cobertura/i) as HTMLInputElement;
+    expect(planInput.value).toBe('Sin plan asignado');
+  });
+
   it('prevents submission and displays an error if full name is empty', async () => {
     renderWithRouter(<Profile user={MOCK_PATIENT} onLogin={mockOnLogin} />);
 

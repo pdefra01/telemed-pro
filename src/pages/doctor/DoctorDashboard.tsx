@@ -594,7 +594,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                         <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{apt.time}</span>
                                                     </div>
                                                     <span className="text-[9px] font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 bg-blue-500/10 text-blue-400 rounded-lg sm:rounded-xl border border-blue-500/20 uppercase tracking-widest">
-                                                        {apt.patientPlan || 'Plan Global'}
+                                                        {apt.patientPlan || 'Sin plan asignado'}
                                                     </span>
                                                 </div>
                                             </div>
