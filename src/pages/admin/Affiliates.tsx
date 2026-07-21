@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, Plus, Edit2, Trash2, AlertCircle, Shield, User as UserIcon, 
-  Building2, Filter, Key, ShieldCheck, Mail, Phone, MapPin, 
-  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2 
+import {
+  Search, Plus, Edit2, Trash2, AlertCircle, Shield, User as UserIcon,
+  Building2, Filter, Key, ShieldCheck, Mail, Phone, MapPin,
+  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
-import { affiliateRepository, PlanAssignmentFailedError } from '../../repositories/AffiliateRepository';
+import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../../repositories/AffiliateRepository';
 import { adhesionRepository, AdhesionRequest } from '../../repositories/AdhesionRepository';
 import { planRepository } from '../../repositories/PlanRepository';
 import { Patient, Plan } from '../../types';
@@ -18,6 +18,17 @@ const GlassTableContainer: React.FC<{ children: React.ReactNode }> = ({ children
   </div>
 );
 
+/**
+ * Decide si mostrar la acción "Renovar cobertura" para un afiliado: sólo
+ * cuando tiene un plan asignado Y su cobertura se sabe explícitamente vencida
+ * (`coverageActive === false`). Si el estado todavía no se cargó (entrada
+ * ausente en el mapa), NUNCA se asume vencida — evita ofrecer una renovación
+ * sobre datos que no se verificaron.
+ */
+export function shouldShowRenewCoverage(patient: Patient, coverageActiveMap: Record<string, boolean>): boolean {
+  return !!patient.planId && coverageActiveMap[patient.id] === false;
+}
+
 const Affiliates: React.FC = () => {
   const { toast } = useToast();
   const [affiliates, setAffiliates] = useState<Patient[]>([]);
@@ -27,6 +38,14 @@ const Affiliates: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [resetPasswordPatient, setResetPasswordPatient] = useState<Patient | null>(null);
+  // Mapa patientId -> coverageActive, poblado tras cargar el padrón. Ausencia
+  // de entrada (no `false`) significa "todavía no verificado" — nunca se
+  // asume vencida sin haber leído el estado real.
+  const [coverageActiveMap, setCoverageActiveMap] = useState<Record<string, boolean>>({});
+  // Fila individual en curso de renovación — separado de `isSubmitting` para
+  // no deshabilitar el botón "Renovar cobertura" de TODAS las filas mientras
+  // se renueva (o edita) una sola.
+  const [renewingId, setRenewingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -80,10 +99,47 @@ const Affiliates: React.FC = () => {
       setIsLoading(true);
       const data = await affiliateRepository.getAllAffiliates();
       setAffiliates(data);
+      loadCoverageStatus(data);
     } catch (error) {
       toast("Error cargando afiliados", "error");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Resuelve `coverageActive` por afiliado (para decidir cuándo ofrecer
+   * "Renovar cobertura"). Se corre en paralelo, sin bloquear el render del
+   * padrón — si una lectura individual falla, esa entrada queda ausente del
+   * mapa en lugar de asumir un estado inventado.
+   */
+  const loadCoverageStatus = async (patients: Patient[]) => {
+    const entries = await Promise.all(
+      patients
+        .filter(p => p.planId)
+        .map(async (p) => {
+          try {
+            const status = await affiliateRepository.getConsultationQuotaStatus(p.id);
+            return [p.id, status.coverageActive] as const;
+          } catch (error) {
+            console.error(`Error obteniendo estado de cobertura de ${p.id}:`, error);
+            return null;
+          }
+        })
+    );
+    setCoverageActiveMap(Object.fromEntries(entries.filter((e): e is readonly [string, boolean] => e !== null)));
+  };
+
+  const handleRenewCoverage = async (patient: Patient) => {
+    setRenewingId(patient.id);
+    try {
+      await affiliateRepository.renewCoverageWindow(patient.id);
+      toast(`Cobertura de ${patient.name} renovada con éxito`, "success");
+      loadAffiliates();
+    } catch (error: any) {
+      toast(error?.message || "Error al renovar la cobertura", "error");
+    } finally {
+      setRenewingId(null);
     }
   };
 
@@ -124,6 +180,12 @@ const Affiliates: React.FC = () => {
         // el plan. No es un error genérico: avisar al admin con precisión
         // para que no quede un paciente sin cupo sin que nadie lo note.
         toast(`Afiliado ${formData.name} registrado, pero no se pudo asignar el plan — reintentá desde Editar.`, "error");
+        setShowModal(false);
+        loadAffiliates();
+      } else if (error instanceof ProfileFieldsUpdateFailedError) {
+        // El plan ya se actualizó (RPC assign_plan commiteada) — solo falló el
+        // segundo write con el resto de los campos del formulario.
+        toast(`El plan de ${formData.name} se actualizó, pero el resto de los datos no se guardó — reintentá.`, "error");
         setShowModal(false);
         loadAffiliates();
       } else {
@@ -382,13 +444,23 @@ const Affiliates: React.FC = () => {
                         >
                           <Key size={16} />
                         </button>
-                        <button 
-                          onClick={() => handleEdit(patient)} 
+                        <button
+                          onClick={() => handleEdit(patient)}
                           className="p-2 bg-white/5 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-colors border border-white/5"
                           title="Editar Perfil"
                         >
                           <Edit2 size={16} />
                         </button>
+                        {shouldShowRenewCoverage(patient, coverageActiveMap) && (
+                          <button
+                            onClick={() => handleRenewCoverage(patient)}
+                            disabled={renewingId === patient.id}
+                            className="p-2 bg-white/5 hover:bg-teal-500/20 text-teal-400 rounded-xl transition-colors border border-white/5 disabled:opacity-50"
+                            title="Renovar Cobertura"
+                          >
+                            <RefreshCw size={16} />
+                          </button>
+                        )}
                         {patient.isActive && (
                           <button 
                             onClick={() => setDeleteConfirmId(patient.id)} 
