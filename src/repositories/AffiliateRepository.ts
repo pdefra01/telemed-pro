@@ -255,35 +255,41 @@ export class AffiliateRepository {
   }
 
   /**
-   * Obtiene el estado del cupo de consultas bonificadas del paciente y su grupo familiar
+   * Obtiene el estado del cupo de consultas bonificadas del paciente y su grupo familiar.
+   *
+   * Resuelve el plan real vía `profiles.plan_id -> plans` (nunca fabrica un cupo por
+   * defecto). Si el paciente no tiene plan asignado, devuelve un estado explícito
+   * "sin plan" en lugar de un número inventado. Si el plan es ilimitado, `totalBonified`
+   * y `remaining` son `null` para no simular un tope numérico.
    */
   async getConsultationQuotaStatus(patientId: string): Promise<{
     quotaUsed: number;
-    totalBonified: number;
+    totalBonified: number | null;
+    remaining: number | null;
+    isUnlimited: boolean;
+    hasPlan: boolean;
     isOverQuota: boolean;
-    remaining: number;
     planName: string;
   }> {
+    const noPlanState = (quotaUsed: number) => ({
+      quotaUsed,
+      totalBonified: 0,
+      remaining: 0,
+      isUnlimited: false,
+      hasPlan: false,
+      isOverQuota: false,
+      planName: 'Sin plan asignado',
+    });
+
     const { data: profile, error: pErr } = await supabase
       .from('profiles')
-      .select('plan_id, plan_name, current_period_quota_used, family_group_id')
+      .select('plan_id, current_period_quota_used, family_group_id')
       .eq('id', patientId)
       .single();
 
     if (pErr || !profile) {
-      return { quotaUsed: 0, totalBonified: 4, isOverQuota: false, remaining: 4, planName: 'Plan Base' };
-    }
-
-    let totalBonified = 4; // Default bonified consultations
-    if (profile.plan_id) {
-      const { data: plan } = await supabase
-        .from('plans')
-        .select('bonified_consultations')
-        .eq('id', profile.plan_id)
-        .single();
-      if (plan && typeof plan.bonified_consultations === 'number') {
-        totalBonified = plan.bonified_consultations;
-      }
+      console.error(`Error obteniendo perfil ${patientId} para cupo de consultas:`, pErr);
+      return noPlanState(0);
     }
 
     let quotaUsed = profile.current_period_quota_used || 0;
@@ -299,15 +305,34 @@ export class AffiliateRepository {
       }
     }
 
-    const remaining = Math.max(0, totalBonified - quotaUsed);
-    const isOverQuota = quotaUsed >= totalBonified;
+    if (!profile.plan_id) {
+      return noPlanState(quotaUsed);
+    }
+
+    const { data: plan, error: planErr } = await supabase
+      .from('plans')
+      .select('name, bonified_consultations, is_unlimited')
+      .eq('id', profile.plan_id)
+      .single();
+
+    if (planErr || !plan) {
+      console.error(`Error obteniendo plan ${profile.plan_id} para cupo de consultas:`, planErr);
+      return noPlanState(quotaUsed);
+    }
+
+    const isUnlimited = !!plan.is_unlimited;
+    const totalBonified = isUnlimited ? null : plan.bonified_consultations;
+    const remaining = isUnlimited ? null : Math.max(0, (totalBonified ?? 0) - quotaUsed);
+    const isOverQuota = !isUnlimited && quotaUsed >= (totalBonified ?? 0);
 
     return {
       quotaUsed,
       totalBonified,
-      isOverQuota,
       remaining,
-      planName: profile.plan_name || 'Plan Base'
+      isUnlimited,
+      hasPlan: true,
+      isOverQuota,
+      planName: plan.name,
     };
   }
 

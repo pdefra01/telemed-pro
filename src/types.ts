@@ -140,6 +140,7 @@ export interface Plan {
   name: string;
   monthlyCost: number;
   bonifiedConsultations: number;
+  isUnlimited: boolean;
   maxFamilyMembers: number;
   metadata?: Record<string, any>;
 }

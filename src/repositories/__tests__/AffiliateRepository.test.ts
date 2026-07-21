@@ -155,4 +155,147 @@ describe('AffiliateRepository', () => {
     expect(updateMock).toHaveBeenCalledWith({ is_active: false, plan_status: 'suspended' });
     expect(eqMock).toHaveBeenCalledWith('id', 'test-id');
   });
+
+  describe('getConsultationQuotaStatus', () => {
+    /** Builds a `profiles` select-by-id chain: select().eq().single() */
+    const profileByIdChain = (data: any, error: any = null) => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data, error }),
+        }),
+      }),
+    });
+
+    /** Builds a `plans` select-by-id chain: select().eq().single() */
+    const planByIdChain = (data: any, error: any = null) => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data, error }),
+        }),
+      }),
+    });
+
+    /** Builds a `profiles` family aggregation chain: select().eq() (no .single()) */
+    const familyChain = (data: any[], error: any = null) => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ data, error }),
+      }),
+    });
+
+    it('resolves a finite-quota plan and reports remaining/over-quota correctly', async () => {
+      vi.mocked(supabase.from)
+        .mockReturnValueOnce(profileByIdChain({
+          plan_id: 'plan-1',
+          current_period_quota_used: 2,
+          family_group_id: null,
+        }) as any)
+        .mockReturnValueOnce(planByIdChain({
+          name: 'Plan Familiar Medinex',
+          bonified_consultations: 6,
+          is_unlimited: false,
+        }) as any);
+
+      const result = await affiliateRepository.getConsultationQuotaStatus('patient-1');
+
+      expect(result).toEqual({
+        quotaUsed: 2,
+        totalBonified: 6,
+        remaining: 4,
+        isUnlimited: false,
+        hasPlan: true,
+        isOverQuota: false,
+        planName: 'Plan Familiar Medinex',
+      });
+    });
+
+    it('reports isOverQuota true once usage reaches the finite plan cap (proves the old =4 fabrication is gone)', async () => {
+      vi.mocked(supabase.from)
+        .mockReturnValueOnce(profileByIdChain({
+          plan_id: 'plan-1',
+          current_period_quota_used: 6,
+          family_group_id: null,
+        }) as any)
+        .mockReturnValueOnce(planByIdChain({
+          name: 'Plan Familiar Medinex',
+          bonified_consultations: 6,
+          is_unlimited: false,
+        }) as any);
+
+      const result = await affiliateRepository.getConsultationQuotaStatus('patient-1');
+
+      expect(result.isOverQuota).toBe(true);
+      expect(result.remaining).toBe(0);
+      expect(result.totalBonified).toBe(6);
+    });
+
+    it('reports unlimited plans with null bounds and never over-quota', async () => {
+      vi.mocked(supabase.from)
+        .mockReturnValueOnce(profileByIdChain({
+          plan_id: 'plan-2',
+          current_period_quota_used: 999,
+          family_group_id: null,
+        }) as any)
+        .mockReturnValueOnce(planByIdChain({
+          name: 'Plan Ilimitado',
+          bonified_consultations: 0,
+          is_unlimited: true,
+        }) as any);
+
+      const result = await affiliateRepository.getConsultationQuotaStatus('patient-2');
+
+      expect(result).toEqual({
+        quotaUsed: 999,
+        totalBonified: null,
+        remaining: null,
+        isUnlimited: true,
+        hasPlan: true,
+        isOverQuota: false,
+        planName: 'Plan Ilimitado',
+      });
+    });
+
+    it('returns an explicit no-plan state without fabricating a quota when plan_id is null', async () => {
+      vi.mocked(supabase.from)
+        .mockReturnValueOnce(profileByIdChain({
+          plan_id: null,
+          current_period_quota_used: 1,
+          family_group_id: null,
+        }) as any);
+
+      const result = await affiliateRepository.getConsultationQuotaStatus('patient-3');
+
+      expect(result).toEqual({
+        quotaUsed: 1,
+        totalBonified: 0,
+        remaining: 0,
+        isUnlimited: false,
+        hasPlan: false,
+        isOverQuota: false,
+        planName: 'Sin plan asignado',
+      });
+    });
+
+    it('aggregates quotaUsed across the family group before resolving the plan', async () => {
+      vi.mocked(supabase.from)
+        .mockReturnValueOnce(profileByIdChain({
+          plan_id: 'plan-1',
+          current_period_quota_used: 2,
+          family_group_id: 'family-1',
+        }) as any)
+        .mockReturnValueOnce(familyChain([
+          { current_period_quota_used: 2 },
+          { current_period_quota_used: 3 },
+        ]) as any)
+        .mockReturnValueOnce(planByIdChain({
+          name: 'Plan Familiar Medinex',
+          bonified_consultations: 6,
+          is_unlimited: false,
+        }) as any);
+
+      const result = await affiliateRepository.getConsultationQuotaStatus('patient-1');
+
+      expect(result.quotaUsed).toBe(5);
+      expect(result.remaining).toBe(1);
+    });
+  });
 });
