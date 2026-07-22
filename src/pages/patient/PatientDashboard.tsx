@@ -599,19 +599,20 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                         <Check size={14} />
                                     </div>
                                 </div>
-                                <div>
-                                    <p className="font-bold text-2xl leading-none tracking-tight uppercase group-hover:text-blue-200 transition-colors">{user.name}</p>
-                                    <div className="flex flex-col gap-1 mt-3">
-                                        <p className="text-[10px] text-blue-100/60 font-bold uppercase tracking-widest flex items-center">
-                                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span> DNI: {user.dni || 'NO CARGADO'}
-                                        </p>
-                                        <p className="text-[10px] text-blue-100/60 font-bold uppercase tracking-widest flex items-center">
-                                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full mr-2"></span> {user.planName || 'PLAN GLOBAL'}
-                                        </p>
+                                <div className="min-w-0">
+                                    <p className="font-bold text-lg sm:text-xl leading-tight tracking-tight uppercase break-words group-hover:text-blue-200 transition-colors">{user.name}</p>
+                                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 mt-3 items-baseline">
+                                        <span className="text-[9px] text-blue-300/50 font-bold uppercase tracking-[0.2em]">DNI</span>
+                                        <span className="text-[11px] text-blue-50 font-mono font-semibold tracking-wider">{user.dni || 'NO CARGADO'}</span>
+
+                                        <span className="text-[9px] text-blue-300/50 font-bold uppercase tracking-[0.2em]">Plan</span>
+                                        <span className="text-[11px] text-blue-50 font-semibold uppercase tracking-wide">{user.planName || 'PLAN GLOBAL'}</span>
+
                                         {user.bloodType && (
-                                            <p className="text-[10px] text-red-300 font-bold uppercase tracking-widest flex items-center">
-                                                <span className="w-1.5 h-1.5 bg-red-400 rounded-full mr-2"></span> GS: {user.bloodType}
-                                            </p>
+                                            <>
+                                                <span className="text-[9px] text-blue-300/50 font-bold uppercase tracking-[0.2em]">GS</span>
+                                                <span className="text-[11px] text-red-300 font-semibold tracking-wide">{user.bloodType}</span>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -691,7 +692,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             className="p-5 bg-emerald-500 hover:bg-emerald-400 rounded-[1.5rem] transition-all flex items-center justify-center space-x-4 group shadow-[0_10px_30px_rgba(16,185,129,0.3)] h-16"
                         >
                                 <Phone size={22} className="text-white group-hover:scale-110 transition-transform" />
-                                <span className="font-bold text-white uppercase tracking-[0.2em] text-sm">WhatsApp Concierge</span>
+                                <span className="font-bold text-white uppercase tracking-[0.2em] text-sm">Hablar con MediBot</span>
                             </a>
                         </div>
                     </div>

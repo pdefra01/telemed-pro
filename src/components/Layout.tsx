@@ -13,7 +13,6 @@ import {
   Activity,
   CreditCard,
   FileBarChart,
-  Wand2,
   ShoppingBag,
   Award
 } from 'lucide-react';
@@ -42,18 +41,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
     ];
 
-    // AI Tools available for everyone
-    const tools = [
-      { name: 'Editor IA', icon: <Wand2 size={20} />, path: '/ai-editor' },
-    ];
-
     if (role === 'patient') {
       return [
         ...common,
         { name: 'Farmacia Digital', icon: <ShoppingBag size={20} />, path: '/pharmacy' },
         { name: 'Historia Clínica', icon: <Activity size={20} />, path: '/history' },
         { name: 'Mis Pagos', icon: <CreditCard size={20} />, path: '/payments' },
-        ...tools
       ];
     }
 
@@ -74,7 +67,6 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
         { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
         { name: 'Reportes', icon: <Activity size={20} />, path: '/reports' },
-        ...tools
       ];
     }
 
@@ -107,11 +99,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-200 ease-in-out z-40 w-64 h-full md:h-screen bg-white shadow-lg flex flex-col justify-between`}
       >
         <div className="flex-1 overflow-y-auto custom-scrollbar pb-4">
-          <div className="p-6 flex flex-col items-center space-y-3 hidden md:flex border-b border-gray-100 mb-6 text-center">
-            <div className="w-20 h-20 bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center p-2 hover:scale-105 transition-transform duration-500 select-none">
+          <div className="p-8 flex flex-col items-center space-y-4 hidden md:flex border-b border-gray-100 mb-6 text-center">
+            <div className="w-32 h-32 bg-white rounded-[1.75rem] shadow-lg ring-1 ring-[#0dbda9]/15 border border-gray-100 flex items-center justify-center p-4 hover:scale-105 transition-transform duration-500 select-none">
               <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
             </div>
-            <span className="text-xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+            <span className="text-2xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
               MED<span className="text-[#0dbda9]">IN</span>EX
             </span>
           </div>
