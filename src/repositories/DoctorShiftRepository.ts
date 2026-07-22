@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import { DoctorWorkShift, OfficeLocation } from '../types';
 import { officeLocationRepository } from './OfficeLocationRepository';
+import { calculateDistanceMeters } from '../utils/geo';
 
 const MAX_SHIFT_HOURS = 8;
 
@@ -51,43 +52,67 @@ export class DoctorShiftRepository {
   }
 
   async clockIn(doctorId: string): Promise<{ shift: DoctorWorkShift; matchedOffice: OfficeLocation }> {
-    // 1. Detect client IP
-    const currentIp = await officeLocationRepository.detectCurrentIp();
-
-    // 2. Validate against active office locations
+    // 1. Fetch active office locations
     const offices = await officeLocationRepository.getAllOffices();
     const activeOffices = offices.filter(o => o.isActive);
 
-    // Check match by IP or localhost/dev environment fallback
+    // Dev/local environment: skip GPS entirely so local development isn't
+    // blocked by lacking a real device location or registered coordinates.
     const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
-    
-    let matchedOffice = activeOffices.find(o => o.publicIp === currentIp);
 
-    if (!matchedOffice && isDev) {
-      // Fallback for local testing
+    let matchedOffice: OfficeLocation | undefined;
+
+    if (isDev) {
       matchedOffice = activeOffices[0] || {
         id: 'dev-office',
         name: 'Oficina de Desarrollo',
-        publicIp: currentIp,
+        latitude: 0,
+        longitude: 0,
+        radiusMeters: 150,
         isActive: true
       };
-    }
+    } else {
+      // 2. Get doctor's current GPS position (rejection messages are already
+      // user-facing and propagate untouched).
+      const position = await officeLocationRepository.getCurrentPosition();
 
-    if (!matchedOffice) {
-      throw new Error(`Acceso denegado: Tu IP actual (${currentIp}) no pertenece a ninguna oficina autorizada.`);
+      // 3. Find the nearest active office whose radius contains the doctor's position.
+      let nearestDistance = Infinity;
+      let matchedDistance = Infinity;
+
+      for (const office of activeOffices) {
+        const distance = calculateDistanceMeters(
+          position.latitude,
+          position.longitude,
+          office.latitude,
+          office.longitude
+        );
+
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+        }
+
+        if (distance <= office.radiusMeters && distance < matchedDistance) {
+          matchedOffice = office;
+          matchedDistance = distance;
+        }
+      }
+
+      if (!matchedOffice) {
+        throw new Error(`Acceso denegado: no estás dentro del radio de ninguna oficina autorizada. La oficina más cercana está a ${Math.round(nearestDistance)}m.`);
+      }
     }
 
     // Close any unclosed shifts prior to creating a new one
     await this.autoCloseOldShifts(doctorId);
 
-    // 3. Create active shift
+    // 4. Create active shift
     const { data, error } = await supabase
       .from('doctor_work_shifts')
       .insert({
         doctor_id: doctorId,
         office_location_id: matchedOffice.id === 'dev-office' ? null : matchedOffice.id,
         clock_in: new Date().toISOString(),
-        ip_address: currentIp,
         status: 'active'
       })
       .select()

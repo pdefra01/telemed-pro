@@ -13,18 +13,22 @@ export class OfficeLocationRepository {
     return (data || []).map(row => ({
       id: row.id,
       name: row.name,
-      publicIp: row.public_ip,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      radiusMeters: row.radius_meters,
       isActive: row.is_active,
       createdAt: row.created_at
     }));
   }
 
-  async createOffice(name: string, publicIp: string): Promise<OfficeLocation> {
+  async createOffice(name: string, latitude: number, longitude: number, radiusMeters: number): Promise<OfficeLocation> {
     const { data, error } = await supabase
       .from('office_locations')
       .insert({
         name,
-        public_ip: publicIp,
+        latitude,
+        longitude,
+        radius_meters: radiusMeters,
         is_active: true
       })
       .select()
@@ -35,7 +39,9 @@ export class OfficeLocationRepository {
     return {
       id: data.id,
       name: data.name,
-      publicIp: data.public_ip,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      radiusMeters: data.radius_meters,
       isActive: data.is_active,
       createdAt: data.created_at
     };
@@ -60,29 +66,32 @@ export class OfficeLocationRepository {
   }
 
   /**
-   * Helper to detect current client public IP via public API or redundant fallback
+   * Wraps the browser Geolocation API in a Promise, surfacing clear
+   * Spanish-language error messages so callers can display them directly.
    */
-  async detectCurrentIp(): Promise<string> {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
-      clearTimeout(timeoutId);
-      const data = await res.json();
-      if (data.ip) return data.ip;
-    } catch (err) {
-      console.warn("Failed to detect IP via primary provider (ipify), trying fallback:", err);
+  async getCurrentPosition(): Promise<{ latitude: number; longitude: number }> {
+    if (!navigator.geolocation) {
+      throw new Error('Tu navegador no soporta geolocalización.');
     }
 
-    try {
-      const res = await fetch('https://api.seeip.org/jsonip');
-      const data = await res.json();
-      if (data.ip) return data.ip;
-    } catch (err) {
-      console.warn("Failed to detect IP via secondary provider (seeip):", err);
-    }
-
-    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? '127.0.0.1' : '192.168.0.141';
+    return new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            reject(new Error('Activá los permisos de ubicación en tu navegador para poder fichar.'));
+          } else {
+            reject(new Error('No pudimos obtener tu ubicación. Intentá nuevamente.'));
+          }
+        },
+        { timeout: 8000, enableHighAccuracy: true }
+      );
+    });
   }
 }
 

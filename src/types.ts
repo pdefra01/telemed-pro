@@ -412,7 +412,9 @@ export interface ContactVerification {
 export interface OfficeLocation {
   id: string;
   name: string;
-  publicIp: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
   isActive: boolean;
   createdAt?: string;
 }

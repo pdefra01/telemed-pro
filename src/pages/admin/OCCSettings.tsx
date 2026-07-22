@@ -34,8 +34,9 @@ const OCCSettings: React.FC = () => {
 
   const [offices, setOffices] = useState<OfficeLocation[]>([]);
   const [isOfficeModalOpen, setIsOfficeModalOpen] = useState(false);
-  const [isDetectingIp, setIsDetectingIp] = useState(false);
-  const [newOffice, setNewOffice] = useState({ name: '', publicIp: '' });
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [newOffice, setNewOffice] = useState({ name: '', latitude: 0, longitude: 0, radiusMeters: 150 });
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -57,26 +58,28 @@ const OCCSettings: React.FC = () => {
     loadSettings();
   }, []);
 
-  const handleDetectCurrentIp = async () => {
-    setIsDetectingIp(true);
+  const handleUseCurrentLocation = async () => {
+    setIsDetectingLocation(true);
+    setLocationError('');
     try {
-      const ip = await officeLocationRepository.detectCurrentIp();
-      setNewOffice(prev => ({ ...prev, publicIp: ip }));
-      toast(`IP detectada: ${ip}`, 'success');
-    } catch (err) {
-      toast("Error al detectar IP pública", 'error');
+      const { latitude, longitude } = await officeLocationRepository.getCurrentPosition();
+      setNewOffice(prev => ({ ...prev, latitude, longitude }));
+      toast(`Ubicación detectada: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`, 'success');
+    } catch (err: any) {
+      setLocationError(err.message || 'No pudimos obtener tu ubicación.');
+      toast(err.message || 'No pudimos obtener tu ubicación.', 'error');
     } finally {
-      setIsDetectingIp(false);
+      setIsDetectingLocation(false);
     }
   };
 
   const handleAddOffice = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const created = await officeLocationRepository.createOffice(newOffice.name, newOffice.publicIp);
+      const created = await officeLocationRepository.createOffice(newOffice.name, newOffice.latitude, newOffice.longitude, newOffice.radiusMeters);
       setOffices([created, ...offices]);
       setIsOfficeModalOpen(false);
-      setNewOffice({ name: '', publicIp: '' });
+      setNewOffice({ name: '', latitude: 0, longitude: 0, radiusMeters: 150 });
       toast(`Oficina '${created.name}' registrada exitosamente`, 'success');
     } catch (err) {
       toast("Error al registrar oficina", 'error');
@@ -290,10 +293,10 @@ const OCCSettings: React.FC = () => {
           <div>
             <h3 className="text-xl font-bold text-white flex items-center">
               <Globe size={20} className="mr-2 text-emerald-500" />
-              Red de Oficinas Autorizadas (Control de IP Pública)
+              Red de Oficinas Autorizadas (Geocerca GPS)
             </h3>
             <p className="text-slate-400 text-xs mt-1">
-              Las IPs públicas registradas aquí permiten a los médicos fichar el ingreso a su jornada laboral desde la red física de la sucursal.
+              Las coordenadas y el radio registrados aquí permiten a los médicos fichar el ingreso a su jornada laboral estando físicamente dentro del área de la sucursal.
             </p>
           </div>
           <button 
@@ -312,7 +315,7 @@ const OCCSettings: React.FC = () => {
                 <div>
                   <h4 className="text-base font-bold text-white tracking-tight">{office.name}</h4>
                   <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20 mt-1 inline-block">
-                    IP: {office.publicIp}
+                    📍 Radio: {office.radiusMeters}m · {office.latitude.toFixed(5)}, {office.longitude.toFixed(5)}
                   </span>
                 </div>
                 <button 
@@ -360,23 +363,54 @@ const OCCSettings: React.FC = () => {
               </div>
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500">IP Pública Autorizada</label>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500">Ubicación GPS</label>
                   <button
                     type="button"
-                    onClick={handleDetectCurrentIp}
-                    disabled={isDetectingIp}
+                    onClick={handleUseCurrentLocation}
+                    disabled={isDetectingLocation}
                     className="text-[10px] font-bold text-emerald-400 hover:underline flex items-center gap-1"
                   >
-                    {isDetectingIp ? 'Detectando...' : '🪄 Detectar mi IP actual'}
+                    {isDetectingLocation ? 'Detectando...' : '📍 Usar mi ubicación actual'}
                   </button>
                 </div>
-                <input 
-                  type="text" 
+                {locationError && (
+                  <p className="text-[10px] text-red-400 mb-2">{locationError}</p>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-1">Latitud</label>
+                    <input
+                      type="number"
+                      required
+                      step="any"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-emerald-500/50"
+                      value={newOffice.latitude}
+                      onChange={(e) => setNewOffice({...newOffice, latitude: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-1">Longitud</label>
+                    <input
+                      type="number"
+                      required
+                      step="any"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-emerald-500/50"
+                      value={newOffice.longitude}
+                      onChange={(e) => setNewOffice({...newOffice, longitude: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-500 mb-2">Radio (metros)</label>
+                <input
+                  type="number"
                   required
-                  placeholder="Ej: 200.123.45.67 o 127.0.0.1"
+                  min={1}
+                  step="1"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-emerald-500/50"
-                  value={newOffice.publicIp}
-                  onChange={(e) => setNewOffice({...newOffice, publicIp: e.target.value})}
+                  value={newOffice.radiusMeters}
+                  onChange={(e) => setNewOffice({...newOffice, radiusMeters: parseInt(e.target.value, 10)})}
                 />
               </div>
               <div className="flex space-x-4 pt-4">
