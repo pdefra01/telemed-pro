@@ -9,12 +9,14 @@ vi.mock('../../services/supabase', () => ({
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     single: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
   },
 }));
 
@@ -32,6 +34,32 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
     supabaseMock.insert.mockReturnThis();
     supabaseMock.update.mockReturnThis();
     supabaseMock.single.mockReturnThis();
+  });
+
+  describe('getPatientAppointments', () => {
+    it('sweeps stale appointments via the expire_stale_appointments RPC before reading, and excludes cancelled/no_show', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.not = vi.fn().mockReturnValue({ order: vi.fn().mockResolvedValue({ data: [], error: null }) });
+
+      await appointmentRepository.getPatientAppointments('patient-1');
+
+      expect(supabaseMock.rpc).toHaveBeenCalledWith('expire_stale_appointments');
+      expect(supabaseMock.not).toHaveBeenCalledWith('status', 'in', '(cancelled,no_show)');
+    });
+
+    it('does not let a failed expire sweep block reading the appointment list', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.rpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.not = vi.fn().mockReturnValue({ order: vi.fn().mockResolvedValue({ data: [], error: null }) });
+
+      await expect(appointmentRepository.getPatientAppointments('patient-1')).resolves.toEqual([]);
+    });
   });
 
   describe('getDoctorAppointments', () => {

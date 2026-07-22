@@ -78,7 +78,7 @@ export interface Appointment {
   doctorName: string;
   date: string;
   time: string;
-  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
   type: 'video' | 'chat' | 'in-person';
   notes?: string; // Doctor's evolution notes
   consultationMetadata?: {

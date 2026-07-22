@@ -5,9 +5,27 @@ import { affiliateRepository } from './AffiliateRepository';
 
 export class AppointmentRepository {
   /**
+   * Barre turnos que nunca llegaron a un estado terminal (completed/cancelled)
+   * y cuyo horario ya pasó hace rato, marcándolos `no_show`. Sin esto, un turno
+   * que el doctor nunca finalizó (se cortó la conexión, cerró la pestaña, etc.)
+   * queda colgado como "próximo turno" del paciente para siempre — no hay
+   * scheduler en este proyecto, así que se corre oportunistamente en cada
+   * lectura, vía una RPC SECURITY DEFINER (el paciente no tiene permiso de
+   * UPDATE directo sobre appointments).
+   */
+  private async expireStaleAppointments(): Promise<void> {
+    const { error } = await supabase.rpc('expire_stale_appointments');
+    if (error) {
+      console.error('Error expirando turnos vencidos:', error);
+    }
+  }
+
+  /**
    * Obtiene todos los turnos confirmados/pendientes para un paciente específico
    */
   async getPatientAppointments(patientId: string): Promise<Appointment[]> {
+    await this.expireStaleAppointments();
+
     const { data, error } = await supabase
       .from('appointments')
       .select(`
@@ -15,7 +33,7 @@ export class AppointmentRepository {
         doctor:profiles!doctor_id(full_name)
       `)
       .eq('patient_id', patientId)
-      .neq('status', 'cancelled')
+      .not('status', 'in', '(cancelled,no_show)')
       .order('scheduled_at', { ascending: true });
 
     if (error) {
@@ -42,8 +60,10 @@ export class AppointmentRepository {
    */
   async getDoctorAppointments(
     doctorId: string,
-    filters?: { status?: ('pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled')[] }
+    filters?: { status?: ('pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show')[] }
   ): Promise<Appointment[]> {
+    await this.expireStaleAppointments();
+
     let query = supabase
       .from('appointments')
       .select(`
@@ -56,7 +76,7 @@ export class AppointmentRepository {
     if (filters?.status && filters.status.length > 0) {
       query = query.in('status', filters.status);
     } else {
-      query = query.neq('status', 'cancelled'); // Por defecto, todo lo no cancelado
+      query = query.not('status', 'in', '(cancelled,no_show)'); // Por defecto, todo lo no cancelado ni vencido
     }
 
     const { data, error } = await query.order('scheduled_at', { ascending: true });
