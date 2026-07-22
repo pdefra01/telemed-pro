@@ -187,7 +187,6 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
     // Modals State
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showAppointmentModal, setShowAppointmentModal] = useState(false);
-    const [showFamilyModal, setShowFamilyModal] = useState(false);
 
     const [isUploading, setIsUploading] = useState(false);
     const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -650,13 +649,12 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                     <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl">
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="font-bold text-xl text-white tracking-tight">Grupo Familiar</h3>
-                            <button
-                                type="button"
-                                onClick={() => setShowFamilyModal(true)}
+                            <Link
+                                to="/profile?addFamily=true"
                                 className="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500/20 transition-all border border-emerald-500/10 flex items-center justify-center"
                             >
                                 <Plus size={20} />
-                            </button>
+                            </Link>
                         </div>
                         <div className="space-y-4">
                             <div className="flex items-center p-4 bg-emerald-500/5 rounded-3xl border border-emerald-500/10 group cursor-pointer hover:bg-emerald-500/10 transition-all">
@@ -1067,51 +1065,6 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 </Button>
                             </div>
                         </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Add Family Member Modal */}
-            {showFamilyModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-                    <div className="bg-slate-900 border border-white/10 rounded-[2rem] sm:rounded-3xl p-5 sm:p-8 w-full max-w-md shadow-2xl">
-                        <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-2xl font-bold text-white uppercase tracking-tight">Nuevo Familiar</h3>
-                            <button onClick={() => setShowFamilyModal(false)} className="text-slate-500 hover:text-white transition">
-                                <X size={28} />
-                            </button>
-                        </div>
-                        <form className="space-y-6" onSubmit={(e) => {
-                            e.preventDefault();
-                            alert('Solicitud enviada para aprobación.');
-                            setShowFamilyModal(false);
-                        }}>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Nombre Completo</label>
-                                <input type="text" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50" required placeholder="Ej: Maria Perez" />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">DNI</label>
-                                <input type="text" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50" required placeholder="XX.XXX.XXX" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Parentesco</label>
-                                    <select className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none">
-                                        <option>Hijo/a</option>
-                                        <option>Cónyuge</option>
-                                        <option>Padre/Madre</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">F. Nacimiento</label>
-                                    <input type="date" className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50" required />
-                                </div>
-                            </div>
-                            <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-emerald-500/20 mt-4">
-                                GUARDAR INTEGRANTE
-                            </Button>
-                        </form>
                     </div>
                 </div>
             )}

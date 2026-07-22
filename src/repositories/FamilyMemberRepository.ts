@@ -54,12 +54,74 @@ export class FamilyMemberRepository {
   }
 
   /**
+   * Enforces the assigned plan's maxFamilyMembers cap before a new member is
+   * inserted. Self-service additions have no admin approval step, so this is
+   * the only gate — without it a patient could add unlimited dependents that
+   * all draw from the same shared consultation quota (family_coverage_windows
+   * is scoped by family_group_id).
+   */
+  private async assertUnderFamilyCap(groupId: string): Promise<void> {
+    const { count, error: countError } = await supabase
+      .from('family_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('family_group_id', groupId);
+
+    if (countError) {
+      console.error('Error contando familiares del grupo:', countError);
+      throw countError;
+    }
+
+    const { data: group, error: groupError } = await supabase
+      .from('family_groups')
+      .select('primary_affiliate_id')
+      .eq('id', groupId)
+      .single();
+
+    if (groupError) {
+      console.error('Error obteniendo grupo familiar:', groupError);
+      throw groupError;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('plan_id')
+      .eq('id', group.primary_affiliate_id)
+      .single();
+
+    if (profileError) {
+      console.error('Error obteniendo el plan del titular:', profileError);
+      throw profileError;
+    }
+
+    if (!profile.plan_id) {
+      throw new Error('No tenés un plan asignado — no se pueden agregar familiares sin cobertura activa.');
+    }
+
+    const { data: plan, error: planError } = await supabase
+      .from('plans')
+      .select('max_family_members')
+      .eq('id', profile.plan_id)
+      .single();
+
+    if (planError) {
+      console.error('Error obteniendo el tope de familiares del plan:', planError);
+      throw planError;
+    }
+
+    if ((count || 0) >= plan.max_family_members) {
+      throw new Error(`Tu plan permite hasta ${plan.max_family_members} familiares. Contactá a administración para ampliar tu cobertura.`);
+    }
+  }
+
+  /**
    * Adds a new member to a family group.
    */
   async addMember(
     groupId: string,
     data: { fullName: string; relation: string; birthDate?: string; dni?: string }
   ): Promise<FamilyMember & { dni?: string; birthDate?: string }> {
+    await this.assertUnderFamilyCap(groupId);
+
     const cleanRelation = data.relation.trim().toLowerCase();
     const { data: row, error } = await supabase
       .from('family_members')

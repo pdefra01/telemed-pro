@@ -57,6 +57,25 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
   // Remove confirm
   const [removingId, setRemovingId] = useState<string | null>(null);
 
+  // Deep-link to open the add-family form (HashRouter and BrowserRouter compatible)
+  useEffect(() => {
+    const hash = window.location.hash;
+    const searchIndex = hash.indexOf('?');
+    if (searchIndex !== -1) {
+      const queryParams = new URLSearchParams(hash.substring(searchIndex));
+      if (queryParams.get('addFamily') === 'true') {
+        setShowAddForm(true);
+        window.location.hash = hash.substring(0, searchIndex);
+      }
+    } else {
+      const queryParams = new URLSearchParams(window.location.search);
+      if (queryParams.get('addFamily') === 'true') {
+        setShowAddForm(true);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
+
   // ── Load family members ────────────────────────────────────────────────────
   useEffect(() => {
     const loadFamily = async () => {
