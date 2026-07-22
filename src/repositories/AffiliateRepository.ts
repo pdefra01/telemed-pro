@@ -2,6 +2,48 @@ import { supabase } from '../services/supabase';
 import { Patient } from '../types';
 import { generateUUID } from '../utils/uuid';
 import { authRepository } from './AuthRepository';
+import type { AffiliatePaymentStatus } from './AccountMovementRepository';
+
+/**
+ * Bridges the ledger's derived status vocabulary ('current'|'pending'|'overdue',
+ * from `affiliate_payment_status` — cuenta-corriente-billing PR2) onto the
+ * PRE-EXISTING `Patient.paymentStatus` union ('paid'|'overdue'|'grace_period').
+ * Renaming that union to the new labels is PR4's task (`types.ts`, out of
+ * scope here) — until then this mapping keeps the type-checker AND the UI
+ * valid. `undefined` input (no row in the view) maps to 'paid', which is
+ * honest for BOTH cases that produce it:
+ *   - an agreement-linked profile: agreements are entirely out of scope for
+ *     this ledger (Scope Boundary), so no row can ever exist for them — never
+ *     fabricate 'overdue'/'grace_period' for a status this feature can't see.
+ *   - a direct affiliate with zero ledger movements yet (e.g. brand new, no
+ *     billing cycle has run): balance is genuinely 0 by construction, so
+ *     'paid' (no view row = no charge = no debt) is the CORRECT value, not a
+ *     guess.
+ */
+/**
+ * FROZEN coverage-window billing terms for one affiliate, as returned by
+ * `getCoverageWindowsForBilling` (cuenta-corriente-billing D6). Always read
+ * from the window's own snapshot columns — never the live plan — so a later
+ * admin plan edit cannot retroactively reclassify already-elapsed months.
+ */
+export interface CoverageWindowSnapshot {
+  periodStart: string;
+  paidMonthsSnapshot: number;
+  bonusMonthsSnapshot: number;
+  monthlyCostSnapshot: number;
+}
+
+export function toLegacyPaymentStatus(status?: AffiliatePaymentStatus): Patient['paymentStatus'] {
+  switch (status) {
+    case 'overdue':
+      return 'overdue';
+    case 'pending':
+      return 'grace_period';
+    case 'current':
+    default:
+      return 'paid';
+  }
+}
 
 /**
  * El paciente base ya fue creado con éxito (vía /api/create-patient), pero el
@@ -49,7 +91,7 @@ export class AffiliateRepository {
       throw error;
     }
 
-    return (data || []).map(row => this.mapProfileToPatient(row));
+    return this.mapRowsWithDerivedPaymentStatus(data || []);
   }
 
   /**
@@ -77,7 +119,54 @@ export class AffiliateRepository {
       .is('agreement_id', null);
 
     if (error) throw error;
-    return (data || []).map(row => this.mapProfileToPatient(row));
+    return this.mapRowsWithDerivedPaymentStatus(data || []);
+  }
+
+  /**
+   * Batch-resolves each row's DERIVED payment status from
+   * `affiliate_payment_status` (cuenta-corriente-billing PR3) before mapping
+   * to `Patient` — ONE query for the whole batch, never one per row. Only
+   * DIRECT affiliates (`agreement_id IS NULL`) can ever have a row in that
+   * view (agreements are out of scope for the ledger); agreement-linked rows
+   * skip the lookup entirely and fall through to `mapProfileToPatient`'s
+   * documented default.
+   */
+  private async mapRowsWithDerivedPaymentStatus(rows: any[]): Promise<Patient[]> {
+    const directIds = rows.filter(r => !r.agreement_id).map(r => r.id);
+
+    const statusMap = new Map<string, AffiliatePaymentStatus>();
+    if (directIds.length > 0) {
+      const { data: statusRows, error: statusError } = await supabase
+        .from('affiliate_payment_status')
+        .select('entity_id, payment_status')
+        .in('entity_id', directIds);
+
+      if (statusError) {
+        // No inventamos un estado ante un error de lectura de la vista — cada
+        // fila cae al fallback documentado de mapProfileToPatient en vez de
+        // reventar el listado completo por un problema puntual en la vista derivada.
+        console.error('Error obteniendo estado de pago derivado (affiliate_payment_status):', statusError);
+      } else {
+        for (const s of statusRows || []) {
+          statusMap.set(s.entity_id, s.payment_status);
+        }
+      }
+    }
+
+    return rows.map(row => this.mapProfileToPatient(row, statusMap.get(row.id)));
+  }
+
+  /**
+   * Single-row variant for update/create call sites — an admin editing an
+   * overdue affiliate's phone number must not get back a Patient object
+   * claiming `paymentStatus: 'paid'` just because this path skipped the
+   * lookup (found by judgment-day review of cuenta-corriente-billing PR3;
+   * traced to `Profile.tsx` overwriting the patient's own session/localStorage
+   * with a stale/wrong status on self-edit).
+   */
+  private async mapRowWithDerivedPaymentStatus(row: any): Promise<Patient> {
+    const [patient] = await this.mapRowsWithDerivedPaymentStatus([row]);
+    return patient;
   }
 
   /**
@@ -264,7 +353,7 @@ export class AffiliateRepository {
     if (Object.keys(profileData).length === 0) {
       // Solo cambió el plan (o nada más) — assign_plan ya devolvió el perfil
       // actualizado completo, evitamos un segundo UPDATE vacío/redundante.
-      return this.mapProfileToPatient(assignedProfile);
+      return this.mapRowWithDerivedPaymentStatus(assignedProfile);
     }
 
     const { data: result, error } = await supabase
@@ -277,12 +366,12 @@ export class AffiliateRepository {
     if (error) {
       console.error(`Error actualizando afiliado ${id}:`, error);
       if (assignedProfile) {
-        throw new ProfileFieldsUpdateFailedError(this.mapProfileToPatient(assignedProfile), error);
+        throw new ProfileFieldsUpdateFailedError(await this.mapRowWithDerivedPaymentStatus(assignedProfile), error);
       }
       throw error;
     }
 
-    return this.mapProfileToPatient(result);
+    return this.mapRowWithDerivedPaymentStatus(result);
   }
 
   /**
@@ -496,6 +585,8 @@ export class AffiliateRepository {
     periodStart: string;
     grantedQuota: number | null;
     isUnlimited: boolean;
+    isDelinquent: boolean;
+    balanceDue: number;
   }> {
     const { data, error } = await supabase.rpc('renew_coverage_window', { p_profile_id: profileId });
 
@@ -504,12 +595,79 @@ export class AffiliateRepository {
       throw error;
     }
 
+    // PostgREST returns the named composite type renew_coverage_window_result
+    // as ONE object with the window row NESTED under the "window" key —
+    // {window:{...}, is_delinquent, balance_due} — never flat, never
+    // array-wrapped (cuenta-corriente-billing PR2's RETURNS
+    // renew_coverage_window_result, not RETURNS TABLE/SETOF).
     return {
-      paidThrough: data.paid_through,
-      periodStart: data.period_start,
-      grantedQuota: data.granted_quota,
-      isUnlimited: data.is_unlimited,
+      paidThrough: data.window.paid_through,
+      periodStart: data.window.period_start,
+      grantedQuota: data.window.granted_quota,
+      isUnlimited: data.window.is_unlimited,
+      isDelinquent: data.is_delinquent,
+      balanceDue: Number(data.balance_due),
     };
+  }
+
+  /**
+   * Batch-resolves the CURRENT coverage window's FROZEN snapshot terms
+   * (`period_start`/`paid_months_snapshot`/`bonus_months_snapshot`/
+   * `monthly_cost_snapshot` — cuenta-corriente-billing D6) for a set of
+   * affiliates, keyed by `affiliate.id`. Avoids N+1 (one query for all
+   * family-group affiliates + one for all standalone affiliates, instead of
+   * one query per affiliate). An affiliate absent from the returned Map has
+   * NO window (e.g. onboarded via `/approve-adhesion`, which writes
+   * `plan_id`/`plan_status` directly and never calls `assign_plan`) — callers
+   * MUST treat a missing entry as "no window" and never fabricate one.
+   */
+  async getCoverageWindowsForBilling(affiliates: Patient[]): Promise<Map<string, CoverageWindowSnapshot>> {
+    const result = new Map<string, CoverageWindowSnapshot>();
+    if (affiliates.length === 0) return result;
+
+    const selectCols = 'family_group_id, subject_profile_id, period_start, paid_months_snapshot, bonus_months_snapshot, monthly_cost_snapshot';
+    const familyGroupIds = [...new Set(affiliates.filter(a => a.familyGroupId).map(a => a.familyGroupId as string))];
+    const standaloneIds = affiliates.filter(a => !a.familyGroupId).map(a => a.id);
+
+    const [familyResult, standaloneResult] = await Promise.all([
+      familyGroupIds.length > 0
+        ? supabase.from('family_coverage_windows').select(selectCols).in('family_group_id', familyGroupIds)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      standaloneIds.length > 0
+        ? supabase.from('family_coverage_windows').select(selectCols).in('subject_profile_id', standaloneIds)
+        : Promise.resolve({ data: [] as any[], error: null }),
+    ]);
+
+    if (familyResult.error) throw familyResult.error;
+    if (standaloneResult.error) throw standaloneResult.error;
+
+    const byFamilyGroup = new Map<string, any>((familyResult.data || []).map((w: any) => [w.family_group_id, w]));
+    const bySubjectProfile = new Map<string, any>((standaloneResult.data || []).map((w: any) => [w.subject_profile_id, w]));
+
+    for (const affiliate of affiliates) {
+      const row = affiliate.familyGroupId
+        ? byFamilyGroup.get(affiliate.familyGroupId)
+        : bySubjectProfile.get(affiliate.id);
+
+      if (!row) continue; // no window — caller must skip + surface, never fabricate
+
+      // Defensive: NULL snapshot columns mean this window predates PR1's
+      // snapshot migration and its backfill hasn't (or couldn't) resolve a
+      // value for it — never bill an unverifiable amount, treat exactly like
+      // "no window".
+      if (row.paid_months_snapshot == null || row.bonus_months_snapshot == null || row.monthly_cost_snapshot == null) {
+        continue;
+      }
+
+      result.set(affiliate.id, {
+        periodStart: row.period_start,
+        paidMonthsSnapshot: row.paid_months_snapshot,
+        bonusMonthsSnapshot: row.bonus_months_snapshot,
+        monthlyCostSnapshot: Number(row.monthly_cost_snapshot),
+      });
+    }
+
+    return result;
   }
 
   /**
@@ -529,7 +687,16 @@ export class AffiliateRepository {
       .eq('id', patientId);
   }
 
-  private mapProfileToPatient(row: any): Patient {
+  /**
+   * @param derivedPaymentStatus Pre-resolved value from `affiliate_payment_status`
+   * (see `mapRowsWithDerivedPaymentStatus`), already looked up by the caller
+   * to avoid an N+1 query per row. `profiles.payment_status` is DEPRECATED
+   * (write-stopped since PR1) and is intentionally never read here anymore —
+   * see `toLegacyPaymentStatus` for the documented fallback when no derived
+   * value is available (agreement-linked profiles, or a brand-new affiliate
+   * with no ledger movements yet).
+   */
+  private mapProfileToPatient(row: any, derivedPaymentStatus?: AffiliatePaymentStatus): Patient {
     return {
       id: row.id,
       name: row.full_name,
@@ -546,7 +713,7 @@ export class AffiliateRepository {
       bloodType: row.blood_type ?? undefined,
       agreementId: row.agreement_id,
       familyGroupId: row.family_group_id ?? undefined,
-      paymentStatus: row.payment_status || 'paid',
+      paymentStatus: toLegacyPaymentStatus(derivedPaymentStatus),
       currentPeriodQuotaUsed: row.current_period_quota_used || 0,
       isActive: row.is_active
     };

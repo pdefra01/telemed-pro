@@ -23,7 +23,7 @@ export class FinancialService {
 
     (invoices || []).forEach(inv => {
       const amount = Number(inv.total_amount || inv.totalAmount || 0);
-      if (inv.entityType === 'agreement') {
+      if (inv.entity_type === 'agreement') {
         b2bRevenue += amount;
       } else {
         // En nuestro esquema simplificado, los afiliados directos entran como B2C

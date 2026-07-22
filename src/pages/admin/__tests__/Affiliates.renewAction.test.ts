@@ -76,7 +76,7 @@ describe('Renovar Cobertura — full click flow', () => {
     } as any);
     vi.mocked(affiliateRepository.renewCoverageWindow).mockResolvedValue({
       paidThrough: '2027-01-01T00:00:00.000Z', periodStart: '2026-07-01T00:00:00.000Z',
-      grantedQuota: 6, isUnlimited: false,
+      grantedQuota: 6, isUnlimited: false, isDelinquent: false, balanceDue: 0,
     });
 
     render(React.createElement(Affiliates));

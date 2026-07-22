@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../AffiliateRepository';
+import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError, toLegacyPaymentStatus } from '../AffiliateRepository';
 import { supabase } from '../../services/supabase';
 import { Patient } from '../../types';
 
@@ -10,6 +10,24 @@ vi.mock('../../services/supabase', () => {
       rpc: vi.fn(),
     }
   };
+});
+
+describe('toLegacyPaymentStatus (bridge: affiliate_payment_status view labels -> legacy Patient.paymentStatus union)', () => {
+  it('maps "overdue" straight through', () => {
+    expect(toLegacyPaymentStatus('overdue')).toBe('overdue');
+  });
+
+  it('maps "pending" to the legacy "grace_period" label', () => {
+    expect(toLegacyPaymentStatus('pending')).toBe('grace_period');
+  });
+
+  it('maps "current" to the legacy "paid" label', () => {
+    expect(toLegacyPaymentStatus('current')).toBe('paid');
+  });
+
+  it('defaults undefined (no view row — agreement-linked or a brand-new affiliate with zero ledger movements) to "paid"', () => {
+    expect(toLegacyPaymentStatus(undefined)).toBe('paid');
+  });
 });
 
 describe('AffiliateRepository', () => {
@@ -180,14 +198,110 @@ describe('AffiliateRepository', () => {
       data: [{ id: 'p1', full_name: 'Sin Plan', role: 'patient', plan_id: null, plan_name: null }],
       error: null,
     });
-    const eqMock = vi.fn().mockReturnValue({ order: orderMock });
-    const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
-    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ order: orderMock }) }) } as any;
+      }
+      // affiliate_payment_status batch lookup — no rows for this test's affiliate
+      return { select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }) } as any;
+    });
 
     const result = await affiliateRepository.getAllAffiliates();
 
     expect(result[0].planName).toBe('Sin plan asignado');
     expect(result[0].planName).not.toBe('Plan Base');
+  });
+
+  describe('derived paymentStatus (affiliate_payment_status view)', () => {
+    /** Builds a `profiles` select-role chain: select().eq().order() */
+    const profilesChain = (rows: any[]) => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ order: vi.fn().mockResolvedValue({ data: rows, error: null }) }),
+      }),
+    });
+
+    /** Builds an `affiliate_payment_status` batch chain: select().in() */
+    const paymentStatusChain = (rows: any[], error: any = null) => ({
+      select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: rows, error }) }),
+    });
+
+    it('getAllAffiliates batch-resolves paymentStatus from affiliate_payment_status for DIRECT affiliates only (single extra query, not N+1)', async () => {
+      const rows = [
+        { id: 'aff-direct', full_name: 'Directo', role: 'patient', agreement_id: null },
+        { id: 'aff-agreement', full_name: 'Convenio', role: 'patient', agreement_id: 'agr-1' },
+      ];
+      let paymentStatusCallCount = 0;
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === 'profiles') return profilesChain(rows) as any;
+        paymentStatusCallCount++;
+        return paymentStatusChain([{ entity_id: 'aff-direct', payment_status: 'overdue' }]) as any;
+      });
+
+      const result = await affiliateRepository.getAllAffiliates();
+
+      // Exactly ONE batch call to affiliate_payment_status for the whole list,
+      // never one per affiliate.
+      expect(paymentStatusCallCount).toBe(1);
+      expect(result.find(p => p.id === 'aff-direct')!.paymentStatus).toBe('overdue');
+      // Agreement-linked profile: no ledger/view row exists for it (agreements
+      // are out of scope for this ledger) — falls back to the documented
+      // 'paid' default rather than a fabricated overdue/pending guess.
+      expect(result.find(p => p.id === 'aff-agreement')!.paymentStatus).toBe('paid');
+    });
+
+    it('maps the view\'s "pending" status to the legacy "grace_period" label (bridge until PR4 renames the Patient.paymentStatus union)', async () => {
+      const rows = [{ id: 'aff-pending', full_name: 'Pendiente', role: 'patient', agreement_id: null }];
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === 'profiles') return profilesChain(rows) as any;
+        return paymentStatusChain([{ entity_id: 'aff-pending', payment_status: 'pending' }]) as any;
+      });
+
+      const result = await affiliateRepository.getAllAffiliates();
+
+      expect(result[0].paymentStatus).toBe('grace_period');
+    });
+
+    it('falls back to "paid" (never a crash) when the affiliate_payment_status batch query itself errors', async () => {
+      const rows = [{ id: 'aff-direct', full_name: 'Directo', role: 'patient', agreement_id: null }];
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === 'profiles') return profilesChain(rows) as any;
+        return paymentStatusChain([], { message: 'view unavailable' }) as any;
+      });
+
+      const result = await affiliateRepository.getAllAffiliates();
+
+      expect(result[0].paymentStatus).toBe('paid');
+    });
+
+    it('getDirectAffiliates also batch-resolves paymentStatus from the view', async () => {
+      const rows = [{ id: 'aff-1', full_name: 'Uno', role: 'patient', agreement_id: null }];
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === 'profiles') {
+          return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ is: vi.fn().mockResolvedValue({ data: rows, error: null }) }) }) } as any;
+        }
+        return paymentStatusChain([{ entity_id: 'aff-1', payment_status: 'overdue' }]) as any;
+      });
+
+      const result = await affiliateRepository.getDirectAffiliates();
+
+      expect(result[0].paymentStatus).toBe('overdue');
+    });
+
+    it('getByAgreement never queries affiliate_payment_status — agreement-linked affiliates always fall back to the documented default', async () => {
+      const rows = [{ id: 'aff-1', full_name: 'Uno', role: 'patient', agreement_id: 'agr-1' }];
+      const isMock = vi.fn();
+      vi.mocked(supabase.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: rows, error: null }) }),
+        }),
+      } as any);
+
+      const result = await affiliateRepository.getByAgreement('agr-1');
+
+      expect(supabase.from).not.toHaveBeenCalledWith('affiliate_payment_status');
+      expect(result[0].paymentStatus).toBe('paid');
+      expect(isMock).not.toHaveBeenCalled();
+    });
   });
 
   it('throws PlanAssignmentFailedError (instead of silently succeeding) when the follow-up plan_id write fails', async () => {
@@ -227,7 +341,10 @@ describe('AffiliateRepository', () => {
       error: null,
     });
     const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
-    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+    const paymentStatusMock = { select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }) };
+    vi.mocked(supabase.from).mockImplementation((table: string) =>
+      (table === 'affiliate_payment_status' ? paymentStatusMock : { update: updateMock }) as any
+    );
 
     const result = await affiliateRepository.updateAffiliate('test-id', { name: 'Juan Actualizado', planId: 'plan-real-id' });
 
@@ -244,7 +361,10 @@ describe('AffiliateRepository', () => {
       error: null,
     });
     const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
-    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+    const paymentStatusMock = { select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }) };
+    vi.mocked(supabase.from).mockImplementation((table: string) =>
+      (table === 'affiliate_payment_status' ? paymentStatusMock : { update: updateMock }) as any
+    );
 
     await affiliateRepository.updateAffiliate('test-id', { name: 'Solo Nombre' });
 
@@ -270,7 +390,10 @@ describe('AffiliateRepository', () => {
 
     const updateSingle = vi.fn().mockResolvedValue({ data: null, error: { message: 'constraint violation' } });
     const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
-    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+    const paymentStatusMock = { select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }) };
+    vi.mocked(supabase.from).mockImplementation((table: string) =>
+      (table === 'affiliate_payment_status' ? paymentStatusMock : { update: updateMock }) as any
+    );
 
     const error = await affiliateRepository
       .updateAffiliate('test-id', { name: 'Nombre Nuevo', planId: 'plan-real-id' })
@@ -282,16 +405,38 @@ describe('AffiliateRepository', () => {
     expect(error.patient.planId).toBe('plan-real-id');
   });
 
+  it('updateAffiliate resolves the REAL derived paymentStatus instead of blindly defaulting to "paid" (an overdue affiliate must not look paid after an unrelated edit)', async () => {
+    const updateSingle = vi.fn().mockResolvedValue({
+      data: { id: 'test-id', full_name: 'Deudor Actualizado', role: 'patient', agreement_id: null },
+      error: null,
+    });
+    const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
+    const paymentStatusMock = {
+      select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [{ entity_id: 'test-id', payment_status: 'overdue' }], error: null }) }),
+    };
+    vi.mocked(supabase.from).mockImplementation((table: string) =>
+      (table === 'affiliate_payment_status' ? paymentStatusMock : { update: updateMock }) as any
+    );
+
+    const result = await affiliateRepository.updateAffiliate('test-id', { name: 'Deudor Actualizado' });
+
+    expect(result.paymentStatus).toBe('overdue');
+  });
+
   it('skips the redundant profiles.update() call and returns the assign_plan result directly when only the plan changes', async () => {
     vi.mocked(supabase.rpc).mockResolvedValue({
       data: { id: 'test-id', full_name: 'Juan Pérez', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
       error: null,
     } as any);
+    const paymentStatusMock = { select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }) };
+    vi.mocked(supabase.from).mockReturnValue(paymentStatusMock as any);
 
     const result = await affiliateRepository.updateAffiliate('test-id', { planId: 'plan-real-id' });
 
     expect(supabase.rpc).toHaveBeenCalledWith('assign_plan', { p_profile_id: 'test-id', p_plan_id: 'plan-real-id' });
-    expect(supabase.from).not.toHaveBeenCalled();
+    // The redundant profiles UPDATE is skipped — the only supabase.from()
+    // call left is the derived-payment-status lookup, not a profile write.
+    expect(supabase.from).not.toHaveBeenCalledWith('profiles');
     expect(result.planId).toBe('plan-real-id');
   });
 
@@ -614,13 +759,20 @@ describe('AffiliateRepository', () => {
   });
 
   describe('renewCoverageWindow', () => {
-    it('calls the renew_coverage_window RPC and maps the returned window to camelCase', async () => {
+    it('calls the renew_coverage_window RPC and maps the NESTED composite {window,is_delinquent,balance_due} shape to camelCase', async () => {
+      // PostgREST returns the named composite type renew_coverage_window_result
+      // as ONE object with the window nested under the "window" key — NOT a
+      // flat object and NOT array-wrapped (cuenta-corriente-billing PR2/PR3).
       vi.mocked(supabase.rpc).mockResolvedValue({
         data: {
-          paid_through: '2027-01-01T00:00:00.000Z',
-          period_start: '2026-07-01T00:00:00.000Z',
-          granted_quota: 30,
-          is_unlimited: false,
+          window: {
+            paid_through: '2027-01-01T00:00:00.000Z',
+            period_start: '2026-07-01T00:00:00.000Z',
+            granted_quota: 30,
+            is_unlimited: false,
+          },
+          is_delinquent: false,
+          balance_due: 0,
         },
         error: null,
       } as any);
@@ -633,16 +785,127 @@ describe('AffiliateRepository', () => {
         periodStart: '2026-07-01T00:00:00.000Z',
         grantedQuota: 30,
         isUnlimited: false,
+        isDelinquent: false,
+        balanceDue: 0,
       });
     });
 
-    it('throws instead of silently succeeding when the RPC reports an error (e.g. window not yet expired)', async () => {
+    it('propagates isDelinquent=true and the outstanding balanceDue when the renewal completes under grace-mode with a pending balance', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({
+        data: {
+          window: {
+            paid_through: '2027-01-01T00:00:00.000Z',
+            period_start: '2026-07-01T00:00:00.000Z',
+            granted_quota: null,
+            is_unlimited: true,
+          },
+          is_delinquent: true,
+          balance_due: 500,
+        },
+        error: null,
+      } as any);
+
+      const result = await affiliateRepository.renewCoverageWindow('profile-2');
+
+      expect(result.isDelinquent).toBe(true);
+      expect(result.balanceDue).toBe(500);
+      expect(result.isUnlimited).toBe(true);
+      expect(result.grantedQuota).toBeNull();
+    });
+
+    it('throws instead of silently succeeding when the RPC reports an error (e.g. window not yet expired, or block-mode balance guard)', async () => {
       vi.mocked(supabase.rpc).mockResolvedValue({
         data: null,
         error: { message: 'La ventana de cobertura del perfil profile-1 todavia no expiro; no se puede renovar' },
       } as any);
 
       await expect(affiliateRepository.renewCoverageWindow('profile-1')).rejects.toBeTruthy();
+    });
+  });
+
+  describe('getCoverageWindowsForBilling', () => {
+    const inChain = (data: any[], error: any = null) => vi.fn().mockResolvedValue({ data, error });
+
+    it('resolves a standalone affiliate\'s window by subject_profile_id and returns its frozen snapshot terms', async () => {
+      const standaloneIn = inChain([
+        { subject_profile_id: 'aff-1', period_start: '2026-01-01T00:00:00.000Z', paid_months_snapshot: 12, bonus_months_snapshot: 2, monthly_cost_snapshot: '15000.00' },
+      ]);
+      vi.mocked(supabase.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({ in: standaloneIn }),
+      } as any);
+
+      const affiliates = [{ id: 'aff-1', familyGroupId: undefined } as any];
+      const result = await affiliateRepository.getCoverageWindowsForBilling(affiliates);
+
+      expect(result.get('aff-1')).toEqual({
+        periodStart: '2026-01-01T00:00:00.000Z',
+        paidMonthsSnapshot: 12,
+        bonusMonthsSnapshot: 2,
+        monthlyCostSnapshot: 15000,
+      });
+    });
+
+    it('resolves a family-group affiliate\'s window by family_group_id, not subject_profile_id', async () => {
+      let familyInCalled = false;
+      let standaloneInCalled = false;
+      vi.mocked(supabase.from).mockImplementation(() => ({
+        select: vi.fn().mockReturnValue({
+          in: vi.fn().mockImplementation((col: string, ids: string[]) => {
+            if (col === 'family_group_id') {
+              familyInCalled = true;
+              expect(ids).toEqual(['fam-1']);
+              return Promise.resolve({
+                data: [{ family_group_id: 'fam-1', period_start: '2026-02-01T00:00:00.000Z', paid_months_snapshot: 6, bonus_months_snapshot: 0, monthly_cost_snapshot: '9000.00' }],
+                error: null,
+              });
+            }
+            standaloneInCalled = true;
+            return Promise.resolve({ data: [], error: null });
+          }),
+        }),
+      } as any));
+
+      const affiliates = [{ id: 'aff-fam-1', familyGroupId: 'fam-1' } as any];
+      const result = await affiliateRepository.getCoverageWindowsForBilling(affiliates);
+
+      expect(familyInCalled).toBe(true);
+      expect(standaloneInCalled).toBe(false);
+      expect(result.get('aff-fam-1')?.monthlyCostSnapshot).toBe(9000);
+    });
+
+    it('omits an affiliate entirely from the returned Map when no window row is found for them (never fabricates one)', async () => {
+      vi.mocked(supabase.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({ in: inChain([]) }),
+      } as any);
+
+      const affiliates = [{ id: 'aff-no-window', familyGroupId: undefined } as any];
+      const result = await affiliateRepository.getCoverageWindowsForBilling(affiliates);
+
+      expect(result.has('aff-no-window')).toBe(false);
+    });
+
+    it('omits an affiliate whose window row has NULL snapshot columns (predates the PR1 backfill) instead of billing an unverifiable amount', async () => {
+      vi.mocked(supabase.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          in: inChain([
+            { subject_profile_id: 'aff-2', period_start: '2026-01-01T00:00:00.000Z', paid_months_snapshot: null, bonus_months_snapshot: null, monthly_cost_snapshot: null },
+          ]),
+        }),
+      } as any);
+
+      const affiliates = [{ id: 'aff-2', familyGroupId: undefined } as any];
+      const result = await affiliateRepository.getCoverageWindowsForBilling(affiliates);
+
+      expect(result.has('aff-2')).toBe(false);
+    });
+
+    it('returns an empty Map without querying at all when given zero affiliates', async () => {
+      const fromSpy = vi.mocked(supabase.from);
+
+      const result = await affiliateRepository.getCoverageWindowsForBilling([]);
+
+      expect(result.size).toBe(0);
+      expect(fromSpy).not.toHaveBeenCalled();
     });
   });
 });
