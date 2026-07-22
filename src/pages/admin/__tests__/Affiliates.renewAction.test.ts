@@ -11,7 +11,7 @@ const basePatient: Patient = {
   email: 'juan@test.com',
   role: 'patient',
   planStatus: 'active',
-  paymentStatus: 'paid',
+  paymentStatus: 'current',
   currentPeriodQuotaUsed: 0,
 };
 
@@ -92,6 +92,61 @@ describe('Renovar Cobertura — full click flow', () => {
     await waitFor(() => {
       expect(affiliateRepository.getAllAffiliates).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('appends the outstanding balance to the success toast when the renewal completes under grace-mode delinquency', async () => {
+    vi.mocked(affiliateRepository.getAllAffiliates).mockResolvedValue([expiredPatient]);
+    vi.mocked(affiliateRepository.getConsultationQuotaStatus).mockResolvedValue({
+      quotaUsed: 0, totalBonified: null, remaining: null, isUnlimited: false,
+      hasPlan: true, isOverQuota: false, planName: 'Plan Familiar Medinex',
+      coverageActive: false, paidThrough: null, periodStart: null,
+    } as any);
+    vi.mocked(affiliateRepository.renewCoverageWindow).mockResolvedValue({
+      paidThrough: '2027-01-01T00:00:00.000Z', periodStart: '2026-07-01T00:00:00.000Z',
+      grantedQuota: 6, isUnlimited: false, isDelinquent: true, balanceDue: 500,
+    });
+
+    render(React.createElement(Affiliates));
+
+    const renewButton = await screen.findByTitle('Renovar Cobertura');
+    fireEvent.click(renewButton);
+
+    await waitFor(() => {
+      expect(affiliateRepository.renewCoverageWindow).toHaveBeenCalledWith('p1');
+    });
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.stringContaining('renovada'),
+        'success'
+      );
+    });
+    const [message] = mockToast.mock.calls[mockToast.mock.calls.length - 1];
+    expect(message).toContain('saldo pendiente');
+    expect(message).toContain('500');
+  });
+
+  it('does not mention a balance in the success toast when the renewal is not delinquent', async () => {
+    vi.mocked(affiliateRepository.getAllAffiliates).mockResolvedValue([expiredPatient]);
+    vi.mocked(affiliateRepository.getConsultationQuotaStatus).mockResolvedValue({
+      quotaUsed: 0, totalBonified: null, remaining: null, isUnlimited: false,
+      hasPlan: true, isOverQuota: false, planName: 'Plan Familiar Medinex',
+      coverageActive: false, paidThrough: null, periodStart: null,
+    } as any);
+    vi.mocked(affiliateRepository.renewCoverageWindow).mockResolvedValue({
+      paidThrough: '2027-01-01T00:00:00.000Z', periodStart: '2026-07-01T00:00:00.000Z',
+      grantedQuota: 6, isUnlimited: false, isDelinquent: false, balanceDue: 0,
+    });
+
+    render(React.createElement(Affiliates));
+
+    const renewButton = await screen.findByTitle('Renovar Cobertura');
+    fireEvent.click(renewButton);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('renovada con éxito'), 'success');
+    });
+    const [message] = mockToast.mock.calls[mockToast.mock.calls.length - 1];
+    expect(message).not.toContain('saldo pendiente');
   });
 
   it('shows the RPC error message in a toast when renewal fails, without crashing', async () => {

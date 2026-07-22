@@ -87,13 +87,38 @@ export class AuthRepository {
         email: authEmail,
         role: role,
         planStatus: 'active',
-        paymentStatus: 'paid',
+        paymentStatus: 'current',
         currentPeriodQuotaUsed: 0,
       } as any;
     }
 
     if (profileData.is_active === false) {
       throw new Error("Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.");
+    }
+
+    // Real derived status (cuenta-corriente-billing) for direct-affiliate
+    // patients only — agreements have no ledger row (out of scope), and
+    // non-patient roles don't carry a meaningful paymentStatus at all.
+    // profiles.payment_status is deprecated/write-stopped and still carries
+    // pre-rename values ('paid'/'grace_period') from its DB default, so it
+    // must never be read here — a stale/wrong status baked into the session
+    // at login would otherwise persist for the whole session (localStorage),
+    // same class of bug PR3 fixed for updateAffiliate's self-edit path.
+    let paymentStatus: 'current' | 'overdue' | 'pending' = 'current';
+    if (profileData.role === 'patient' && !profileData.agreement_id) {
+      const { data: statusRow, error: statusError } = await supabase
+        .from('affiliate_payment_status')
+        .select('payment_status')
+        .eq('entity_id', data.user.id)
+        .maybeSingle();
+
+      if (statusError) {
+        console.error(`Error obteniendo estado de pago derivado para ${data.user.id}:`, statusError);
+      } else if (statusRow) {
+        paymentStatus = statusRow.payment_status;
+      }
+      // No row (new affiliate, zero ledger movements yet) or a read error:
+      // stays 'current' — never guess 'overdue'/'pending' without a real row.
     }
 
     return {
@@ -111,7 +136,7 @@ export class AuthRepository {
       phone: profileData.phone,
       address: profileData.address,
       planStatus: profileData.plan_status || 'active',
-      paymentStatus: profileData.payment_status || 'paid',
+      paymentStatus,
       currentPeriodQuotaUsed: profileData.current_period_quota_used || 0,
       familyGroupId: profileData.family_group_id ?? undefined,
       digitalPublicKey: profileData.digital_public_key,
