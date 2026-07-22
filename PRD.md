@@ -27,6 +27,7 @@ TeleMed Pro is a high-end, premium telemedicine platform designed for doctors an
 ### 4.1. Subscription & Affiliate Management
 
 - **Membership Model**: Patients pay a monthly fee (mensualidad).
+- **Plan Duration**: Each plan defines a billed duration in months (`paidMonths`) plus an optional free promo duration (`bonusMonths`) added on top (e.g. a "12+2" plan = 14 months of coverage for the price of 12).
 - **Grace vs. Block**: The system must allow admins to toggle between "Grace Period" and "Immediate Blocking" for non-payment.
 - **Affiliate Roster (Padrón)**: Supports individual registrations and bulk imports (CSV/Excel) for corporate agreements (convenios).
 - **Cancellations**: Supports both immediate termination or end-of-month expiration.
@@ -35,6 +36,9 @@ TeleMed Pro is a high-end, premium telemedicine platform designed for doctors an
 ### 4.2. Consultations & Quotas
 - **Bonified Consultations**: Each plan includes a defined number (X) of "0 cost" consultations per month for the entire family group.
 - **Over-quota logic**: Beyond the quota, consultations follow the standard pricing or a discounted rate (TBD).
+- **Coverage Window**: Assigning a plan to an affiliate (or family group) for the first time opens a coverage window — a snapshot of period start, expiration date (derived from the plan's `paidMonths` + `bonusMonths`), and granted quota. This snapshot, not the live plan, is the source of truth for quota and expiry: editing a plan later never retroactively changes coverage already granted to an affiliate mid-window.
+- **Explicit Coverage States**: The system always reports one of three states — active (with real remaining quota), expired (never reports leftover quota from an expired window as available), or no window yet (plan assigned but coverage never opened) — instead of fabricating a number.
+- **Manual Renewal**: Once a window expires, an admin can trigger an explicit "Renovar Cobertura" action from the affiliate roster to open a fresh window sourced from the affiliate's currently assigned plan and reset consumed quota. There is no automatic renewal (no scheduler yet) — it is always a deliberate admin action.
 
 ### 4.3. Payment & Billing
 - **Hybrid Payments**: Supports digital gateways (Mercado Pago, etc.) and manual reconciliation via bank file imports.
