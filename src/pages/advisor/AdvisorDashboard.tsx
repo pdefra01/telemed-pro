@@ -19,7 +19,8 @@ import {
   Clipboard,
   Check,
   Percent,
-  QrCode
+  QrCode,
+  ClipboardList
 } from 'lucide-react';
 import { User } from '../../types';
 import { createClient } from '@supabase/supabase-js';
@@ -84,8 +85,11 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [activeAnn, setActiveAnn] = useState<Announcement | null>(null);
   const [copied, setCopied] = useState(false);
+  const [surveyLinkCopied, setSurveyLinkCopied] = useState(false);
+  const [leadSurveyCount, setLeadSurveyCount] = useState(0);
 
   const affiliateLink = `${window.location.origin}/#/adhesion?promoter=${user.promoter_code || ''}`;
+  const surveyLink = `${window.location.origin}/#/encuesta?promoter=${user.promoter_code || ''}`;
 
   const registerLinkShared = async () => {
     try {
@@ -122,7 +126,19 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
     // Register share even if clipboard failed — the intent was to share
     await registerLinkShared();
   };
-  
+
+  const handleCopySurveyLink = async () => {
+    if (!user.promoter_code) return;
+    try {
+      await navigator.clipboard.writeText(surveyLink);
+      setSurveyLinkCopied(true);
+      setTimeout(() => setSurveyLinkCopied(false), 2000);
+    } catch {
+      // Clipboard permission denied (common on mobile or iframes)
+      console.error('Clipboard write failed');
+    }
+  };
+
   // Estados de autogestión
   const [phone, setPhone] = useState(user.phone || '');
   const [address, setAddress] = useState('');
@@ -177,6 +193,15 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
         if (profile.address) setAddress(profile.address);
         if (profile.locality) setLocality(profile.locality);
         if (profile.neighborhood) setNeighborhood(profile.neighborhood);
+      }
+
+      // Total de respuestas de la encuesta de opinión atribuidas a este asesor
+      if (user.promoter_code) {
+        const { count } = await supabase
+          .from('lead_survey_responses')
+          .select('*', { count: 'exact', head: true })
+          .eq('promoter_code', user.promoter_code);
+        setLeadSurveyCount(count || 0);
       }
 
     } catch (err) {
@@ -576,6 +601,82 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
                   <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
                     <QrCode size={12} className="text-emerald-400" />
                     Código QR de Asociación
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Encuesta de Opinión — Sumá Leads */}
+          <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800 p-6 shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-all duration-500" />
+            <h2 className="text-xl font-bold mb-3 flex items-center gap-2 text-white">
+              <ClipboardList size={20} className="text-indigo-400" />
+              Encuesta de Opinión — Sumá Leads
+            </h2>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed font-sans">
+              Compartí la encuesta corta con tu comunidad para captar leads interesados. Cada respuesta queda
+              atribuida a tu código de promotor.
+            </p>
+
+            {!hasPromoterCode ? (
+              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-amber-400">
+                <AlertCircle size={18} className="flex-shrink-0" />
+                <p className="text-xs font-medium">
+                  Código de promotor no asignado. Contactá a administración para activar tu enlace de encuesta.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-indigo-300">Respuestas recibidas</span>
+                  <span className="text-2xl font-black text-indigo-400 tracking-tight">{leadSurveyCount}</span>
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-2xl border border-slate-800 focus-within:border-indigo-500/40 transition-all">
+                  <input
+                    type="text"
+                    readOnly
+                    value={surveyLink}
+                    className="bg-transparent border-0 outline-none text-xs text-slate-300 px-2 py-1.5 w-full font-mono select-all"
+                  />
+                  <button
+                    onClick={handleCopySurveyLink}
+                    className={`p-2.5 rounded-xl transition-all duration-300 flex-shrink-0 ${
+                      surveyLinkCopied
+                        ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
+                    title="Copiar enlace"
+                  >
+                    {surveyLinkCopied ? <Check size={16} /> : <Clipboard size={16} />}
+                  </button>
+                </div>
+
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent("¡Hola! Te comparto una encuesta rápida de Medinex, sólo te lleva 30 segundos: " + surveyLink)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/10 text-sm"
+                >
+                  Compartir por WhatsApp
+                </a>
+
+                {/* Divider */}
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-800"></div>
+                  <span className="flex-shrink mx-3 text-[10px] text-slate-500 uppercase tracking-widest font-bold">o escaneá el QR</span>
+                  <div className="flex-grow border-t border-slate-800"></div>
+                </div>
+
+                {/* QR Code Container */}
+                <div className="flex flex-col items-center justify-center p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 backdrop-blur-sm">
+                  <div className="p-3 bg-white rounded-xl shadow-lg mb-2">
+                    <AffiliateQrCode value={surveyLink} />
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                    <QrCode size={12} className="text-indigo-400" />
+                    Código QR de la Encuesta
                   </span>
                 </div>
               </div>

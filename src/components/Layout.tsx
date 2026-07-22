@@ -15,7 +15,8 @@ import {
   FileBarChart,
   ShoppingBag,
   Award,
-  Clock
+  Clock,
+  ClipboardList
 } from 'lucide-react';
 import { User, Role } from '../types';
 import logoMedinex from '../logo_medinex.jpeg';
@@ -68,6 +69,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         { name: 'Fichado Médico', icon: <Clock size={20} />, path: '/doctor-attendance' },
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
         { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
+        { name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys' },
         { name: 'Reportes', icon: <Activity size={20} />, path: '/reports' },
       ];
     }

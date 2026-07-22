@@ -31,6 +31,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
 import { AdhesionForm } from './pages/AdhesionForm';
+import { LeadSurvey } from './pages/LeadSurvey';
+import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 
 import { ToastProvider } from './context/ToastContext';
@@ -120,9 +122,14 @@ const App: React.FC = () => {
     if (window.location.pathname === '/adhesion' || window.location.pathname.endsWith('/adhesion')) {
       window.location.replace(window.location.origin + '/#/adhesion');
     }
+    if (window.location.pathname === '/encuesta' || window.location.pathname.endsWith('/encuesta')) {
+      window.location.replace(window.location.origin + '/#/encuesta');
+    }
   }, []);
 
   const isAdhesionPath = window.location.hash.includes('/adhesion') || window.location.pathname.includes('/adhesion');
+  const isEncuestaPath = window.location.hash.includes('/encuesta') || window.location.pathname.includes('/encuesta');
+  const isPublicPath = isAdhesionPath || isEncuestaPath;
 
   const MainContent = (
     <Routes>
@@ -134,6 +141,11 @@ const App: React.FC = () => {
       <Route
         path="/adhesion"
         element={<AdhesionForm />}
+      />
+
+      <Route
+        path="/encuesta"
+        element={<LeadSurvey />}
       />
 
       <Route
@@ -162,6 +174,14 @@ const App: React.FC = () => {
         element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
             <DoctorAttendance />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/lead-surveys"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <LeadSurveys />
           </ProtectedRoute>
         }
       />
@@ -339,7 +359,7 @@ const App: React.FC = () => {
     <Router>
       <ErrorBoundary>
         <ToastProvider>
-          {isAdhesionPath ? (
+          {isPublicPath ? (
             MainContent
           ) : !user || user.role !== 'admin' ? (
             <Layout user={user} onLogout={handleLogout}>
@@ -351,8 +371,8 @@ const App: React.FC = () => {
             </AdminLayout>
           )}
 
-          {/* AI Assistant is available for authenticated users, but not on the adhesion page */}
-          {user && !isAdhesionPath && <AIChatBot />}
+          {/* AI Assistant is available for authenticated users, but not on the public adhesion/encuesta pages */}
+          {user && !isPublicPath && <AIChatBot />}
         </ToastProvider>
       </ErrorBoundary>
     </Router>
