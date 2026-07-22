@@ -1,6 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { DashboardRepository } from '../DashboardRepository';
 import { supabase } from '../../services/supabase';
+import { appointmentRepository } from '../AppointmentRepository';
 
 // Mock de Supabase
 vi.mock('../../services/supabase', () => ({
@@ -13,6 +14,10 @@ vi.mock('../../services/supabase', () => ({
     order: vi.fn().mockReturnThis(),
     single: vi.fn().mockReturnThis(),
   },
+}));
+
+vi.mock('../AppointmentRepository', () => ({
+  appointmentRepository: { expireStaleAppointments: vi.fn().mockResolvedValue(undefined) },
 }));
 
 describe('DashboardRepository (TDD)', () => {
@@ -62,6 +67,35 @@ describe('DashboardRepository (TDD)', () => {
       
       expect(stats).toHaveLength(7);
       expect(stats.every(s => s.consultations === 0)).toBe(true);
+    });
+  });
+
+  describe('getDoctorQueue', () => {
+    it('sweeps stale appointments before reading the live queue, so a stuck turno is never one race away from still showing', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockResolvedValue({ data: [], error: null });
+
+      await repository.getDoctorQueue('doc-1');
+
+      expect(appointmentRepository.expireStaleAppointments).toHaveBeenCalled();
+    });
+  });
+
+  describe('getDoctorKPIs', () => {
+    it('sweeps stale appointments before computing pendingConsultations', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.gte.mockResolvedValue({ data: [], error: null });
+      // .in() isn't in the base mock; getDoctorKPIs' pending-count query ends there.
+      supabaseMock.in = vi.fn().mockResolvedValue({ count: 0, error: null });
+
+      await repository.getDoctorKPIs('doc-1', 'daily');
+
+      expect(appointmentRepository.expireStaleAppointments).toHaveBeenCalled();
     });
   });
 

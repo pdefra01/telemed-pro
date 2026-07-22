@@ -13,7 +13,7 @@ export class AppointmentRepository {
    * lectura, vía una RPC SECURITY DEFINER (el paciente no tiene permiso de
    * UPDATE directo sobre appointments).
    */
-  private async expireStaleAppointments(): Promise<void> {
+  async expireStaleAppointments(): Promise<void> {
     const { error } = await supabase.rpc('expire_stale_appointments');
     if (error) {
       console.error('Error expirando turnos vencidos:', error);

@@ -1,4 +1,5 @@
 import { supabase } from '../services/supabase';
+import { appointmentRepository } from './AppointmentRepository';
 
 export interface AdminMetrics {
   totalDoctors: number;
@@ -142,6 +143,8 @@ export class DashboardRepository {
    */
   async getDoctorQueue(doctorId: string): Promise<any[]> {
     try {
+      await appointmentRepository.expireStaleAppointments();
+
       const { data, error } = await supabase
         .from('doctor_queue')
         .select('*')
@@ -164,6 +167,8 @@ export class DashboardRepository {
     avgSessionMinutes: number;
   }> {
     try {
+      await appointmentRepository.expireStaleAppointments();
+
       // 1. Consultas Pendientes (status: 'confirmed' o 'in_progress')
       const { count: pendingCount, error: errPending } = await supabase
         .from('appointments')
