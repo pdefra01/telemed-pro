@@ -591,8 +591,12 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
                             <div className="flex items-center space-x-6 my-10">
                                 <div className="relative">
-                                    <div className="w-24 h-24 bg-slate-800 rounded-[2rem] overflow-hidden border-2 border-white/30 shadow-2xl transform group-hover:rotate-6 transition-transform duration-500">
-                                        <img src={user.avatarUrl} alt="ID" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" />
+                                    <div className="w-24 h-24 bg-slate-800 rounded-[2rem] overflow-hidden border-2 border-white/30 shadow-2xl transform group-hover:rotate-6 transition-transform duration-500 flex items-center justify-center">
+                                        {user.avatarUrl ? (
+                                            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" />
+                                        ) : (
+                                            <span className="text-3xl font-bold text-blue-200">{user.name?.charAt(0) || '?'}</span>
+                                        )}
                                     </div>
                                     <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-xl flex items-center justify-center border-4 border-blue-700 text-white">
                                         <Check size={14} />
@@ -658,7 +662,13 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         </div>
                         <div className="space-y-4">
                             <div className="flex items-center p-4 bg-emerald-500/5 rounded-3xl border border-emerald-500/10 group cursor-pointer hover:bg-emerald-500/10 transition-all">
-                                <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-2xl mr-4 border border-white/10 shadow-lg" />
+                                {user.avatarUrl ? (
+                                    <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-2xl mr-4 border border-white/10 shadow-lg" />
+                                ) : (
+                                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold mr-4 text-xl flex-shrink-0">
+                                        {user.name?.charAt(0) || '?'}
+                                    </div>
+                                )}
                                 <div>
                                     <p className="font-bold text-white text-xs uppercase tracking-tight">{user.name}</p>
                                     <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-[0.2em] mt-1">Titular</p>
@@ -690,7 +700,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             className="p-5 bg-emerald-500 hover:bg-emerald-400 rounded-[1.5rem] transition-all flex items-center justify-center space-x-4 group shadow-[0_10px_30px_rgba(16,185,129,0.3)] h-16"
                         >
                                 <Phone size={22} className="text-white group-hover:scale-110 transition-transform" />
-                                <span className="font-bold text-white uppercase tracking-[0.2em] text-sm">Hablar con MediBot</span>
+                                <span className="font-bold text-white uppercase tracking-[0.2em] text-sm">Chat con MediBot</span>
                             </a>
                         </div>
                     </div>
