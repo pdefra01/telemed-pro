@@ -15,8 +15,8 @@ vi.mock('../supabase', () => {
                 const subChain: any = {};
                 subChain.eq = vi.fn(() => Promise.resolve({
                   data: [
-                    { id: '1', period: '2026-07', entityType: 'agreement', total_amount: 1000000, status: 'paid' },
-                    { id: '2', period: '2026-07', entityType: 'affiliate', total_amount: 500000, status: 'paid' }
+                    { id: '1', period: '2026-07', entity_type: 'agreement', total_amount: 1000000, status: 'paid' },
+                    { id: '2', period: '2026-07', entity_type: 'affiliate', total_amount: 500000, status: 'paid' }
                   ],
                   error: null
                 }));
