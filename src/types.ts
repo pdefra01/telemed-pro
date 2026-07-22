@@ -143,6 +143,10 @@ export interface Plan {
   isUnlimited: boolean;
   maxFamilyMembers: number;
   isDefault: boolean;
+  /** Billed duration in months. Total price = monthlyCost × paidMonths. DB CHECK: >= 1. */
+  paidMonths: number;
+  /** Free promo duration in months, added on top of paidMonths. DB CHECK: >= 0. */
+  bonusMonths: number;
   metadata?: Record<string, any>;
 }
 
