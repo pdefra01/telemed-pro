@@ -148,6 +148,56 @@ export class DoctorShiftRepository {
     };
   }
 
+  /**
+   * Fetches past shift history (any status), optionally scoped by doctor,
+   * office, and/or a clock_in date range. Used by the admin attendance page —
+   * all filters are optional so an empty object returns every shift ever
+   * recorded, most recent first.
+   */
+  async getShiftHistory(filters: {
+    doctorId?: string;
+    officeLocationId?: string;
+    from?: string;
+    to?: string;
+  }): Promise<(DoctorWorkShift & { doctorName: string })[]> {
+    let query = supabase
+      .from('doctor_work_shifts')
+      .select('*, doctor:profiles!doctor_id(full_name), office_locations(name)');
+
+    if (filters.doctorId) {
+      query = query.eq('doctor_id', filters.doctorId);
+    }
+    if (filters.officeLocationId) {
+      query = query.eq('office_location_id', filters.officeLocationId);
+    }
+    if (filters.from) {
+      query = query.gte('clock_in', filters.from);
+    }
+    if (filters.to) {
+      query = query.lte('clock_in', filters.to);
+    }
+
+    const { data, error } = await query.order('clock_in', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching shift history:", error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      doctorId: row.doctor_id,
+      officeLocationId: row.office_location_id ?? undefined,
+      clockIn: row.clock_in,
+      clockOut: row.clock_out ?? undefined,
+      durationMinutes: row.duration_minutes ?? undefined,
+      ipAddress: row.ip_address ?? undefined,
+      status: row.status,
+      officeName: row.office_locations?.name || 'Oficina',
+      doctorName: row.doctor?.full_name || 'Médico',
+    }));
+  }
+
   private async autoCloseOldShifts(doctorId: string): Promise<void> {
     const { data } = await supabase
       .from('doctor_work_shifts')

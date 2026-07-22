@@ -14,7 +14,8 @@ import {
   CreditCard,
   FileBarChart,
   ShoppingBag,
-  Award
+  Award,
+  Clock
 } from 'lucide-react';
 import { User, Role } from '../types';
 import logoMedinex from '../logo_medinex.jpeg';
@@ -64,6 +65,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       return [
         ...common,
         { name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors' },
+        { name: 'Fichado Médico', icon: <Clock size={20} />, path: '/doctor-attendance' },
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
         { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
         { name: 'Reportes', icon: <Activity size={20} />, path: '/reports' },

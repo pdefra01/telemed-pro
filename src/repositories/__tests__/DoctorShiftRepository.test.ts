@@ -8,6 +8,8 @@ vi.mock('../../services/supabase', () => ({
     from: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockReturnThis(),
@@ -29,6 +31,8 @@ describe('DoctorShiftRepository (TDD)', () => {
     supabaseMock.from.mockReturnThis();
     supabaseMock.select.mockReturnThis();
     supabaseMock.eq.mockReturnThis();
+    supabaseMock.gte.mockReturnThis();
+    supabaseMock.lte.mockReturnThis();
     supabaseMock.order.mockReturnThis();
     supabaseMock.update.mockReturnThis();
     supabaseMock.maybeSingle.mockReturnThis();
@@ -155,6 +159,138 @@ describe('DoctorShiftRepository (TDD)', () => {
       );
       const updateCallArgs = supabaseMock.update.mock.calls[0][0];
       expect(updateCallArgs.duration_minutes).toBeGreaterThan(0);
+    });
+  });
+
+  describe('getShiftHistory', () => {
+    it('returns every shift mapped correctly (including doctorName/officeName from the joins) when no filters are given', async () => {
+      const supabaseMock = supabase as any;
+      const mockRows = [
+        {
+          id: 'shift-1',
+          doctor_id: 'doc-1',
+          office_location_id: 'office-1',
+          clock_in: '2026-07-20T12:00:00.000Z',
+          clock_out: '2026-07-20T16:30:00.000Z',
+          duration_minutes: 270,
+          ip_address: '127.0.0.1',
+          status: 'completed',
+          doctor: { full_name: 'Dra. Ana Gómez' },
+          office_locations: { name: 'Sede Central' },
+        },
+      ];
+
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.order.mockResolvedValue({ data: mockRows, error: null });
+
+      const result = await repository.getShiftHistory({});
+
+      expect(supabaseMock.from).toHaveBeenCalledWith('doctor_work_shifts');
+      expect(supabaseMock.order).toHaveBeenCalledWith('clock_in', { ascending: false });
+      expect(supabaseMock.eq).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        {
+          id: 'shift-1',
+          doctorId: 'doc-1',
+          officeLocationId: 'office-1',
+          clockIn: '2026-07-20T12:00:00.000Z',
+          clockOut: '2026-07-20T16:30:00.000Z',
+          durationMinutes: 270,
+          ipAddress: '127.0.0.1',
+          status: 'completed',
+          officeName: 'Sede Central',
+          doctorName: 'Dra. Ana Gómez',
+        },
+      ]);
+    });
+
+    it('falls back to placeholder doctorName/officeName when the joins return null, without leaving them undefined', async () => {
+      const supabaseMock = supabase as any;
+      const mockRows = [
+        {
+          id: 'shift-2',
+          doctor_id: 'doc-2',
+          office_location_id: null,
+          clock_in: '2026-07-21T09:00:00.000Z',
+          clock_out: null,
+          duration_minutes: null,
+          ip_address: '10.0.0.5',
+          status: 'active',
+          doctor: null,
+          office_locations: null,
+        },
+      ];
+
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.order.mockResolvedValue({ data: mockRows, error: null });
+
+      const result = await repository.getShiftHistory({});
+
+      expect(result[0].doctorName).toBe('Médico');
+      expect(result[0].officeName).toBe('Oficina');
+      expect(result[0].clockOut).toBeUndefined();
+      expect(result[0].durationMinutes).toBeUndefined();
+    });
+
+    it('applies the doctorId filter via .eq("doctor_id", ...)', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.order.mockResolvedValue({ data: [], error: null });
+
+      await repository.getShiftHistory({ doctorId: 'doc-1' });
+
+      expect(supabaseMock.eq).toHaveBeenCalledWith('doctor_id', 'doc-1');
+    });
+
+    it('applies the officeLocationId filter via .eq("office_location_id", ...)', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.order.mockResolvedValue({ data: [], error: null });
+
+      await repository.getShiftHistory({ officeLocationId: 'office-1' });
+
+      expect(supabaseMock.eq).toHaveBeenCalledWith('office_location_id', 'office-1');
+    });
+
+    it('applies the from filter via .gte("clock_in", ...) as an inclusive lower bound', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.gte.mockReturnValue(supabaseMock);
+      supabaseMock.order.mockResolvedValue({ data: [], error: null });
+
+      await repository.getShiftHistory({ from: '2026-07-01' });
+
+      expect(supabaseMock.gte).toHaveBeenCalledWith('clock_in', '2026-07-01');
+    });
+
+    it('applies the to filter via .lte("clock_in", ...) as an inclusive upper bound', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.lte.mockReturnValue(supabaseMock);
+      supabaseMock.order.mockResolvedValue({ data: [], error: null });
+
+      await repository.getShiftHistory({ to: '2026-07-31' });
+
+      expect(supabaseMock.lte).toHaveBeenCalledWith('clock_in', '2026-07-31');
+    });
+
+    it('orders by clock_in descending (most recent first)', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.order.mockResolvedValue({ data: [], error: null });
+
+      await repository.getShiftHistory({});
+
+      expect(supabaseMock.order).toHaveBeenCalledWith('clock_in', { ascending: false });
     });
   });
 });

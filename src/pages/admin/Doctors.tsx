@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, Edit2, Trash2, Search, Filter, 
-  Activity, Star, Clock, AlertCircle, 
+import { useNavigate } from 'react-router-dom';
+import {
+  Plus, Edit2, Trash2, Search, Filter,
+  Activity, Star, Clock, AlertCircle,
   User as UserIcon, ShieldCheck, Stethoscope,
   Key
 } from 'lucide-react';
@@ -20,6 +21,7 @@ const GlassTableContainer: React.FC<{ children: React.ReactNode }> = ({ children
 
 const Doctors: React.FC = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [appointmentsToday, setAppointmentsToday] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -281,14 +283,21 @@ const Doctors: React.FC = () => {
                   </td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex justify-end space-x-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button 
-                        onClick={() => setResetPasswordDoc(doc)} 
+                      <button
+                        onClick={() => navigate(`/doctor-attendance?doctorId=${doc.id}`)}
+                        className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5"
+                        title="Ver Fichado"
+                      >
+                        <Clock size={16} />
+                      </button>
+                      <button
+                        onClick={() => setResetPasswordDoc(doc)}
                         className="p-2 bg-white/5 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors border border-white/5"
                         title="Restablecer Contraseña"
                       >
                         <Key size={16} />
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleEdit(doc)} 
                         className="p-2 bg-white/5 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-colors border border-white/5"
                         title="Editar Perfil"

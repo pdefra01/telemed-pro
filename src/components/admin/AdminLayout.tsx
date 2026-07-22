@@ -17,7 +17,8 @@ import {
   Megaphone,
   Package,
   ShoppingCart,
-  Award
+  Award,
+  Clock
 } from 'lucide-react';
 import { User } from '../../types';
 import logoMedinex from '../../logo_medinex.jpeg';
@@ -35,6 +36,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
   const navItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors' },
+    { name: 'Fichado Médico', icon: <Clock size={20} />, path: '/doctor-attendance' },
     { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
     { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
     { name: 'Convenios', icon: <Building2 size={20} />, path: '/agreements' },

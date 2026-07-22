@@ -12,6 +12,7 @@ import AIChatBot from './components/AIChatBot';
 import VideoRoom from './pages/VideoRoom';
 import AIImageEditor from './pages/AIImageEditor';
 import Doctors from './pages/admin/Doctors';
+import DoctorAttendance from './pages/admin/DoctorAttendance';
 import Affiliates from './pages/admin/Affiliates';
 import Agreements from './pages/admin/Agreements';
 import OCCBilling from './pages/admin/OCCBilling';
@@ -153,6 +154,14 @@ const App: React.FC = () => {
         element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
             <Doctors />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/doctor-attendance"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <DoctorAttendance />
           </ProtectedRoute>
         }
       />
