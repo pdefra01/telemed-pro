@@ -17,6 +17,22 @@ export class PlanAssignmentFailedError extends Error {
   }
 }
 
+/**
+ * `assign_plan` ya commiteó el cambio de plan (y, si correspondía, abrió la
+ * ventana de cobertura) antes de que el resto de los campos del perfil se
+ * intente escribir en un segundo write separado. Si ese segundo write falla,
+ * el plan/cupo ya cambiaron pero el resto del formulario no se guardó — se
+ * propaga como error distinto de uno genérico para que la UI no reporte un
+ * fallo total cuando en realidad una parte sí se persistió.
+ */
+export class ProfileFieldsUpdateFailedError extends Error {
+  constructor(public readonly patient: Patient, cause: unknown) {
+    super('El plan se actualizó correctamente, pero no se pudieron guardar los demás datos del afiliado.');
+    this.name = 'ProfileFieldsUpdateFailedError';
+    this.cause = cause as Error | undefined;
+  }
+}
+
 export class AffiliateRepository {
   /**
    * Obtiene todos los afiliados activos
@@ -117,15 +133,14 @@ export class AffiliateRepository {
 
     // El endpoint /api/create-patient no acepta plan_id (solo crea el auth user +
     // el perfil base vía trigger). Si el admin eligió un plan al crear el afiliado,
-    // lo asignamos acá con un segundo write — el trigger de profiles sincroniza
-    // plan_name automáticamente a partir de plan_id.
+    // lo asignamos acá vía la RPC assign_plan — no con un update directo, porque
+    // esta es exactamente la primera asignación que assign_plan usa para abrir
+    // automáticamente la ventana de cobertura (un write directo la dejaría sin crear).
     if (data.planId) {
-      const { data: withPlan, error: planAssignError } = await supabase
-        .from('profiles')
-        .update({ plan_id: data.planId })
-        .eq('id', result.id)
-        .select()
-        .single();
+      const { data: withPlan, error: planAssignError } = await supabase.rpc('assign_plan', {
+        p_profile_id: result.id,
+        p_plan_id: data.planId,
+      });
 
       if (planAssignError) {
         console.error(`Error asignando plan al afiliado recién creado ${result.id}:`, planAssignError);
@@ -215,10 +230,10 @@ export class AffiliateRepository {
     if (data.name !== undefined) profileData.full_name = data.name;
     if (data.email !== undefined) profileData.email = data.email;
     if (data.dni !== undefined) profileData.dni = data.dni;
-    // Solo escribimos plan_id — el trigger sync_profile_plan_name_trigger sincroniza
-    // plan_name automáticamente. Nunca se escribe plan_name directo (evita el drift
-    // que causaba el bug original de esta feature).
-    if (data.planId !== undefined) profileData.plan_id = data.planId;
+    // plan_id ya NO se escribe acá — se enruta por la RPC assign_plan (ver
+    // abajo), que además abre automáticamente la ventana de cobertura en la
+    // primera asignación. Un write directo a profiles.plan_id dejaría esa
+    // ventana sin crear.
     if (data.planStatus !== undefined) profileData.plan_status = data.planStatus;
     if (data.address !== undefined) profileData.address = data.address;
     if (data.phone !== undefined) profileData.phone = data.phone;
@@ -231,6 +246,27 @@ export class AffiliateRepository {
       await authRepository.updateEmailFromAdmin(id, data.email);
     }
 
+    let assignedProfile: any = null;
+    if (data.planId !== undefined) {
+      const { data: rpcResult, error: assignError } = await supabase.rpc('assign_plan', {
+        p_profile_id: id,
+        p_plan_id: data.planId,
+      });
+
+      if (assignError) {
+        console.error(`Error asignando plan al afiliado ${id}:`, assignError);
+        throw assignError;
+      }
+
+      assignedProfile = rpcResult;
+    }
+
+    if (Object.keys(profileData).length === 0) {
+      // Solo cambió el plan (o nada más) — assign_plan ya devolvió el perfil
+      // actualizado completo, evitamos un segundo UPDATE vacío/redundante.
+      return this.mapProfileToPatient(assignedProfile);
+    }
+
     const { data: result, error } = await supabase
       .from('profiles')
       .update(profileData)
@@ -240,6 +276,9 @@ export class AffiliateRepository {
 
     if (error) {
       console.error(`Error actualizando afiliado ${id}:`, error);
+      if (assignedProfile) {
+        throw new ProfileFieldsUpdateFailedError(this.mapProfileToPatient(assignedProfile), error);
+      }
       throw error;
     }
 
@@ -297,8 +336,16 @@ export class AffiliateRepository {
    *
    * Resuelve el plan real vía `profiles.plan_id -> plans` (nunca fabrica un cupo por
    * defecto). Si el paciente no tiene plan asignado, devuelve un estado explícito
-   * "sin plan" en lugar de un número inventado. Si el plan es ilimitado, `totalBonified`
-   * y `remaining` son `null` para no simular un tope numérico.
+   * "sin plan" en lugar de un número inventado.
+   *
+   * El cupo otorgado y la vigencia (`coverageActive`/`paidThrough`) se leen SIEMPRE
+   * de la ventana de cobertura (`family_coverage_windows`), nunca del plan vivo:
+   * es el snapshot congelado en `assign_plan`/`renew_coverage_window` el que
+   * determina lo ya otorgado, para que un cambio de plan a mitad de ventana no
+   * altere retroactivamente el cupo. Si la ventana venció (`paid_through < now()`)
+   * se reporta un estado "vencido" explícito y nunca se informa el remanente
+   * congelado como disponible. Si el plan es ilimitado, `totalBonified` y
+   * `remaining` son `null` para no simular un tope numérico.
    */
   async getConsultationQuotaStatus(patientId: string): Promise<{
     quotaUsed: number;
@@ -308,6 +355,9 @@ export class AffiliateRepository {
     hasPlan: boolean;
     isOverQuota: boolean;
     planName: string;
+    coverageActive: boolean;
+    paidThrough: string | null;
+    periodStart: string | null;
   }> {
     const noPlanState = (quotaUsed: number) => ({
       quotaUsed,
@@ -317,6 +367,9 @@ export class AffiliateRepository {
       hasPlan: false,
       isOverQuota: false,
       planName: 'Sin plan asignado',
+      coverageActive: false,
+      paidThrough: null,
+      periodStart: null,
     });
 
     const { data: profile, error: pErr } = await supabase
@@ -358,8 +411,63 @@ export class AffiliateRepository {
       return noPlanState(quotaUsed);
     }
 
-    const isUnlimited = !!plan.is_unlimited;
-    const totalBonified = isUnlimited ? null : plan.bonified_consultations;
+    // Subject key mirrors assign_plan/renew_coverage_window: family_group_id
+    // when present, else the standalone profile id.
+    const windowQuery = profile.family_group_id
+      ? supabase
+          .from('family_coverage_windows')
+          .select('paid_through, period_start, granted_quota, is_unlimited')
+          .eq('family_group_id', profile.family_group_id)
+      : supabase
+          .from('family_coverage_windows')
+          .select('paid_through, period_start, granted_quota, is_unlimited')
+          .eq('subject_profile_id', patientId);
+
+    const { data: window, error: windowErr } = await windowQuery.maybeSingle();
+
+    if (windowErr) {
+      console.error(`Error obteniendo ventana de cobertura para ${patientId}:`, windowErr);
+    }
+
+    if (!window) {
+      // Tiene plan asignado pero nunca se abrió una ventana de cobertura
+      // (p.ej. asignación legacy fuera de assign_plan) — se informa como
+      // cobertura inactiva sin inventar un cupo que no existe.
+      return {
+        quotaUsed,
+        totalBonified: null,
+        remaining: null,
+        isUnlimited: false,
+        hasPlan: true,
+        isOverQuota: false,
+        planName: plan.name,
+        coverageActive: false,
+        paidThrough: null,
+        periodStart: null,
+      };
+    }
+
+    const coverageActive = new Date(window.paid_through) > new Date();
+    const isUnlimited = !!window.is_unlimited;
+
+    if (!coverageActive) {
+      // Vencida: nunca se reporta el remanente congelado como disponible,
+      // sea el plan finito o ilimitado.
+      return {
+        quotaUsed,
+        totalBonified: isUnlimited ? null : window.granted_quota,
+        remaining: 0,
+        isUnlimited,
+        hasPlan: true,
+        isOverQuota: true,
+        planName: plan.name,
+        coverageActive: false,
+        paidThrough: window.paid_through,
+        periodStart: window.period_start,
+      };
+    }
+
+    const totalBonified = isUnlimited ? null : window.granted_quota;
     const remaining = isUnlimited ? null : Math.max(0, (totalBonified ?? 0) - quotaUsed);
     const isOverQuota = !isUnlimited && quotaUsed >= (totalBonified ?? 0);
 
@@ -371,6 +479,36 @@ export class AffiliateRepository {
       hasPlan: true,
       isOverQuota,
       planName: plan.name,
+      coverageActive: true,
+      paidThrough: window.paid_through,
+      periodStart: window.period_start,
+    };
+  }
+
+  /**
+   * Ejecuta la renovación explícita de la ventana de cobertura vencida vía la
+   * RPC `renew_coverage_window` (SECURITY DEFINER, atómica). Nunca es
+   * automática — es una acción manual del admin, ya que no existe scheduler;
+   * la propia RPC rechaza renovar una ventana que todavía no venció.
+   */
+  async renewCoverageWindow(profileId: string): Promise<{
+    paidThrough: string;
+    periodStart: string;
+    grantedQuota: number | null;
+    isUnlimited: boolean;
+  }> {
+    const { data, error } = await supabase.rpc('renew_coverage_window', { p_profile_id: profileId });
+
+    if (error) {
+      console.error(`Error renovando cobertura del afiliado ${profileId}:`, error);
+      throw error;
+    }
+
+    return {
+      paidThrough: data.paid_through,
+      periodStart: data.period_start,
+      grantedQuota: data.granted_quota,
+      isUnlimited: data.is_unlimited,
     };
   }
 

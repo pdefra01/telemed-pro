@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { affiliateRepository, PlanAssignmentFailedError } from '../AffiliateRepository';
+import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../AffiliateRepository';
 import { supabase } from '../../services/supabase';
 import { Patient } from '../../types';
 
 vi.mock('../../services/supabase', () => {
   return {
     supabase: {
-      from: vi.fn()
+      from: vi.fn(),
+      rpc: vi.fn(),
     }
   };
 });
@@ -87,7 +88,7 @@ describe('AffiliateRepository', () => {
     expect(result.name).toBe('Juan Pérez');
   });
 
-  it('assigns plan_id with a follow-up write when creating an affiliate with a real plan selected', async () => {
+  it('routes the follow-up plan assignment through the assign_plan RPC (opens the coverage window on first assignment) when creating an affiliate with a real plan selected', async () => {
     const mockPatientData: Partial<Patient> = {
       name: 'Ana Gómez',
       dni: '30111222',
@@ -108,22 +109,18 @@ describe('AffiliateRepository', () => {
       error: null,
     });
     const initialSelectChain = { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: initialSingle }) }) };
+    vi.mocked(supabase.from).mockReturnValueOnce(initialSelectChain as any);
 
-    // Chain 2: the follow-up update().eq().select().single() assigning plan_id
-    const updateSingle = vi.fn().mockResolvedValue({
+    vi.mocked(supabase.rpc).mockResolvedValue({
       data: { id: 'mock-patient-id-2', full_name: 'Ana Gómez', email: 'ana@test.com', dni: '30111222', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
       error: null,
-    });
-    const updateChain = { update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) }) };
-
-    vi.mocked(supabase.from)
-      .mockReturnValueOnce(initialSelectChain as any)
-      .mockReturnValueOnce(updateChain as any);
+    } as any);
 
     const result = await affiliateRepository.createAffiliate(mockPatientData);
 
-    // Proves the follow-up write set plan_id (not a free-text plan_name)
-    expect(updateChain.update).toHaveBeenCalledWith({ plan_id: 'plan-real-id' });
+    // Proves this goes through assign_plan (which auto-opens the coverage
+    // window on first assignment), not a direct profiles.update() write.
+    expect(supabase.rpc).toHaveBeenCalledWith('assign_plan', { p_profile_id: 'mock-patient-id-2', p_plan_id: 'plan-real-id' });
     expect(result.planId).toBe('plan-real-id');
     expect(result.planName).toBe('Plan Familiar Medinex');
   });
@@ -211,30 +208,90 @@ describe('AffiliateRepository', () => {
       error: null,
     });
     const initialSelectChain = { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: initialSingle }) }) };
+    vi.mocked(supabase.from).mockReturnValueOnce(initialSelectChain as any);
 
-    // The follow-up plan_id UPDATE fails.
-    const updateSingle = vi.fn().mockResolvedValue({ data: null, error: { message: 'update failed' } });
-    const updateChain = { update: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) }) };
-
-    vi.mocked(supabase.from)
-      .mockReturnValueOnce(initialSelectChain as any)
-      .mockReturnValueOnce(updateChain as any);
+    // The follow-up assign_plan RPC fails.
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: null, error: { message: 'assign_plan failed' } } as any);
 
     await expect(affiliateRepository.createAffiliate(mockPatientData)).rejects.toBeInstanceOf(PlanAssignmentFailedError);
   });
 
-  it('writes plan_id (never a free-text plan_name) when updating an affiliate with a plan selection', async () => {
+  it('routes a plan_id change through the assign_plan RPC instead of a direct profiles.update() write', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { id: 'test-id', plan_id: 'plan-real-id' },
+      error: null,
+    } as any);
+
     const updateSingle = vi.fn().mockResolvedValue({
-      data: { id: 'test-id', full_name: 'Juan Pérez', email: 'juan@test.com', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
+      data: { id: 'test-id', full_name: 'Juan Actualizado', email: 'juan@test.com', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
       error: null,
     });
     const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
     vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
 
+    const result = await affiliateRepository.updateAffiliate('test-id', { name: 'Juan Actualizado', planId: 'plan-real-id' });
+
+    expect(supabase.rpc).toHaveBeenCalledWith('assign_plan', { p_profile_id: 'test-id', p_plan_id: 'plan-real-id' });
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ full_name: 'Juan Actualizado' }));
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ plan_id: expect.anything() }));
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ plan_name: expect.anything() }));
+    expect(result.planId).toBe('plan-real-id');
+  });
+
+  it('does not call assign_plan when the update has no plan_id change', async () => {
+    const updateSingle = vi.fn().mockResolvedValue({
+      data: { id: 'test-id', full_name: 'Solo Nombre', role: 'patient' },
+      error: null,
+    });
+    const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
+    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+
+    await affiliateRepository.updateAffiliate('test-id', { name: 'Solo Nombre' });
+
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('throws instead of silently succeeding when the assign_plan RPC reports an error', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: null,
+      error: { message: 'Acceso denegado: Solo administradores pueden asignar planes.' },
+    } as any);
+
+    await expect(
+      affiliateRepository.updateAffiliate('test-id', { name: 'x', planId: 'plan-real-id' })
+    ).rejects.toBeTruthy();
+  });
+
+  it('throws ProfileFieldsUpdateFailedError (not a generic error) when assign_plan succeeds but the trailing profile field update fails', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { id: 'test-id', full_name: 'Old Name', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
+      error: null,
+    } as any);
+
+    const updateSingle = vi.fn().mockResolvedValue({ data: null, error: { message: 'constraint violation' } });
+    const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
+    vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+
+    const error = await affiliateRepository
+      .updateAffiliate('test-id', { name: 'Nombre Nuevo', planId: 'plan-real-id' })
+      .catch(e => e);
+
+    expect(error).toBeInstanceOf(ProfileFieldsUpdateFailedError);
+    // The already-committed plan assignment must be surfaced on the error so
+    // callers can tell the admin the plan DID change even though this failed.
+    expect(error.patient.planId).toBe('plan-real-id');
+  });
+
+  it('skips the redundant profiles.update() call and returns the assign_plan result directly when only the plan changes', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { id: 'test-id', full_name: 'Juan Pérez', plan_id: 'plan-real-id', plan_name: 'Plan Familiar Medinex', role: 'patient' },
+      error: null,
+    } as any);
+
     const result = await affiliateRepository.updateAffiliate('test-id', { planId: 'plan-real-id' });
 
-    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ plan_id: 'plan-real-id' }));
-    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ plan_name: expect.anything() }));
+    expect(supabase.rpc).toHaveBeenCalledWith('assign_plan', { p_profile_id: 'test-id', p_plan_id: 'plan-real-id' });
+    expect(supabase.from).not.toHaveBeenCalled();
     expect(result.planId).toBe('plan-real-id');
   });
 
@@ -333,7 +390,20 @@ describe('AffiliateRepository', () => {
       }),
     });
 
-    it('resolves a finite-quota plan and reports remaining/over-quota correctly', async () => {
+    /** Builds a `family_coverage_windows` chain: select().eq().maybeSingle() */
+    const windowChain = (data: any, error: any = null) => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+        }),
+      }),
+    });
+
+    const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const past = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const evenMorePast = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+
+    it('resolves an active window and computes remaining/over-quota from the window snapshot, not the live plan', async () => {
       vi.mocked(supabase.from)
         .mockReturnValueOnce(profileByIdChain({
           plan_id: 'plan-1',
@@ -342,7 +412,13 @@ describe('AffiliateRepository', () => {
         }) as any)
         .mockReturnValueOnce(planByIdChain({
           name: 'Plan Familiar Medinex',
-          bonified_consultations: 6,
+          bonified_consultations: 999, // decoy: live plan value must be ignored
+          is_unlimited: false,
+        }) as any)
+        .mockReturnValueOnce(windowChain({
+          paid_through: farFuture,
+          period_start: evenMorePast,
+          granted_quota: 6,
           is_unlimited: false,
         }) as any);
 
@@ -356,10 +432,13 @@ describe('AffiliateRepository', () => {
         hasPlan: true,
         isOverQuota: false,
         planName: 'Plan Familiar Medinex',
+        coverageActive: true,
+        paidThrough: farFuture,
+        periodStart: evenMorePast,
       });
     });
 
-    it('reports isOverQuota true once usage reaches the finite plan cap (proves the old =4 fabrication is gone)', async () => {
+    it('reports isOverQuota true once usage reaches the window granted cap (proves computed from the snapshot, not the live plan)', async () => {
       vi.mocked(supabase.from)
         .mockReturnValueOnce(profileByIdChain({
           plan_id: 'plan-1',
@@ -368,7 +447,13 @@ describe('AffiliateRepository', () => {
         }) as any)
         .mockReturnValueOnce(planByIdChain({
           name: 'Plan Familiar Medinex',
-          bonified_consultations: 6,
+          bonified_consultations: 999,
+          is_unlimited: false,
+        }) as any)
+        .mockReturnValueOnce(windowChain({
+          paid_through: farFuture,
+          period_start: evenMorePast,
+          granted_quota: 6,
           is_unlimited: false,
         }) as any);
 
@@ -377,9 +462,10 @@ describe('AffiliateRepository', () => {
       expect(result.isOverQuota).toBe(true);
       expect(result.remaining).toBe(0);
       expect(result.totalBonified).toBe(6);
+      expect(result.coverageActive).toBe(true);
     });
 
-    it('reports unlimited plans with null bounds and never over-quota', async () => {
+    it('reports an active unlimited window with null bounds even if the live plan is currently finite', async () => {
       vi.mocked(supabase.from)
         .mockReturnValueOnce(profileByIdChain({
           plan_id: 'plan-2',
@@ -389,6 +475,12 @@ describe('AffiliateRepository', () => {
         .mockReturnValueOnce(planByIdChain({
           name: 'Plan Ilimitado',
           bonified_consultations: 0,
+          is_unlimited: false, // decoy: live plan swapped to finite mid-window
+        }) as any)
+        .mockReturnValueOnce(windowChain({
+          paid_through: farFuture,
+          period_start: evenMorePast,
+          granted_quota: null,
           is_unlimited: true,
         }) as any);
 
@@ -402,6 +494,9 @@ describe('AffiliateRepository', () => {
         hasPlan: true,
         isOverQuota: false,
         planName: 'Plan Ilimitado',
+        coverageActive: true,
+        paidThrough: farFuture,
+        periodStart: evenMorePast,
       });
     });
 
@@ -423,10 +518,13 @@ describe('AffiliateRepository', () => {
         hasPlan: false,
         isOverQuota: false,
         planName: 'Sin plan asignado',
+        coverageActive: false,
+        paidThrough: null,
+        periodStart: null,
       });
     });
 
-    it('aggregates quotaUsed across the family group before resolving the plan', async () => {
+    it('aggregates quotaUsed across the family group and resolves the shared window by family_group_id', async () => {
       vi.mocked(supabase.from)
         .mockReturnValueOnce(profileByIdChain({
           plan_id: 'plan-1',
@@ -441,12 +539,110 @@ describe('AffiliateRepository', () => {
           name: 'Plan Familiar Medinex',
           bonified_consultations: 6,
           is_unlimited: false,
+        }) as any)
+        .mockReturnValueOnce(windowChain({
+          paid_through: farFuture,
+          period_start: evenMorePast,
+          granted_quota: 6,
+          is_unlimited: false,
         }) as any);
 
       const result = await affiliateRepository.getConsultationQuotaStatus('patient-1');
 
       expect(result.quotaUsed).toBe(5);
       expect(result.remaining).toBe(1);
+      expect(result.coverageActive).toBe(true);
+    });
+
+    it('reports an explicit expired-coverage state and never reports leftover snapshot quota as available', async () => {
+      vi.mocked(supabase.from)
+        .mockReturnValueOnce(profileByIdChain({
+          plan_id: 'plan-1',
+          current_period_quota_used: 1, // only used 1 of 6 — leftover must NOT be reported as available
+          family_group_id: null,
+        }) as any)
+        .mockReturnValueOnce(planByIdChain({
+          name: 'Plan Familiar Medinex',
+          bonified_consultations: 6,
+          is_unlimited: false,
+        }) as any)
+        .mockReturnValueOnce(windowChain({
+          paid_through: past,
+          period_start: evenMorePast,
+          granted_quota: 6,
+          is_unlimited: false,
+        }) as any);
+
+      const result = await affiliateRepository.getConsultationQuotaStatus('patient-1');
+
+      expect(result.coverageActive).toBe(false);
+      expect(result.remaining).toBe(0);
+      expect(result.isOverQuota).toBe(true);
+      expect(result.paidThrough).toBe(past);
+      expect(result.hasPlan).toBe(true);
+    });
+
+    it('reports coverage inactive without fabricating a quota when the plan is assigned but no coverage window exists yet', async () => {
+      vi.mocked(supabase.from)
+        .mockReturnValueOnce(profileByIdChain({
+          plan_id: 'plan-1',
+          current_period_quota_used: 0,
+          family_group_id: null,
+        }) as any)
+        .mockReturnValueOnce(planByIdChain({
+          name: 'Plan Familiar Medinex',
+          bonified_consultations: 6,
+          is_unlimited: false,
+        }) as any)
+        .mockReturnValueOnce(windowChain(null) as any);
+
+      const result = await affiliateRepository.getConsultationQuotaStatus('patient-1');
+
+      expect(result).toEqual({
+        quotaUsed: 0,
+        totalBonified: null,
+        remaining: null,
+        isUnlimited: false,
+        hasPlan: true,
+        isOverQuota: false,
+        planName: 'Plan Familiar Medinex',
+        coverageActive: false,
+        paidThrough: null,
+        periodStart: null,
+      });
+    });
+  });
+
+  describe('renewCoverageWindow', () => {
+    it('calls the renew_coverage_window RPC and maps the returned window to camelCase', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({
+        data: {
+          paid_through: '2027-01-01T00:00:00.000Z',
+          period_start: '2026-07-01T00:00:00.000Z',
+          granted_quota: 30,
+          is_unlimited: false,
+        },
+        error: null,
+      } as any);
+
+      const result = await affiliateRepository.renewCoverageWindow('profile-1');
+
+      expect(supabase.rpc).toHaveBeenCalledWith('renew_coverage_window', { p_profile_id: 'profile-1' });
+      expect(result).toEqual({
+        paidThrough: '2027-01-01T00:00:00.000Z',
+        periodStart: '2026-07-01T00:00:00.000Z',
+        grantedQuota: 30,
+        isUnlimited: false,
+      });
+    });
+
+    it('throws instead of silently succeeding when the RPC reports an error (e.g. window not yet expired)', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({
+        data: null,
+        error: { message: 'La ventana de cobertura del perfil profile-1 todavia no expiro; no se puede renovar' },
+      } as any);
+
+      await expect(affiliateRepository.renewCoverageWindow('profile-1')).rejects.toBeTruthy();
     });
   });
 });
