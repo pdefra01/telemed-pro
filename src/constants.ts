@@ -80,7 +80,7 @@ export const MOCK_PATIENT: Patient = {
   birthDate: '1985-04-12',
   planName: 'Plan Familiar Premium',
   avatarUrl: 'https://picsum.photos/seed/patient1/200/200',
-  paymentStatus: 'paid',
+  paymentStatus: 'current',
   currentPeriodQuotaUsed: 0,
   familyMembers: [
     { id: 'f1', name: 'María Pérez', relation: 'Esposa', age: 34 },

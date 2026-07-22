@@ -133,8 +133,14 @@ const Affiliates: React.FC = () => {
   const handleRenewCoverage = async (patient: Patient) => {
     setRenewingId(patient.id);
     try {
-      await affiliateRepository.renewCoverageWindow(patient.id);
-      toast(`Cobertura de ${patient.name} renovada con éxito`, "success");
+      const result = await affiliateRepository.renewCoverageWindow(patient.id);
+      // Bajo modo grace_period la renovación se completa igual con saldo
+      // pendiente (D7) — el admin tiene que verlo en el mismo toast, no
+      // enterarse recién al mirar la cuenta corriente por separado.
+      const message = result.isDelinquent
+        ? `Cobertura de ${patient.name} renovada con éxito — saldo pendiente: $${result.balanceDue.toLocaleString()}`
+        : `Cobertura de ${patient.name} renovada con éxito`;
+      toast(message, "success");
       loadAffiliates();
     } catch (error: any) {
       toast(error?.message || "Error al renovar la cobertura", "error");

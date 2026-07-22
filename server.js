@@ -871,7 +871,10 @@ app.post('/api/approve-adhesion', async (req, res) => {
         birth_date: request.titular_birth_date,
         plan_id: resolvedPlanId,
         plan_status: 'active',
-        payment_status: 'paid',
+        // `profiles.payment_status` is DEPRECATED (write-stopped since
+        // cuenta-corriente-billing PR1) — it's now derived read-only from the
+        // receivables ledger (`affiliate_payment_status` view), never written
+        // directly by onboarding or any other app-layer path.
         is_active: true,
         producer_id: resolvedProducerId
       })

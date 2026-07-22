@@ -13,6 +13,25 @@ vi.mock('../../services/supabase', () => {
   };
 });
 
+/** Builds the `profiles` select().eq().single() chain. */
+const profileChain = (data: any, error: any = null) => ({
+  select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data, error }) }) }),
+});
+
+/** Builds the `affiliate_payment_status` select().eq().maybeSingle() chain. */
+const paymentStatusChain = (data: any, error: any = null) => ({
+  select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data, error }) }) }),
+});
+
+/** Routes supabase.from() by table name so both queries in login() resolve independently. */
+function mockFromByTable(profileData: any, paymentStatusRow: any = null, paymentStatusError: any = null) {
+  vi.mocked(supabase.from).mockImplementation((table: string) =>
+    (table === 'affiliate_payment_status'
+      ? paymentStatusChain(paymentStatusRow, paymentStatusError)
+      : profileChain(profileData)) as any
+  );
+}
+
 describe('AuthRepository', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -34,7 +53,7 @@ describe('AuthRepository', () => {
       role: 'patient',
       is_active: true,
       plan_status: 'active',
-      payment_status: 'paid'
+      agreement_id: null,
     };
 
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
@@ -42,10 +61,7 @@ describe('AuthRepository', () => {
       error: null
     } as any);
 
-    const singleMock = vi.fn().mockResolvedValueOnce({ data: mockProfileData, error: null });
-    const eqMock = vi.fn().mockReturnValue({ single: singleMock });
-    const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
-    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+    mockFromByTable(mockProfileData, { payment_status: 'current' });
 
     const user = await authRepository.login('test@medinex.com', 'password123', 'patient');
 
@@ -72,7 +88,7 @@ describe('AuthRepository', () => {
       role: 'patient',
       is_active: true,
       plan_status: 'active',
-      payment_status: 'paid',
+      agreement_id: null,
       plan_name: null
     };
 
@@ -81,10 +97,7 @@ describe('AuthRepository', () => {
       error: null
     } as any);
 
-    const singleMock = vi.fn().mockResolvedValueOnce({ data: mockProfileData, error: null });
-    const eqMock = vi.fn().mockReturnValue({ single: singleMock });
-    const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
-    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+    mockFromByTable(mockProfileData);
 
     const user: any = await authRepository.login('noplan@medinex.com', 'password123', 'patient');
 
@@ -107,7 +120,7 @@ describe('AuthRepository', () => {
       role: 'patient',
       is_active: false,
       plan_status: 'pending',
-      payment_status: 'paid'
+      agreement_id: null,
     };
 
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
@@ -115,13 +128,82 @@ describe('AuthRepository', () => {
       error: null
     } as any);
 
-    const singleMock = vi.fn().mockResolvedValueOnce({ data: mockProfileData, error: null });
-    const eqMock = vi.fn().mockReturnValue({ single: singleMock });
-    const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
-    vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as any);
+    mockFromByTable(mockProfileData);
 
     await expect(authRepository.login('pending@medinex.com', 'password123', 'patient'))
       .rejects
       .toThrow('Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.');
+  });
+
+  describe('login() derived paymentStatus (cuenta-corriente-billing)', () => {
+    const activeAuthUser = { user: { id: 'aff-1', email: 'aff@medinex.com' } };
+    const baseProfile = {
+      id: 'aff-1',
+      full_name: 'Afiliado Uno',
+      email: 'aff@medinex.com',
+      role: 'patient',
+      is_active: true,
+      plan_status: 'active',
+      agreement_id: null,
+    };
+
+    it('never reads the deprecated raw profiles.payment_status column (a fresh row still carries the old DB default "paid")', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({ data: activeAuthUser, error: null } as any);
+      // Simulates the real Postgres state: the column's DEFAULT is still
+      // 'paid' (pre-rename vocabulary) since nothing writes to it anymore.
+      mockFromByTable({ ...baseProfile, payment_status: 'paid' }, { payment_status: 'overdue' });
+
+      const user: any = await authRepository.login('aff@medinex.com', 'x', 'patient');
+
+      // Must reflect the DERIVED view's value, never the stale raw column.
+      expect(user.paymentStatus).toBe('overdue');
+    });
+
+    it('resolves the real derived status from affiliate_payment_status for a direct affiliate', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({ data: activeAuthUser, error: null } as any);
+      mockFromByTable(baseProfile, { payment_status: 'pending' });
+
+      const user: any = await authRepository.login('aff@medinex.com', 'x', 'patient');
+
+      expect(supabase.from).toHaveBeenCalledWith('affiliate_payment_status');
+      expect(user.paymentStatus).toBe('pending');
+    });
+
+    it('defaults to "current" (never a fabricated guess) when the affiliate has no ledger row yet', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({ data: activeAuthUser, error: null } as any);
+      mockFromByTable(baseProfile, null); // no row for this entity yet
+
+      const user: any = await authRepository.login('aff@medinex.com', 'x', 'patient');
+
+      expect(user.paymentStatus).toBe('current');
+    });
+
+    it('defaults to "current" (never crashes the login) if the derived-status query itself errors', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({ data: activeAuthUser, error: null } as any);
+      mockFromByTable(baseProfile, null, { message: 'view unavailable' });
+
+      const user: any = await authRepository.login('aff@medinex.com', 'x', 'patient');
+
+      expect(user.paymentStatus).toBe('current');
+    });
+
+    it('never queries affiliate_payment_status for an agreement-linked patient — always "current"', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({ data: activeAuthUser, error: null } as any);
+      mockFromByTable({ ...baseProfile, agreement_id: 'agr-1' });
+
+      const user: any = await authRepository.login('aff@medinex.com', 'x', 'patient');
+
+      expect(supabase.from).not.toHaveBeenCalledWith('affiliate_payment_status');
+      expect(user.paymentStatus).toBe('current');
+    });
+
+    it('never queries affiliate_payment_status for a non-patient role (e.g. doctor)', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({ data: activeAuthUser, error: null } as any);
+      mockFromByTable({ ...baseProfile, role: 'doctor' });
+
+      await authRepository.login('aff@medinex.com', 'x', 'doctor');
+
+      expect(supabase.from).not.toHaveBeenCalledWith('affiliate_payment_status');
+    });
   });
 });

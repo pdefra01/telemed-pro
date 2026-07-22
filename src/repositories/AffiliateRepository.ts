@@ -5,22 +5,6 @@ import { authRepository } from './AuthRepository';
 import type { AffiliatePaymentStatus } from './AccountMovementRepository';
 
 /**
- * Bridges the ledger's derived status vocabulary ('current'|'pending'|'overdue',
- * from `affiliate_payment_status` — cuenta-corriente-billing PR2) onto the
- * PRE-EXISTING `Patient.paymentStatus` union ('paid'|'overdue'|'grace_period').
- * Renaming that union to the new labels is PR4's task (`types.ts`, out of
- * scope here) — until then this mapping keeps the type-checker AND the UI
- * valid. `undefined` input (no row in the view) maps to 'paid', which is
- * honest for BOTH cases that produce it:
- *   - an agreement-linked profile: agreements are entirely out of scope for
- *     this ledger (Scope Boundary), so no row can ever exist for them — never
- *     fabricate 'overdue'/'grace_period' for a status this feature can't see.
- *   - a direct affiliate with zero ledger movements yet (e.g. brand new, no
- *     billing cycle has run): balance is genuinely 0 by construction, so
- *     'paid' (no view row = no charge = no debt) is the CORRECT value, not a
- *     guess.
- */
-/**
  * FROZEN coverage-window billing terms for one affiliate, as returned by
  * `getCoverageWindowsForBilling` (cuenta-corriente-billing D6). Always read
  * from the window's own snapshot columns — never the live plan — so a later
@@ -31,18 +15,6 @@ export interface CoverageWindowSnapshot {
   paidMonthsSnapshot: number;
   bonusMonthsSnapshot: number;
   monthlyCostSnapshot: number;
-}
-
-export function toLegacyPaymentStatus(status?: AffiliatePaymentStatus): Patient['paymentStatus'] {
-  switch (status) {
-    case 'overdue':
-      return 'overdue';
-    case 'pending':
-      return 'grace_period';
-    case 'current':
-    default:
-      return 'paid';
-  }
 }
 
 /**
@@ -159,7 +131,7 @@ export class AffiliateRepository {
   /**
    * Single-row variant for update/create call sites — an admin editing an
    * overdue affiliate's phone number must not get back a Patient object
-   * claiming `paymentStatus: 'paid'` just because this path skipped the
+   * claiming `paymentStatus: 'current'` just because this path skipped the
    * lookup (found by judgment-day review of cuenta-corriente-billing PR3;
    * traced to `Profile.tsx` overwriting the patient's own session/localStorage
    * with a stale/wrong status on self-edit).
@@ -215,7 +187,7 @@ export class AffiliateRepository {
         planStatus: data.planStatus || 'active',
         address: data.address,
         phone: data.phone,
-        paymentStatus: 'paid',
+        paymentStatus: 'current',
         currentPeriodQuotaUsed: 0
       };
     }
@@ -298,7 +270,7 @@ export class AffiliateRepository {
           planStatus: source.planStatus || 'active',
           address: source.address,
           phone: source.phone,
-          paymentStatus: 'paid',
+          paymentStatus: 'current',
           currentPeriodQuotaUsed: 0
         };
       });
@@ -691,10 +663,18 @@ export class AffiliateRepository {
    * @param derivedPaymentStatus Pre-resolved value from `affiliate_payment_status`
    * (see `mapRowsWithDerivedPaymentStatus`), already looked up by the caller
    * to avoid an N+1 query per row. `profiles.payment_status` is DEPRECATED
-   * (write-stopped since PR1) and is intentionally never read here anymore —
-   * see `toLegacyPaymentStatus` for the documented fallback when no derived
-   * value is available (agreement-linked profiles, or a brand-new affiliate
-   * with no ledger movements yet).
+   * (write-stopped since PR1) and is intentionally never read here anymore.
+   * `AffiliatePaymentStatus` ('current'|'pending'|'overdue') and
+   * `Patient.paymentStatus` share the exact same vocabulary since the PR4
+   * rename, so no translation is needed — `undefined` (no row in the view)
+   * defaults to `'current'`, which is honest for BOTH cases that produce it:
+   *   - an agreement-linked profile: agreements are entirely out of scope for
+   *     this ledger (Scope Boundary), so no row can ever exist for them —
+   *     never fabricate 'overdue'/'pending' for a status this feature can't see.
+   *   - a direct affiliate with zero ledger movements yet (e.g. brand new, no
+   *     billing cycle has run): balance is genuinely 0 by construction, so
+   *     'current' (no view row = no charge = no debt) is the CORRECT value,
+   *     not a guess.
    */
   private mapProfileToPatient(row: any, derivedPaymentStatus?: AffiliatePaymentStatus): Patient {
     return {
@@ -713,7 +693,7 @@ export class AffiliateRepository {
       bloodType: row.blood_type ?? undefined,
       agreementId: row.agreement_id,
       familyGroupId: row.family_group_id ?? undefined,
-      paymentStatus: toLegacyPaymentStatus(derivedPaymentStatus),
+      paymentStatus: derivedPaymentStatus ?? 'current',
       currentPeriodQuotaUsed: row.current_period_quota_used || 0,
       isActive: row.is_active
     };

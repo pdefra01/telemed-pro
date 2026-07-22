@@ -10,6 +10,29 @@ import { billingService } from '../../services/BillingService';
 import { financialService } from '../../services/FinancialService';
 import { Invoice, OperatingExpense, PLSummary } from '../../types';
 
+/**
+ * Formats the `runMonthlyBillingCycle` result summary for the post-cycle
+ * alert. Appends the affiliates that were skipped for having a plan but no
+ * coverage window (cuenta-corriente-billing PR3's `skippedNoWindow`) so the
+ * admin can act on them (reassign/renew) instead of only finding out via a
+ * server-side log line.
+ */
+export function formatCycleResultMessage(result: {
+  processedAgreements: number;
+  processedIndividuals: number;
+  totalAmount: number;
+  skippedNoWindow: { id: string; name: string }[];
+}): string {
+  let message = `Ciclo completado con éxito.\nConvenios: ${result.processedAgreements}\nDirectos: ${result.processedIndividuals}\nTotal: $${result.totalAmount.toLocaleString()}`;
+
+  if (result.skippedNoWindow.length > 0) {
+    const names = result.skippedNoWindow.map(a => a.name).join(', ');
+    message += `\nOmitidos (sin ventana de cobertura): ${names}`;
+  }
+
+  return message;
+}
+
 const GlassCard: React.FC<{
   children: React.ReactNode;
   className?: string;
@@ -88,7 +111,7 @@ const OCCBilling: React.FC = () => {
       setIsLoading(true);
       const period = new Date().toISOString().substring(0, 7); // Formato YYYY-MM
       const result = await billingService.runMonthlyBillingCycle(period);
-      alert(`Ciclo completado con éxito.\nConvenios: ${result.processedAgreements}\nDirectos: ${result.processedIndividuals}\nTotal: $${result.totalAmount.toLocaleString()}`);
+      alert(formatCycleResultMessage(result));
       await loadInvoices();
     } catch (error) {
       console.error("Error en ciclo de facturación", error);

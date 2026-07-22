@@ -35,7 +35,7 @@ export interface Patient extends User {
   planId?: string;
   planName?: string; // e.g., "Plan Familiar Premium"
   agreementId?: string;
-  paymentStatus: 'paid' | 'overdue' | 'grace_period';
+  paymentStatus: 'current' | 'overdue' | 'pending';
   currentPeriodQuotaUsed: number;
   bloodType?: string;
   credentialHash?: string;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError, toLegacyPaymentStatus } from '../AffiliateRepository';
+import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../AffiliateRepository';
 import { supabase } from '../../services/supabase';
 import { Patient } from '../../types';
 
@@ -10,24 +10,6 @@ vi.mock('../../services/supabase', () => {
       rpc: vi.fn(),
     }
   };
-});
-
-describe('toLegacyPaymentStatus (bridge: affiliate_payment_status view labels -> legacy Patient.paymentStatus union)', () => {
-  it('maps "overdue" straight through', () => {
-    expect(toLegacyPaymentStatus('overdue')).toBe('overdue');
-  });
-
-  it('maps "pending" to the legacy "grace_period" label', () => {
-    expect(toLegacyPaymentStatus('pending')).toBe('grace_period');
-  });
-
-  it('maps "current" to the legacy "paid" label', () => {
-    expect(toLegacyPaymentStatus('current')).toBe('paid');
-  });
-
-  it('defaults undefined (no view row — agreement-linked or a brand-new affiliate with zero ledger movements) to "paid"', () => {
-    expect(toLegacyPaymentStatus(undefined)).toBe('paid');
-  });
 });
 
 describe('AffiliateRepository', () => {
@@ -84,7 +66,7 @@ describe('AffiliateRepository', () => {
       dni: '35123456',
       planName: 'Plan Base',
       planStatus: 'active',
-      paymentStatus: 'paid',
+      paymentStatus: 'current',
       currentPeriodQuotaUsed: 0
     });
 
@@ -245,11 +227,11 @@ describe('AffiliateRepository', () => {
       expect(result.find(p => p.id === 'aff-direct')!.paymentStatus).toBe('overdue');
       // Agreement-linked profile: no ledger/view row exists for it (agreements
       // are out of scope for this ledger) — falls back to the documented
-      // 'paid' default rather than a fabricated overdue/pending guess.
-      expect(result.find(p => p.id === 'aff-agreement')!.paymentStatus).toBe('paid');
+      // 'current' default rather than a fabricated overdue/pending guess.
+      expect(result.find(p => p.id === 'aff-agreement')!.paymentStatus).toBe('current');
     });
 
-    it('maps the view\'s "pending" status to the legacy "grace_period" label (bridge until PR4 renames the Patient.paymentStatus union)', async () => {
+    it('maps the view\'s "pending" status straight through (Patient.paymentStatus uses the same vocabulary as the view since the PR4 rename)', async () => {
       const rows = [{ id: 'aff-pending', full_name: 'Pendiente', role: 'patient', agreement_id: null }];
       vi.mocked(supabase.from).mockImplementation((table: string) => {
         if (table === 'profiles') return profilesChain(rows) as any;
@@ -258,10 +240,10 @@ describe('AffiliateRepository', () => {
 
       const result = await affiliateRepository.getAllAffiliates();
 
-      expect(result[0].paymentStatus).toBe('grace_period');
+      expect(result[0].paymentStatus).toBe('pending');
     });
 
-    it('falls back to "paid" (never a crash) when the affiliate_payment_status batch query itself errors', async () => {
+    it('falls back to "current" (never a crash) when the affiliate_payment_status batch query itself errors', async () => {
       const rows = [{ id: 'aff-direct', full_name: 'Directo', role: 'patient', agreement_id: null }];
       vi.mocked(supabase.from).mockImplementation((table: string) => {
         if (table === 'profiles') return profilesChain(rows) as any;
@@ -270,7 +252,7 @@ describe('AffiliateRepository', () => {
 
       const result = await affiliateRepository.getAllAffiliates();
 
-      expect(result[0].paymentStatus).toBe('paid');
+      expect(result[0].paymentStatus).toBe('current');
     });
 
     it('getDirectAffiliates also batch-resolves paymentStatus from the view', async () => {
@@ -299,7 +281,7 @@ describe('AffiliateRepository', () => {
       const result = await affiliateRepository.getByAgreement('agr-1');
 
       expect(supabase.from).not.toHaveBeenCalledWith('affiliate_payment_status');
-      expect(result[0].paymentStatus).toBe('paid');
+      expect(result[0].paymentStatus).toBe('current');
       expect(isMock).not.toHaveBeenCalled();
     });
   });
