@@ -9,6 +9,8 @@ vi.mock('../../services/supabase', () => ({
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
@@ -31,13 +33,15 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
     supabaseMock.select.mockReturnThis();
     supabaseMock.eq.mockReturnThis();
     supabaseMock.neq.mockReturnThis();
+    supabaseMock.gte.mockReturnThis();
+    supabaseMock.lte.mockReturnThis();
     supabaseMock.insert.mockReturnThis();
     supabaseMock.update.mockReturnThis();
     supabaseMock.single.mockReturnThis();
   });
 
   describe('getPatientAppointments', () => {
-    it('sweeps stale appointments via the expire_stale_appointments RPC before reading, and excludes cancelled/no_show', async () => {
+    it('sweeps stale appointments via the expire_stale_appointments RPC before reading, and excludes cancelled/no_show/completed', async () => {
       const supabaseMock = supabase as any;
       supabaseMock.from.mockReturnValue(supabaseMock);
       supabaseMock.select.mockReturnValue(supabaseMock);
@@ -47,7 +51,7 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
       await appointmentRepository.getPatientAppointments('patient-1');
 
       expect(supabaseMock.rpc).toHaveBeenCalledWith('expire_stale_appointments');
-      expect(supabaseMock.not).toHaveBeenCalledWith('status', 'in', '(cancelled,no_show)');
+      expect(supabaseMock.not).toHaveBeenCalledWith('status', 'in', '(cancelled,no_show,completed)');
     });
 
     it('does not let a failed expire sweep block reading the appointment list', async () => {

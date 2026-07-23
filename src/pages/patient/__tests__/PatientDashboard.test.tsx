@@ -76,7 +76,7 @@ describe('PatientDashboard Scheduler', () => {
         if (args.length === 0) {
           super(mockDate.getTime());
         } else {
-          super(...(args as [any, ...any[]]));
+          super(args[0]);
         }
       }
     }

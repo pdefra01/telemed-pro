@@ -65,7 +65,8 @@ export function getQuotaBadgeContent(quotaStatus: QuotaStatus): { className: str
 
 const PatientDashboard: React.FC<Props> = ({ user }) => {
     const { toast } = useToast();
-    const [nextAppointment, setNextAppointment] = useState<Appointment | null>(null);
+    const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
     const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -81,13 +82,26 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
     const [familyMembers, setFamilyMembers] = useState<any[]>([]);
     const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState<string>('');
 
+    const handleCancelAppointment = async (appointmentId: string) => {
+        if (!window.confirm('¿Estás seguro de que querés cancelar este turno?')) return;
+        setCancellingId(appointmentId);
+        try {
+            await appointmentRepository.cancelAppointment(appointmentId);
+            toast('Turno cancelado con éxito', 'info');
+            triggerRefresh();
+        } catch (error: any) {
+            console.error("Error cancelando turno:", error);
+            toast(error.message || 'Error al cancelar el turno', 'error');
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
     useEffect(() => {
         const fetchAppointments = async () => {
             try {
                 const appts = await appointmentRepository.getPatientAppointments(user.id);
-                if (appts.length > 0) {
-                    setNextAppointment(appts[0]);
-                }
+                setUpcomingAppointments(appts);
             } catch (error) {
                 console.error("Error cargando turnos:", error);
             } finally {
@@ -383,14 +397,19 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-10"> {/* Left Col */}
                 <div className="md:col-span-2 space-y-10">
-                    {/* Next Appointment Card */}
+                    {/* Upcoming Appointments List */}
                     <div className="group bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl transition-all hover:border-emerald-500/20">
                         <div className="flex justify-between items-center mb-10">
                             <h3 className="font-bold text-2xl text-white flex items-center tracking-tight">
                                 <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mr-4 border border-emerald-500/20">
                                     <Clock className="text-emerald-400" size={24} />
                                 </div>
-                                Próximo Turno
+                                Próximos Turnos
+                                {upcomingAppointments.length > 0 && (
+                                    <span className="ml-3 text-xs bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full font-mono font-bold">
+                                        {upcomingAppointments.length}
+                                    </span>
+                                )}
                             </h3>
                             <button
                                 type="button"
@@ -406,44 +425,61 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                 <div className="w-12 h-12 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-6"></div>
                                 <span className="text-[10px] font-bold tracking-[0.4em] uppercase">Resolviendo Conexión Segura...</span>
                             </div>
-                        ) : nextAppointment ? (
-                            <div className="group/card relative flex flex-col sm:flex-row items-center bg-white/5 hover:bg-white/10 rounded-[2rem] p-8 border border-white/5 transition-all duration-500 overflow-hidden">
-                                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
-                                <div className="flex-shrink-0 mb-6 sm:mb-0 sm:mr-8 relative">
-                                    <div className="w-24 h-24 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-[0_10px_30px_rgba(16,185,129,0.3)] group-hover/card:scale-110 transition-transform duration-500">
-                                        <span className="text-4xl font-bold leading-none tracking-tighter">{nextAppointment.date?.split('-')[2] || nextAppointment.date}</span>
-                                        <span className="text-[10px] font-bold uppercase tracking-widest mt-1">Hoy</span>
-                                    </div>
-                                    <div className="absolute -top-2 -right-2 w-6 h-6 bg-emerald-500 rounded-full border-4 border-slate-900 animate-pulse"></div>
-                                </div>
-                                <div className="flex-1 text-center sm:text-left relative">
-                                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-3">
-                                        <span className="text-xs font-semibold bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full">Consulta en vivo</span>
-                                        <span className="text-xs font-mono text-slate-400 bg-white/5 px-3 py-1 rounded-full">ID: {nextAppointment.id.slice(0, 8)}</span>
-                                    </div>
-                                    <p className="font-bold text-2xl sm:text-3xl text-white mb-2 tracking-tight group-hover/card:text-emerald-400 transition-colors">{nextAppointment.doctorName}</p>
-                                    <p className="text-slate-400 font-semibold text-base sm:text-lg flex items-center justify-center sm:justify-start">
-                                        <Video size={18} className="mr-3 text-emerald-500" /> 
-                                        {nextAppointment.time} <span className="mx-2 opacity-30">|</span> 
-                                        <span className="text-sm font-normal text-slate-300">Sala de Espera Virtual</span>
-                                    </p>
-                                </div>
-                                <div className="mt-6 sm:mt-0 relative w-full sm:w-auto">
-                                    {['confirmed', 'in_progress'].includes(nextAppointment.status) ? (
-                                        <Link
-                                            to={`/room/${nextAppointment.id}`}
-                                            className="group/btn relative bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-8 py-4 rounded-2xl font-bold transition-all block text-center shadow-lg shadow-emerald-500/20 overflow-hidden text-base"
-                                        >
-                                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform"></div>
-                                            <span className="relative z-10">Ingresar a la Consulta</span>
-                                        </Link>
-                                    ) : (
-                                        <div className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-5 py-2.5 rounded-2xl text-xs font-semibold flex items-center justify-center gap-2">
-                                            <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
-                                            Pendiente de Confirmación
+                        ) : upcomingAppointments.length > 0 ? (
+                            <div className="space-y-6">
+                                {upcomingAppointments.map((appt) => {
+                                    const dayStr = appt.date?.split('-')[2] || appt.date;
+                                    const isCancelling = cancellingId === appt.id;
+
+                                    return (
+                                        <div key={appt.id} className="group/card relative flex flex-col sm:flex-row items-center bg-white/5 hover:bg-white/10 rounded-[2rem] p-8 border border-white/5 transition-all duration-500 overflow-hidden gap-6">
+                                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
+                                            <div className="flex-shrink-0 relative">
+                                                <div className="w-24 h-24 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-[0_10px_30px_rgba(16,185,129,0.3)] group-hover/card:scale-105 transition-transform duration-500">
+                                                    <span className="text-3xl font-bold leading-none tracking-tighter">{dayStr}</span>
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest mt-1">{appt.date}</span>
+                                                </div>
+                                                <div className="absolute -top-2 -right-2 w-5 h-5 bg-emerald-500 rounded-full border-4 border-slate-900 animate-pulse"></div>
+                                            </div>
+                                            <div className="flex-1 text-center sm:text-left relative">
+                                                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-3">
+                                                    <span className="text-xs font-semibold bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full">Consulta en vivo</span>
+                                                    <span className="text-xs font-mono text-slate-400 bg-white/5 px-3 py-1 rounded-full">ID: {appt.id.slice(0, 8)}</span>
+                                                </div>
+                                                <p className="font-bold text-2xl text-white mb-1 tracking-tight group-hover/card:text-emerald-400 transition-colors">{appt.doctorName}</p>
+                                                <p className="text-slate-400 font-semibold text-base flex items-center justify-center sm:justify-start">
+                                                    <Video size={18} className="mr-3 text-emerald-500" /> 
+                                                    {appt.time} <span className="mx-2 opacity-30">|</span> 
+                                                    <span className="text-sm font-normal text-slate-300">Sala de Espera Virtual</span>
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row items-center gap-3 relative w-full sm:w-auto">
+                                                {['confirmed', 'in_progress'].includes(appt.status) ? (
+                                                    <Link
+                                                        to={`/room/${appt.id}`}
+                                                        className="group/btn relative bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-3.5 rounded-2xl font-bold transition-all block text-center shadow-lg shadow-emerald-500/20 overflow-hidden text-sm w-full sm:w-auto"
+                                                    >
+                                                        <span className="relative z-10">Ingresar a la Consulta</span>
+                                                    </Link>
+                                                ) : (
+                                                    <div className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-4 py-2.5 rounded-2xl text-xs font-semibold flex items-center justify-center gap-2">
+                                                        <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                                                        Pendiente de Confirmación
+                                                    </div>
+                                                )}
+
+                                                <button
+                                                    type="button"
+                                                    disabled={isCancelling}
+                                                    onClick={() => handleCancelAppointment(appt.id)}
+                                                    className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-4 py-3 rounded-2xl text-xs font-semibold transition-all w-full sm:w-auto disabled:opacity-50"
+                                                >
+                                                    {isCancelling ? 'CANCELANDO...' : 'Cancelar Turno'}
+                                                </button>
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="text-center py-16 bg-white/5 rounded-[2rem] border-2 border-dashed border-white/5">
@@ -1000,7 +1036,19 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                                            <div className="flex flex-col sm:flex-row flex-wrap gap-2 pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        // Allow scheduling for today (immediate consultation)
+                                                        setSelectedSlot(pendingSlot);
+                                                        setShowPastSlotWarning(false);
+                                                        setPendingSlot(null);
+                                                    }}
+                                                    className="flex-1 py-2 px-3 text-[10px] font-bold bg-emerald-500 text-[#020617] rounded-lg hover:bg-emerald-400 transition-colors uppercase tracking-wider"
+                                                >
+                                                    Agendar para Hoy (Atención Inmediata)
+                                                </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => {
@@ -1011,7 +1059,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                         setShowPastSlotWarning(false);
                                                         setPendingSlot(null);
                                                     }}
-                                                    className="flex-1 py-2 text-[10px] font-bold bg-amber-500 text-[#020617] rounded-lg hover:bg-amber-400 transition-colors uppercase tracking-wider"
+                                                    className="flex-1 py-2 px-3 text-[10px] font-bold bg-amber-500 text-[#020617] rounded-lg hover:bg-amber-400 transition-colors uppercase tracking-wider"
                                                 >
                                                     Agendar para Mañana
                                                 </button>
@@ -1021,7 +1069,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                         setShowDatePicker(true);
                                                         setShowPastSlotWarning(false);
                                                     }}
-                                                    className="flex-1 py-2 text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg transition-colors uppercase tracking-wider"
+                                                    className="flex-1 py-2 px-3 text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg transition-colors uppercase tracking-wider"
                                                 >
                                                     Elegir otra fecha
                                                 </button>

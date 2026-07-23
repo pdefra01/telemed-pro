@@ -33,7 +33,7 @@ export class AppointmentRepository {
         doctor:profiles!doctor_id(full_name)
       `)
       .eq('patient_id', patientId)
-      .not('status', 'in', '(cancelled,no_show)')
+      .not('status', 'in', '(cancelled,no_show,completed)')
       .order('scheduled_at', { ascending: true });
 
     if (error) {
@@ -255,6 +255,21 @@ export class AppointmentRepository {
 
     if (error) {
       console.error(`Error completando turno ${appointmentId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancela un turno
+   */
+  async cancelAppointment(appointmentId: string): Promise<void> {
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status: 'cancelled' })
+      .eq('id', appointmentId);
+
+    if (error) {
+      console.error(`Error cancelando turno ${appointmentId}:`, error);
       throw error;
     }
   }
