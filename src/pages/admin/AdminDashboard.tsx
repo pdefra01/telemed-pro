@@ -38,18 +38,31 @@ const MetricCard: React.FC<{
   value: string | number;
   trend?: string;
   color: keyof typeof OCC_COLORS;
-}> = ({ icon, label, value, trend, color }) => (
-  <GlassCard className="p-6 group">
+  tooltip?: string;
+}> = ({ icon, label, value, trend, color, tooltip }) => (
+  <GlassCard className="p-6 group relative overflow-visible">
     <div className="flex justify-between items-start mb-4">
       <div className={`p-3 rounded-2xl bg-white/5 border border-white/10 text-white transition-transform duration-300 group-hover:scale-110`} style={{ color: OCC_COLORS[color] }}>
         {icon}
       </div>
-      {trend && (
-        <span className="flex items-center text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full">
-          <ArrowUpRight size={10} className="mr-1" />
-          {trend}
-        </span>
-      )}
+      <div className="flex items-center gap-2">
+        {trend && (
+          <span className="flex items-center text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full">
+            <ArrowUpRight size={10} className="mr-1" />
+            {trend}
+          </span>
+        )}
+        {tooltip && (
+          <div className="group/tooltip relative flex items-center">
+            <div className="w-5 h-5 rounded-full bg-white/5 border border-white/10 text-slate-400 group-hover/tooltip:text-white group-hover/tooltip:border-white/20 flex items-center justify-center text-[10px] font-bold font-mono cursor-help transition-colors">
+              ?
+            </div>
+            <div className="absolute right-0 bottom-full mb-2 hidden group-hover/tooltip:block w-48 p-2.5 bg-slate-900/95 border border-white/10 text-slate-300 text-[10px] rounded-xl shadow-2xl z-50 pointer-events-none leading-normal backdrop-blur-md">
+              {tooltip}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
     <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">{label}</p>
     <h4 className="text-3xl font-bold text-white tracking-tight">{value}</h4>
@@ -194,6 +207,7 @@ const AdminDashboard: React.FC = () => {
             value={isLoading ? "---" : metrics.totalAffiliates.toLocaleString()}
             trend="+12%"
             color="blue"
+            tooltip="Total de pacientes y familiares registrados activos en la plataforma."
           />
         </Link>
         <Link to="/doctors" className="block transform transition-transform hover:scale-[1.02]">
@@ -203,6 +217,7 @@ const AdminDashboard: React.FC = () => {
             value={isLoading ? "---" : metrics.totalDoctors}
             trend="+2"
             color="emerald"
+            tooltip="Cantidad de profesionales con matrícula verificada y perfil activo."
           />
         </Link>
         <Link to="/agreements" className="block transform transition-transform hover:scale-[1.02]">
@@ -212,6 +227,7 @@ const AdminDashboard: React.FC = () => {
             value={isLoading ? "---" : metrics.activeAgreements}
             trend="+3"
             color="indigo"
+            tooltip="Empresas y obras sociales con convenio institucional vigente."
           />
         </Link>
         <Link to="/billing" className="block transform transition-transform hover:scale-[1.02]">
@@ -221,6 +237,7 @@ const AdminDashboard: React.FC = () => {
             value={isLoading ? "---" : `$${(metrics.monthlyRevenue / 1000).toFixed(1)}k`}
             trend="+8.4%"
             color="emerald"
+            tooltip="Monto total acumulado por facturas liquidadas y pagadas."
           />
         </Link>
         <Link to="/billing" className="block transform transition-transform hover:scale-[1.02]">
@@ -229,6 +246,7 @@ const AdminDashboard: React.FC = () => {
             label="Facturas Pend."
             value={isLoading ? "---" : metrics.pendingInvoices}
             color="amber"
+            tooltip="Facturas emitidas pendientes de cobro o liquidación."
           />
         </Link>
       </div>
@@ -302,42 +320,67 @@ const AdminDashboard: React.FC = () => {
         {/* Status / Health Cards */}
         <div className="space-y-6">
           <GlassCard className="p-6">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-              <Activity size={18} className="mr-2 text-blue-400" />
-              Estado Operativo
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-white flex items-center">
+                <Activity size={18} className="mr-2 text-blue-400" />
+                Estado Operativo
+              </h3>
+              <div className="group/tooltip relative flex items-center">
+                <div className="w-5 h-5 rounded-full bg-white/5 border border-white/10 text-slate-400 group-hover/tooltip:text-white group-hover/tooltip:border-white/20 flex items-center justify-center text-[10px] font-bold font-mono cursor-help transition-colors">
+                  ?
+                </div>
+                <div className="absolute right-0 bottom-full mb-2 hidden group-hover/tooltip:block w-52 p-2.5 bg-slate-900/95 border border-white/10 text-slate-300 text-[10px] rounded-xl shadow-2xl z-50 pointer-events-none leading-normal backdrop-blur-md">
+                  Médicos con turno de guardia activo en tiempo real (fichados sin salida) respecto del total registrado.
+                </div>
+              </div>
+            </div>
             <div className="space-y-4">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-400">Médicos Online</span>
-                <span className="text-white font-bold">{metrics.totalDoctors}</span>
+                <span className="text-slate-400">Médicos Online / Guardia</span>
+                <span className="text-white font-bold">{metrics.onlineDoctors || 0} / {metrics.totalDoctors}</span>
               </div>
-              <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-blue-500 h-full w-[85%] rounded-full shadow-[0_0_8px_#3b82f6]"></div>
+              <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="bg-blue-500 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_#3b82f6]"
+                  style={{ width: `${metrics.totalDoctors > 0 ? Math.min(100, Math.round(((metrics.onlineDoctors || 0) / metrics.totalDoctors) * 100)) : 0}%` }}
+                ></div>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-400">Cupo Consultas</span>
-                <span className="text-white font-bold">72%</span>
-              </div>
-              <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-emerald-500 h-full w-[72%] rounded-full shadow-[0_0_8px_#10b981]"></div>
+              <div className="flex justify-between items-center text-xs text-slate-500 font-mono">
+                <span>Cobertura Activa</span>
+                <span>{metrics.totalDoctors > 0 ? Math.round(((metrics.onlineDoctors || 0) / metrics.totalDoctors) * 100) : 0}%</span>
               </div>
             </div>
           </GlassCard>
 
-          <GlassCard className="p-6 bg-rose-500/5 border-rose-500/20">
-            <h3 className="text-lg font-bold text-rose-400 mb-4 flex items-center">
-              <AlertTriangle size={18} className="mr-2" />
-              Alertas Críticas
-            </h3>
+          <GlassCard className={`p-6 ${metrics.criticalAlerts && metrics.criticalAlerts.length > 0 ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className={`text-lg font-bold flex items-center ${metrics.criticalAlerts && metrics.criticalAlerts.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                <AlertTriangle size={18} className="mr-2" />
+                Alertas Críticas {metrics.criticalAlerts && metrics.criticalAlerts.length > 0 && `(${metrics.criticalAlerts.length})`}
+              </h3>
+              <div className="group/tooltip relative flex items-center">
+                <div className="w-5 h-5 rounded-full bg-white/5 border border-white/10 text-slate-400 group-hover/tooltip:text-white group-hover/tooltip:border-white/20 flex items-center justify-center text-[10px] font-bold font-mono cursor-help transition-colors">
+                  ?
+                </div>
+                <div className="absolute right-0 bottom-full mb-2 hidden group-hover/tooltip:block w-52 p-2.5 bg-slate-900/95 border border-white/10 text-slate-300 text-[10px] rounded-xl shadow-2xl z-50 pointer-events-none leading-normal backdrop-blur-md">
+                  Monitoreo automático de anomalías operativas (tasa de ausentismo no_show &gt; 15%, guardias desiertas y mora de facturación).
+                </div>
+              </div>
+            </div>
             <div className="space-y-3">
-              <div className="flex items-start space-x-3 text-xs">
-                <div className="w-2 h-2 mt-1 rounded-full bg-rose-500 flex-shrink-0 animate-ping"></div>
-                <p className="text-slate-300 italic">3 afiliados con deuda superaron el periodo de gracia.</p>
-              </div>
-              <div className="flex items-start space-x-3 text-xs">
-                <div className="w-2 h-2 mt-1 rounded-full bg-amber-500 flex-shrink-0"></div>
-                <p className="text-slate-300 italic">Tasa de ausentismo médico &gt; 15% en Clínica Médica.</p>
-              </div>
+              {metrics.criticalAlerts && metrics.criticalAlerts.length > 0 ? (
+                metrics.criticalAlerts.map((alert) => (
+                  <div key={alert.id} className="flex items-start space-x-3 text-xs">
+                    <div className={`w-2 h-2 mt-1 rounded-full flex-shrink-0 ${alert.type === 'danger' ? 'bg-rose-500 animate-ping' : 'bg-amber-500'}`}></div>
+                    <p className="text-slate-300 font-medium">{alert.message}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center space-x-3 text-xs">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 shadow-[0_0_8px_#10b981]"></div>
+                  <p className="text-slate-300 font-medium">Todos los parámetros dentro del rango normal. Sin alertas críticas.</p>
+                </div>
+              )}
             </div>
           </GlassCard>
         </div>

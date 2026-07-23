@@ -1,13 +1,21 @@
 import { supabase } from '../services/supabase';
 import { appointmentRepository } from './AppointmentRepository';
 
+export interface CriticalAlert {
+  id: string;
+  type: 'danger' | 'warning' | 'info';
+  message: string;
+}
+
 export interface AdminMetrics {
   totalDoctors: number;
+  onlineDoctors: number;
   totalAffiliates: number;
   recentAppointments: number;
   activeAgreements: number;
   monthlyRevenue: number;
   pendingInvoices: number;
+  criticalAlerts: CriticalAlert[];
 }
 
 export interface WeeklyStat {
@@ -28,6 +36,17 @@ export class DashboardRepository {
         .eq('role', 'doctor');
 
       if (errDoctors) throw errDoctors;
+
+      // Obtener médicos online (con turno de trabajo activo en doctor_work_shifts)
+      let onlineDoctorsCount = 0;
+      const { count: onlineCount, error: errOnline } = await supabase
+        .from('doctor_work_shifts')
+        .select('*', { count: 'exact', head: true })
+        .is('clock_out', null);
+
+      if (!errOnline && onlineCount !== null) {
+        onlineDoctorsCount = onlineCount;
+      }
 
       // Obtener total de afiliados
       const { count: affiliatesCount, error: errAffiliates } = await supabase
@@ -66,23 +85,72 @@ export class DashboardRepository {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'issued');
 
+      // Generar alertas críticas dinámicas
+      const criticalAlerts: CriticalAlert[] = [];
+
+      // 1. Alerta de Ausentismo (turnos no_show en los últimos 30 días)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { count: totalRecentAppts } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact', head: true })
+        .gte('scheduled_at', thirtyDaysAgo);
+
+      const { count: noShowCount } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'no_show')
+        .gte('scheduled_at', thirtyDaysAgo);
+
+      if (totalRecentAppts && totalRecentAppts > 0 && noShowCount && noShowCount > 0) {
+        const rate = Math.round((noShowCount / totalRecentAppts) * 100);
+        if (rate > 15) {
+          criticalAlerts.push({
+            id: 'absenteeism',
+            type: 'warning',
+            message: `Tasa de ausentismo médico/paciente en ${rate}% (${noShowCount} turnos no_show este mes).`
+          });
+        }
+      }
+
+      // 2. Alerta de Facturas/Convenios Pendientes
+      if (pendingCount && pendingCount > 0) {
+        criticalAlerts.push({
+          id: 'pending_invoices',
+          type: 'danger',
+          message: `${pendingCount} factura(s) de convenios pendientes de cobro.`
+        });
+      }
+
+      // 3. Alerta de Cobertura de Guardia
+      if (onlineDoctorsCount === 0 && (doctorsCount || 0) > 0) {
+        criticalAlerts.push({
+          id: 'no_online_doctors',
+          type: 'warning',
+          message: `Sin médicos en guardia activa en este momento.`
+        });
+      }
+
       return {
         totalDoctors: doctorsCount || 0,
+        onlineDoctors: onlineDoctorsCount,
         totalAffiliates: affiliatesCount || 0,
         recentAppointments: appointmentsCount,
         activeAgreements: agreementsCount || 0,
         monthlyRevenue,
-        pendingInvoices: pendingCount || 0
+        pendingInvoices: pendingCount || 0,
+        criticalAlerts
       };
     } catch (error) {
       console.error("Error obteniendo métricas del dashboard:", error);
       return {
         totalDoctors: 0,
+        onlineDoctors: 0,
         totalAffiliates: 0,
         recentAppointments: 0,
         activeAgreements: 0,
         monthlyRevenue: 0,
-        pendingInvoices: 0
+        pendingInvoices: 0,
+        criticalAlerts: []
       };
     }
   }
