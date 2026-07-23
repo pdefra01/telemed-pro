@@ -3,7 +3,7 @@ import {
     FileText, Pill, File, Download, Search, CheckCircle, 
     AlertCircle, Loader2, Calendar, User, ExternalLink, 
     FileArchive, ChevronRight, Hash, Clock, FlaskConical, Activity,
-    ShieldCheck, ShieldX, Shield, Upload
+    ShieldCheck, ShieldX, Shield, Upload, X
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
@@ -25,6 +25,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
     const [searchTerm, setSearchTerm] = useState('');
     
     const [records, setRecords] = useState<MedicalRecord[]>([]);
+    const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
     const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
     const [documents, setDocuments] = useState<any[]>([]);
     const [familyMembers, setFamilyMembers] = useState<any[]>([]);
@@ -257,7 +258,8 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 </div>
                                                 <Button 
                                                     variant="ghost" 
-                                                    className="text-emerald-500 hover:text-emerald-400 font-bold text-xs uppercase tracking-widest p-0 group/link self-end sm:self-auto"
+                                                    onClick={() => setSelectedRecord(record)}
+                                                    className="text-emerald-500 hover:text-emerald-400 font-bold text-xs uppercase tracking-widest p-0 group/link self-end sm:self-auto cursor-pointer"
                                                 >
                                                     Reporte Completo <ChevronRight size={18} className="ml-1 group-hover/link:translate-x-1 transition-transform" />
                                                 </Button>
@@ -445,6 +447,91 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                     </div>
                 )}
             </div>
+            {/* Modal de Reporte Médico Completo */}
+            {selectedRecord && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] p-6 sm:p-10 max-w-2xl w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto relative text-left">
+                        <div className="flex justify-between items-start border-b border-white/10 pb-6">
+                            <div>
+                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                    <span className="text-xs font-semibold bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full uppercase tracking-wider">
+                                        Reporte Médico Completo
+                                    </span>
+                                    <span className="text-xs font-mono text-slate-400 bg-white/5 px-3 py-1 rounded-full">
+                                        ID: {selectedRecord.id.slice(0, 8)}
+                                    </span>
+                                </div>
+                                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                                    {selectedRecord.diagnosis}
+                                </h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedRecord(null)}
+                                className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white/5 p-4 sm:p-6 rounded-2xl border border-white/5 text-sm">
+                            <div>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Profesional Médico</span>
+                                <p className="text-white font-semibold flex items-center gap-2 text-base">
+                                    <User size={18} className="text-emerald-400" />
+                                    {selectedRecord.doctorName}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Fecha de Atención</span>
+                                <p className="text-white font-semibold flex items-center gap-2 text-base">
+                                    <Calendar size={18} className="text-emerald-400" />
+                                    {selectedRecord.date}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Evolución y Diagnóstico Médico</span>
+                            <div className="bg-slate-950 p-5 rounded-2xl border border-white/5 text-slate-300 leading-relaxed text-sm whitespace-pre-wrap font-mono">
+                                {selectedRecord.notes || 'Sin evolución médica registrada.'}
+                            </div>
+                        </div>
+
+                        {selectedRecord.attachments && selectedRecord.attachments.length > 0 && (
+                            <div className="space-y-3">
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Archivos Adjuntos ({selectedRecord.attachments.length})</span>
+                                <div className="space-y-2">
+                                    {selectedRecord.attachments.map((att, idx) => (
+                                        <div key={idx} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 text-xs text-slate-300">
+                                            <span className="flex items-center gap-2 font-mono"><FileArchive size={16} className="text-emerald-400" /> {att}</span>
+                                            <Button size="sm" variant="ghost" onClick={() => handleDownload(att, `Adjunto: ${att}`)}>
+                                                Descargar
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-white/10">
+                            <Button
+                                variant="outline"
+                                onClick={() => handleDownload(`reporte_${selectedRecord.id.slice(0, 8)}.txt`, `REPORTE MÉDICO COMPLETO\n========================\nID Turno: ${selectedRecord.id}\nFecha: ${selectedRecord.date}\nPaciente: ${user.name}\nMédico: ${selectedRecord.doctorName}\nDiagnóstico: ${selectedRecord.diagnosis}\n\nEvolución y Notas:\n${selectedRecord.notes}`)}
+                                className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 font-bold py-3 px-6 rounded-xl"
+                            >
+                                <Download size={16} className="mr-2" /> Descargar Informe
+                            </Button>
+                            <Button
+                                onClick={() => setSelectedRecord(null)}
+                                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 px-6 rounded-xl"
+                            >
+                                Cerrar
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
             </div>
         </div>
     );
