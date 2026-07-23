@@ -86,12 +86,15 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
         if (!window.confirm('¿Estás seguro de que querés cancelar este turno?')) return;
         setCancellingId(appointmentId);
         try {
+            // Optimistic UI update: remove immediately from UI
+            setUpcomingAppointments(prev => prev.filter(a => a.id !== appointmentId));
             await appointmentRepository.cancelAppointment(appointmentId);
             toast('Turno cancelado con éxito', 'info');
             triggerRefresh();
         } catch (error: any) {
             console.error("Error cancelando turno:", error);
             toast(error.message || 'Error al cancelar el turno', 'error');
+            triggerRefresh(); // Refresh to restore if failed
         } finally {
             setCancellingId(null);
         }

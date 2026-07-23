@@ -260,17 +260,24 @@ export class AppointmentRepository {
   }
 
   /**
-   * Cancela un turno
+   * Cancela un turno por parte del paciente o médico
    */
   async cancelAppointment(appointmentId: string): Promise<void> {
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status: 'cancelled' })
-      .eq('id', appointmentId);
+    // 1. Intentar vía RPC (saltea RLS de forma segura verificando autoría)
+    const { error: rpcError } = await supabase.rpc('cancel_patient_appointment', { p_appointment_id: appointmentId });
 
-    if (error) {
-      console.error(`Error cancelando turno ${appointmentId}:`, error);
-      throw error;
+    if (rpcError) {
+      console.warn("RPC cancel_patient_appointment no disponible o falló, reintentando vía UPDATE:", rpcError);
+      // 2. Fallback vía UPDATE directo
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'cancelled' })
+        .eq('id', appointmentId);
+
+      if (error) {
+        console.error(`Error cancelando turno ${appointmentId}:`, error);
+        throw error;
+      }
     }
   }
 
