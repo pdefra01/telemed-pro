@@ -267,16 +267,21 @@ export class AppointmentRepository {
     const { error: rpcError } = await supabase.rpc('cancel_patient_appointment', { p_appointment_id: appointmentId });
 
     if (rpcError) {
-      console.warn("RPC cancel_patient_appointment no disponible o falló, reintentando vía UPDATE:", rpcError);
-      // 2. Fallback vía UPDATE directo
-      const { error } = await supabase
+      console.warn("RPC cancel_patient_appointment falló, reintentando vía UPDATE:", rpcError);
+      // 2. Fallback vía UPDATE directo validando que se modifique la fila
+      const { data, error } = await supabase
         .from('appointments')
         .update({ status: 'cancelled' })
-        .eq('id', appointmentId);
+        .eq('id', appointmentId)
+        .select();
 
       if (error) {
         console.error(`Error cancelando turno ${appointmentId}:`, error);
         throw error;
+      }
+
+      if (!data || data.length === 0) {
+        throw new Error("No tenés permiso para cancelar este turno o el turno no existe.");
       }
     }
   }
