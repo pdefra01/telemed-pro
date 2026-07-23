@@ -15,6 +15,12 @@ insert into storage.buckets (id, name, public)
 values ('medical-documents', 'medical-documents', true)
 on conflict (id) do nothing;
 
+-- Idempotent: a prior partial/manual attempt on this bucket left at least one
+-- of these policy names already in place in production (discovered when the
+-- first version of this migration hit "policy already exists" mid-run) — drop
+-- before create so this is safely re-runnable regardless of what survived.
+
+drop policy if exists "Patients can upload their own medical documents" on storage.objects;
 create policy "Patients can upload their own medical documents"
 on storage.objects for insert
 to authenticated
@@ -23,6 +29,7 @@ with check (
   and (storage.foldername(name))[1] = auth.uid()::text
 );
 
+drop policy if exists "Patients can view their own medical documents" on storage.objects;
 create policy "Patients can view their own medical documents"
 on storage.objects for select
 to authenticated
@@ -33,6 +40,7 @@ using (
 
 -- Mirrors "Doctors can view patient documents" on the medical_documents table
 -- (any doctor, not just the patient's assigned one — same scope as today).
+drop policy if exists "Doctors can view all medical documents" on storage.objects;
 create policy "Doctors can view all medical documents"
 on storage.objects for select
 to authenticated
@@ -46,6 +54,7 @@ using (
 
 -- Supports the cleanup-on-failure path in uploadDocument(), which removes the
 -- just-uploaded file if the medical_documents DB insert fails afterward.
+drop policy if exists "Patients can delete their own medical documents" on storage.objects;
 create policy "Patients can delete their own medical documents"
 on storage.objects for delete
 to authenticated
