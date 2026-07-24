@@ -156,7 +156,11 @@ export class AffiliateRepository {
         email: data.email,
         phone: data.phone,
         address: data.address,
-        password: data.dni, // Se usa el DNI como password temporal por defecto
+        birth_date: data.birthDate,
+        locality: data.locality,
+        neighborhood: data.neighborhood,
+        cuil: data.cuil,
+        password: data.dni, // DNI como password temporal por defecto
       }),
     });
 
@@ -300,6 +304,9 @@ export class AffiliateRepository {
     if (data.phone !== undefined) profileData.phone = data.phone;
     if (data.bloodType !== undefined) profileData.blood_type = data.bloodType || null;
     if (data.birthDate !== undefined) profileData.birth_date = data.birthDate || null;
+    if (data.locality !== undefined) profileData.locality = data.locality || null;
+    if (data.neighborhood !== undefined) profileData.neighborhood = data.neighborhood || null;
+    if (data.cuil !== undefined) profileData.cuil = data.cuil || null;
 
     // Sync the real Supabase Auth login email — updating profiles.email alone
     // leaves the account unable to log in with the new address.
@@ -695,7 +702,10 @@ export class AffiliateRepository {
       familyGroupId: row.family_group_id ?? undefined,
       paymentStatus: derivedPaymentStatus ?? 'current',
       currentPeriodQuotaUsed: row.current_period_quota_used || 0,
-      isActive: row.is_active
+      isActive: row.is_active,
+      locality: row.locality ?? undefined,
+      neighborhood: row.neighborhood ?? undefined,
+      cuil: row.cuil ?? undefined,
     };
   }
 }

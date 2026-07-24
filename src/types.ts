@@ -39,6 +39,9 @@ export interface Patient extends User {
   currentPeriodQuotaUsed: number;
   bloodType?: string;
   credentialHash?: string;
+  locality?: string;
+  neighborhood?: string;
+  cuil?: string;
 }
 
 export interface DoctorMetrics {

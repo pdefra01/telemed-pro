@@ -47,9 +47,16 @@ const Affiliates: React.FC = () => {
   // se renueva (o edita) una sola.
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    name: '',
+    lastName: '',
+    firstName: '',
     email: '',
     dni: '',
+    cuil: '',
+    phone: '',
+    birthDate: '',
+    address: '',
+    locality: '',
+    neighborhood: '',
     planId: '',
     planStatus: 'active' as const
   });
@@ -152,12 +159,16 @@ const Affiliates: React.FC = () => {
   const handleNewAffiliate = () => {
     setEditId(null);
     setFormData({
-      name: '',
+      lastName: '',
+      firstName: '',
       email: '',
       dni: '',
-      // Pre-select the plan flagged isDefault, not plans[0] (alphabetically-
-      // first, since PlanRepository.getAll() orders by name) — an admin who
-      // doesn't touch the dropdown must get the intended default plan.
+      cuil: '',
+      phone: '',
+      birthDate: '',
+      address: '',
+      locality: '',
+      neighborhood: '',
       planId: plans.find(p => p.isDefault)?.id || '',
       planStatus: 'active'
     });
@@ -167,31 +178,29 @@ const Affiliates: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    const fullName = `${formData.lastName.trim()} ${formData.firstName.trim()}`.trim();
     try {
-      // formData.planId is '' when no plan is selected (or no plans exist) —
-      // never send an empty string as a foreign key, leave plan_id untouched/null instead.
-      const payload = { ...formData, planId: formData.planId || undefined };
+      const payload = {
+        ...formData,
+        name: fullName,
+        planId: formData.planId || undefined
+      };
       if (editId) {
         await affiliateRepository.updateAffiliate(editId, payload);
-        toast(`Afiliado ${formData.name} actualizado`, "success");
+        toast(`Afiliado ${fullName} actualizado`, "success");
       } else {
         await affiliateRepository.createAffiliate(payload);
-        toast(`Afiliado ${formData.name} registrado`, "success");
+        toast(`Afiliado ${fullName} registrado`, "success");
       }
       setShowModal(false);
       loadAffiliates();
     } catch (error) {
       if (error instanceof PlanAssignmentFailedError) {
-        // El afiliado sí se creó — solo falló el segundo write que le asigna
-        // el plan. No es un error genérico: avisar al admin con precisión
-        // para que no quede un paciente sin cupo sin que nadie lo note.
-        toast(`Afiliado ${formData.name} registrado, pero no se pudo asignar el plan — reintentá desde Editar.`, "error");
+        toast(`Afiliado ${fullName} registrado, pero no se pudo asignar el plan — reintentá desde Editar.`, "error");
         setShowModal(false);
         loadAffiliates();
       } else if (error instanceof ProfileFieldsUpdateFailedError) {
-        // El plan ya se actualizó (RPC assign_plan commiteada) — solo falló el
-        // segundo write con el resto de los campos del formulario.
-        toast(`El plan de ${formData.name} se actualizó, pero el resto de los datos no se guardó — reintentá.`, "error");
+        toast(`El plan de ${fullName} se actualizó, pero el resto de los datos no se guardó — reintentá.`, "error");
         setShowModal(false);
         loadAffiliates();
       } else {
@@ -204,10 +213,20 @@ const Affiliates: React.FC = () => {
 
   const handleEdit = (patient: Patient) => {
     setEditId(patient.id);
+    const parts = patient.name.split(' ');
+    const lastName = parts[0] || '';
+    const firstName = parts.slice(1).join(' ') || '';
     setFormData({
-      name: patient.name,
+      lastName,
+      firstName,
       email: patient.email,
       dni: patient.dni || '',
+      cuil: patient.cuil || '',
+      phone: patient.phone || '',
+      birthDate: patient.birthDate || '',
+      address: patient.address || '',
+      locality: patient.locality || '',
+      neighborhood: patient.neighborhood || '',
       planId: patient.planId || '',
       planStatus: (patient.planStatus as any) || 'active'
     });
@@ -582,45 +601,135 @@ const Affiliates: React.FC = () => {
       {/* Premium Modal ABM */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0f172a] border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 w-full max-w-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+          <div className="bg-[#0f172a] border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 w-full max-w-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden max-h-[90vh] flex flex-col">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
-            
-            <h3 className="text-2xl font-bold text-white mb-6">
+
+            <h3 className="text-2xl font-bold text-white mb-6 flex-shrink-0">
               {editId ? 'Editar' : 'Registrar'} <span className="text-emerald-500">Afiliado</span>
             </h3>
-            
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Nombre Completo</label>
-                <input
-                  type="text" required
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
 
+            <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto custom-scrollbar pr-1">
+
+              {/* Nombre y Apellido */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">DNI</label>
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Apellido *</label>
                   <input
                     type="text" required
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                    placeholder="Flores"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600"
+                    value={formData.lastName}
+                    onChange={e => setFormData({ ...formData, lastName: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Nombre *</label>
+                  <input
+                    type="text" required
+                    placeholder="Lourdes"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600"
+                    value={formData.firstName}
+                    onChange={e => setFormData({ ...formData, firstName: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* DNI y CUIL */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">DNI *</label>
+                  <input
+                    type="text" required
+                    placeholder="30123456"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600 font-mono"
                     value={formData.dni}
                     onChange={e => setFormData({ ...formData, dni: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Email Corporativo</label>
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">CUIL</label>
                   <input
-                    type="email" required
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    type="text"
+                    placeholder="27-30123456-9"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600 font-mono"
+                    value={formData.cuil}
+                    onChange={e => setFormData({ ...formData, cuil: e.target.value })}
                   />
                 </div>
               </div>
 
+              {/* Email y Teléfono */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Email *</label>
+                  <input
+                    type="email" required
+                    placeholder="afiliado@ejemplo.com"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Teléfono</label>
+                  <input
+                    type="tel"
+                    placeholder="+54 9 11 1234-5678"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600"
+                    value={formData.phone}
+                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Fecha de nacimiento */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Fecha de Nacimiento</label>
+                <input
+                  type="date"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                  value={formData.birthDate}
+                  onChange={e => setFormData({ ...formData, birthDate: e.target.value })}
+                />
+              </div>
+
+              {/* Domicilio */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Domicilio</label>
+                <input
+                  type="text"
+                  placeholder="Av. Corrientes 1234"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600"
+                  value={formData.address}
+                  onChange={e => setFormData({ ...formData, address: e.target.value })}
+                />
+              </div>
+
+              {/* Localidad y Barrio */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Localidad</label>
+                  <input
+                    type="text"
+                    placeholder="Buenos Aires"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600"
+                    value={formData.locality}
+                    onChange={e => setFormData({ ...formData, locality: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Barrio</label>
+                  <input
+                    type="text"
+                    placeholder="Palermo"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-600"
+                    value={formData.neighborhood}
+                    onChange={e => setFormData({ ...formData, neighborhood: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Plan */}
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Nivel de Cobertura</label>
                 <select
@@ -651,16 +760,16 @@ const Affiliates: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex justify-end space-x-4 pt-4">
-                <button 
-                  type="button" 
-                  onClick={() => setShowModal(false)} 
+              <div className="flex justify-end space-x-4 pt-4 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
                   className="px-6 py-3 text-slate-400 font-bold hover:text-white transition-colors"
                 >
                   Cancelar
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSubmitting}
                   className="bg-emerald-500 hover:bg-emerald-400 text-[#020617] px-8 py-3 rounded-2xl font-bold transition-all disabled:opacity-50"
                 >
