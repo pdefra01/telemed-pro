@@ -38,6 +38,7 @@ import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 import { ToastProvider } from './context/ToastContext';
 
 import { authRepository } from './repositories/AuthRepository';
+import { supabase } from './services/supabase';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 // Error Boundary simple para capturar errores de renderizado
@@ -116,6 +117,19 @@ const App: React.FC = () => {
       localStorage.removeItem('medinex_user');
     }
   };
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null);
+        localStorage.removeItem('medinex_user');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Redireccionar accesos directos por pathname a HashRouter para compatibilidad
   useEffect(() => {

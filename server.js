@@ -75,12 +75,16 @@ const requireAuth = async (req, res, next) => {
   try {
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !user) {
+      console.error('[requireAuth] Auth error:', error?.message || error);
+      if (error && error.message && error.message.includes('fetch failed')) {
+         return res.status(500).json({ error: 'Error de conexión con el servicio de autenticación (Backend).' });
+      }
       return res.status(401).json({ error: 'Token de autenticación inválido o expirado.' });
     }
     req.user = user;
     next();
   } catch (err) {
-    console.error('[requireAuth] Authentication error:', err.message);
+    console.error('[requireAuth] Authentication exception:', err.message);
     return res.status(401).json({ error: 'Fallo de autenticación.' });
   }
 };
