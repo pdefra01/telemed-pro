@@ -38,8 +38,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-  const getNavItems = (role: Role) => {
-    const common = [
+  type NavChild = { name: string; icon: React.ReactNode; path: string };
+  type NavItem = NavChild & { children?: NavChild[] };
+
+  const getNavItems = (role: Role): NavItem[] => {
+    const common: NavItem[] = [
       { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
     ];
 
@@ -65,11 +68,17 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
     if (role === 'admin') {
       return [
         ...common,
-        { name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors' },
-        { name: 'Fichado Médico', icon: <Clock size={20} />, path: '/doctor-attendance' },
+        {
+          name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors',
+          children: [
+            { name: 'Fichado Médico', icon: <Clock size={16} />, path: '/doctor-attendance' },
+          ],
+        },
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
         { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
-        { name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys' },
+        {
+          name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys',
+        },
         { name: 'Reportes', icon: <Activity size={20} />, path: '/reports' },
       ];
     }
@@ -124,18 +133,41 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
           <nav className="px-4 space-y-1">
             {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setIsSidebarOpen(false)}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${location.pathname === item.path
-                    ? 'bg-teal-600 text-white shadow-md font-semibold'
-                    : 'text-gray-600 hover:bg-teal-50 hover:text-teal-700 font-medium'
+              <div key={item.path}>
+                <Link
+                  to={item.path}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                    location.pathname === item.path
+                      ? 'bg-teal-600 text-white shadow-md font-semibold'
+                      : item.children?.some((c) => location.pathname === c.path)
+                        ? 'bg-teal-50 text-teal-700 font-semibold'
+                        : 'text-gray-600 hover:bg-teal-50 hover:text-teal-700 font-medium'
                   }`}
-              >
-                {item.icon}
-                <span>{item.name}</span>
-              </Link>
+                >
+                  {item.icon}
+                  <span>{item.name}</span>
+                </Link>
+                {item.children && item.children.length > 0 && (
+                  <div className="mt-0.5 ml-4 pl-3 border-l-2 border-teal-100 space-y-0.5">
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.path}
+                        to={child.path}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className={`flex items-center space-x-2.5 px-3 py-2 rounded-lg transition-colors text-sm ${
+                          location.pathname === child.path
+                            ? 'bg-teal-600 text-white shadow-md font-semibold'
+                            : 'text-gray-500 hover:bg-teal-50 hover:text-teal-700 font-medium'
+                        }`}
+                      >
+                        {child.icon}
+                        <span>{child.name}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </nav>
         </div>

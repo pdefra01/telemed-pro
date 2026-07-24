@@ -34,22 +34,37 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
 
-  const navItems = [
+  type NavChild = { name: string; icon: React.ReactNode; path: string };
+  type NavItem = NavChild & { children?: NavChild[] };
+
+  const navItems: NavItem[] = [
     { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
-    { name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors' },
-    { name: 'Fichado Médico', icon: <Clock size={20} />, path: '/doctor-attendance' },
+    {
+      name: 'Médicos', icon: <Stethoscope size={20} />, path: '/doctors',
+      children: [
+        { name: 'Fichado Médico', icon: <Clock size={16} />, path: '/doctor-attendance' },
+      ],
+    },
     { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
     { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
-    { name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys' },
     { name: 'Convenios', icon: <Building2 size={20} />, path: '/agreements' },
     { name: 'Ventas y Cadetería', icon: <ShoppingCart size={20} />, path: '/admin/pharmacy-sales' },
     { name: 'Inventario Farmacia', icon: <Package size={20} />, path: '/admin/pharmacy-inventory' },
-    { name: 'Encuestas', icon: <FileText size={20} />, path: '/survey-builder' },
+    {
+      name: 'Encuestas', icon: <FileText size={20} />, path: '/survey-builder',
+      children: [
+        { name: 'Encuesta de Opinión', icon: <ClipboardList size={16} />, path: '/admin/lead-surveys' },
+      ],
+    },
     { name: 'Campañas', icon: <Megaphone size={20} />, path: '/campaigns' },
     { name: 'Facturación', icon: <CreditCard size={20} />, path: '/billing' },
     { name: 'Reportes', icon: <FileBarChart size={20} />, path: '/reports' },
     { name: 'Configuración', icon: <Settings size={20} />, path: '/settings' },
   ];
+
+  const isGroupActive = (item: NavItem) =>
+    location.pathname === item.path ||
+    (item.children?.some((c) => location.pathname === c.path) ?? false);
 
   return (
     <div className="h-screen overflow-hidden bg-[#020617] text-slate-200 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30">
@@ -92,26 +107,53 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
             </div>
           </div>
 
-          <nav className="space-y-1.5">
+          <nav className="space-y-1">
             {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setIsSidebarOpen(false)}
-                className={`group flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  location.pathname === item.path
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
-                }`}
-              >
-                <span className={`transition-transform duration-300 ${location.pathname === item.path ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  {item.icon}
-                </span>
-                <span className="font-medium text-sm tracking-wide">{item.name}</span>
-                {location.pathname === item.path && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,1)]"></div>
+              <div key={item.path}>
+                <Link
+                  to={item.path}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className={`group flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                    location.pathname === item.path
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                      : isGroupActive(item)
+                        ? 'text-emerald-300 bg-white/3 border border-transparent'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+                  }`}
+                >
+                  <span className={`transition-transform duration-300 ${location.pathname === item.path ? 'scale-110' : 'group-hover:scale-110'}`}>
+                    {item.icon}
+                  </span>
+                  <span className="font-medium text-sm tracking-wide">{item.name}</span>
+                  {location.pathname === item.path && (
+                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,1)]"></div>
+                  )}
+                </Link>
+                {item.children && item.children.length > 0 && (
+                  <div className="mt-0.5 ml-4 pl-4 border-l border-white/10 space-y-0.5">
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.path}
+                        to={child.path}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className={`group flex items-center space-x-2.5 px-3 py-2 rounded-lg transition-all duration-200 ${
+                          location.pathname === child.path
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'
+                        }`}
+                      >
+                        <span className="transition-transform duration-300 group-hover:scale-110">
+                          {child.icon}
+                        </span>
+                        <span className="font-medium text-xs tracking-wide">{child.name}</span>
+                        {location.pathname === child.path && (
+                          <div className="ml-auto w-1 h-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,1)]"></div>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
                 )}
-              </Link>
+              </div>
             ))}
           </nav>
         </div>
