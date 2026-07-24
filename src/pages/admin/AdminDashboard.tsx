@@ -12,6 +12,7 @@ import {
 import { dashboardRepository, AdminMetrics, WeeklyStat } from '../../repositories/DashboardRepository';
 import { doctorRepository } from '../../repositories/DoctorRepository';
 import { Doctor } from '../../types';
+import { supabase } from '../../services/supabase';
 
 const OCC_COLORS = {
   emerald: '#10b981',
@@ -80,6 +81,7 @@ const AdminDashboard: React.FC = () => {
   });
   const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
   const [topDoctors, setTopDoctors] = useState<Doctor[]>([]);
+  const [consultationCounts, setConsultationCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   // Filtros globales de analítica evolutiva
@@ -115,6 +117,20 @@ const AdminDashboard: React.FC = () => {
         setMetrics(metricsData);
         setDoctorsList(doctorsData);
         setTopDoctors([...doctorsData].sort((a, b) => b.rating - a.rating).slice(0, 5));
+
+        // Obtener la cantidad real de consultas completadas por médico
+        const { data: appointmentsData, error: appointmentsError } = await supabase
+          .from('appointments')
+          .select('doctor_id')
+          .eq('status', 'completed');
+        
+        if (!appointmentsError && appointmentsData) {
+          const counts: Record<string, number> = {};
+          appointmentsData.forEach(row => {
+            counts[row.doctor_id] = (counts[row.doctor_id] || 0) + 1;
+          });
+          setConsultationCounts(counts);
+        }
       } catch (error) {
         console.error("Error loading dashboard data", error);
       } finally {
@@ -493,7 +509,7 @@ const AdminDashboard: React.FC = () => {
                     <td className="py-4">
                       <div className="flex items-center text-xs font-bold text-slate-200">
                         <Clock size={12} className="mr-1 text-blue-400" />
-                        {Math.floor(Math.random() * 50) + 10}
+                        {consultationCounts[doc.id] || 0}
                       </div>
                     </td>
                     <td className="py-4 text-right">

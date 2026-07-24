@@ -87,7 +87,7 @@ export const PatientSurveys: React.FC<Props> = ({ user }) => {
     try {
       const payload = Object.entries(responses).map(([questionId, responseValue]) => ({
         questionId,
-        responseValue
+        responseValue: responseValue as string
       }));
 
       await surveyRepository.submitSurveyResponses(
