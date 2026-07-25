@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { User, Patient, Doctor } from './types';
 import Auth from './pages/Auth';
@@ -35,7 +35,7 @@ import { LeadSurvey } from './pages/LeadSurvey';
 import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 
-import { ToastProvider } from './context/ToastContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 
 import { authRepository } from './repositories/AuthRepository';
 import { supabase } from './services/supabase';
@@ -84,10 +84,67 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
+// Componente para manejar la inactividad de sesión según el rol
+const SessionTimeoutHandler: React.FC<{ user: User | null; onLogout: () => void }> = ({ user, onLogout }) => {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!user) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      return;
+    }
+
+    // Cargar política de inactividad
+    let timeoutMinutes = 0;
+    try {
+      const cached = localStorage.getItem('medinex_session_policy') || sessionStorage.getItem('medinex_session_policy');
+      if (cached) {
+        const policy = JSON.parse(cached);
+        timeoutMinutes = policy[user.role]?.timeoutMinutes || 0;
+      } else {
+        // Fallback defaults
+        if (user.role === 'admin' || user.role === 'advisor') timeoutMinutes = 15;
+        else if (user.role === 'doctor') timeoutMinutes = 30;
+      }
+    } catch (e) {
+      console.error("Error reading timeout from policy:", e);
+    }
+
+    if (timeoutMinutes <= 0) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      return;
+    }
+
+    const timeoutMs = timeoutMinutes * 60 * 1000;
+
+    const resetTimer = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        console.log(`[SessionTimeoutHandler] Logout due to inactivity of ${timeoutMinutes} minutes`);
+        onLogout();
+        toast("Tu sesión ha expirado por inactividad por motivos de seguridad.", "error");
+      }, timeoutMs);
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    
+    resetTimer();
+    events.forEach(event => window.addEventListener(event, resetTimer));
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [user, onLogout, toast]);
+
+  return null;
+};
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem('medinex_user');
+      const saved = sessionStorage.getItem('medinex_user') || localStorage.getItem('medinex_user');
       if (!saved) return null;
       // Validar que sea un JSON válido y que tenga estructura de usuario
       const parsed = JSON.parse(saved);
@@ -96,7 +153,8 @@ const App: React.FC = () => {
       }
       return null;
     } catch (e) {
-      console.error("Error al cargar usuario de localStorage:", e);
+      console.error("Error al cargar usuario de almacenamiento:", e);
+      sessionStorage.removeItem('medinex_user');
       localStorage.removeItem('medinex_user');
       return null;
     }
@@ -104,7 +162,30 @@ const App: React.FC = () => {
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
-    localStorage.setItem('medinex_user', JSON.stringify(loggedInUser));
+    
+    // Leer política de persistencia para guardar en storage adecuado
+    let isPersistent = true;
+    try {
+      const cached = localStorage.getItem('medinex_session_policy') || sessionStorage.getItem('medinex_session_policy');
+      if (cached) {
+        const policy = JSON.parse(cached);
+        isPersistent = policy[loggedInUser.role]?.persistent ?? true;
+      } else {
+        if (['admin', 'doctor', 'advisor'].includes(loggedInUser.role)) {
+          isPersistent = false;
+        }
+      }
+    } catch (e) {
+      console.error("Error determining persistence path at login:", e);
+    }
+
+    if (isPersistent) {
+      localStorage.setItem('medinex_user', JSON.stringify(loggedInUser));
+      sessionStorage.removeItem('medinex_user');
+    } else {
+      sessionStorage.setItem('medinex_user', JSON.stringify(loggedInUser));
+      localStorage.removeItem('medinex_user');
+    }
   };
 
   const handleLogout = async () => {
@@ -115,14 +196,41 @@ const App: React.FC = () => {
     } finally {
       setUser(null);
       localStorage.removeItem('medinex_user');
+      sessionStorage.removeItem('medinex_user');
     }
   };
+
+  // Sincronizar la política desde la base de datos
+  useEffect(() => {
+    const fetchPolicy = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'session_security_policy')
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data?.value) {
+          const policyStr = JSON.stringify(data.value);
+          localStorage.setItem('medinex_session_policy', policyStr);
+          sessionStorage.setItem('medinex_session_policy', policyStr);
+        }
+      } catch (err) {
+        console.error("Error fetching session security policy from DB:", err);
+      }
+    };
+
+    fetchPolicy();
+  }, [user]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         setUser(null);
         localStorage.removeItem('medinex_user');
+        sessionStorage.removeItem('medinex_user');
       }
     });
 
@@ -373,6 +481,7 @@ const App: React.FC = () => {
     <Router>
       <ErrorBoundary>
         <ToastProvider>
+          <SessionTimeoutHandler user={user} onLogout={handleLogout} />
           {isPublicPath ? (
             MainContent
           ) : !user || user.role !== 'admin' ? (

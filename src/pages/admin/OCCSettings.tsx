@@ -38,17 +38,29 @@ const OCCSettings: React.FC = () => {
   const [locationError, setLocationError] = useState('');
   const [newOffice, setNewOffice] = useState({ name: '', latitude: 0, longitude: 0, radiusMeters: 150 });
 
+  const [sessionPolicy, setSessionPolicy] = useState<{
+    [role: string]: { timeoutMinutes: number; persistent: boolean };
+  }>({
+    admin: { timeoutMinutes: 15, persistent: false },
+    doctor: { timeoutMinutes: 30, persistent: false },
+    advisor: { timeoutMinutes: 30, persistent: false },
+    patient: { timeoutMinutes: 0, persistent: true }
+  });
+  const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [taxesData, policy, officesData] = await Promise.all([
+        const [taxesData, policy, officesData, sessionPolicyData] = await Promise.all([
           taxRepository.getAll(),
           systemSettingsRepository.getByKey('delinquency_policy'),
-          officeLocationRepository.getAllOffices()
+          officeLocationRepository.getAllOffices(),
+          systemSettingsRepository.getByKey('session_security_policy')
         ]);
         setTaxes(taxesData);
         if (policy) setDelinquencyPolicy(policy);
         setOffices(officesData);
+        if (sessionPolicyData) setSessionPolicy(sessionPolicyData);
       } catch (error) {
         console.error("Error loading settings", error);
       } finally {
@@ -57,6 +69,21 @@ const OCCSettings: React.FC = () => {
     };
     loadSettings();
   }, []);
+
+  const handleSaveSessionPolicy = async () => {
+    setIsSavingPolicy(true);
+    try {
+      await systemSettingsRepository.update('session_security_policy', sessionPolicy);
+      const policyStr = JSON.stringify(sessionPolicy);
+      localStorage.setItem('medinex_session_policy', policyStr);
+      sessionStorage.setItem('medinex_session_policy', policyStr);
+      toast("Políticas de sesión actualizadas correctamente", 'success');
+    } catch (error) {
+      toast("Error al actualizar políticas de sesión", 'error');
+    } finally {
+      setIsSavingPolicy(false);
+    }
+  };
 
   const handleUseCurrentLocation = async () => {
     setIsDetectingLocation(true);
@@ -210,6 +237,73 @@ const OCCSettings: React.FC = () => {
             <p className="text-xs text-slate-400 leading-relaxed">
               El motor de facturación (Billing Engine) escanea diariamente los estados de pago y aplica estas políticas en tiempo real sobre el `planStatus` de cada perfil.
             </p>
+          </GlassCard>
+
+          <h3 className="text-xl font-bold text-white flex items-center pt-2">
+            <Settings2 size={20} className="mr-2 text-emerald-500" />
+            Seguridad y Sesiones
+          </h3>
+          <GlassCard className="p-6">
+            <p className="text-slate-400 text-sm mb-6 italic">
+              Configurá la expiración por inactividad y persistencia de las sesiones según el rol.
+            </p>
+            
+            <div className="space-y-6">
+              {(['admin', 'doctor', 'advisor', 'patient'] as const).map((role) => {
+                const roleConfig = sessionPolicy[role] || { timeoutMinutes: 0, persistent: true };
+                const roleLabel = role === 'admin' ? 'Administrador' : role === 'doctor' ? 'Médico' : role === 'advisor' ? 'Asesor' : 'Paciente';
+                
+                return (
+                  <div key={role} className="border-b border-white/5 pb-4 last:border-b-0 last:pb-0">
+                    <h4 className="font-bold text-sm text-white mb-2 capitalize">{roleLabel}</h4>
+                    
+                    <div className="space-y-2.5">
+                      <label className="flex items-center text-xs text-slate-400 select-none cursor-pointer">
+                        <input 
+                          type="checkbox"
+                          checked={roleConfig.persistent}
+                          onChange={(e) => {
+                            setSessionPolicy({
+                              ...sessionPolicy,
+                              [role]: { ...roleConfig, persistent: e.target.checked }
+                            });
+                          }}
+                          className="mr-2 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/20"
+                        />
+                        Persistir sesión al cerrar navegador
+                      </label>
+
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-slate-400">Timeout:</span>
+                        <input 
+                          type="number"
+                          min={0}
+                          value={roleConfig.timeoutMinutes}
+                          onChange={(e) => {
+                            setSessionPolicy({
+                              ...sessionPolicy,
+                              [role]: { ...roleConfig, timeoutMinutes: parseInt(e.target.value) || 0 }
+                            });
+                          }}
+                          className="w-14 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white text-xs font-mono text-center focus:outline-none focus:border-emerald-500/50"
+                        />
+                        <span className="text-xs text-slate-400">min de inactividad (0 = desact.)</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={handleSaveSessionPolicy}
+                disabled={isSavingPolicy}
+                className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] disabled:opacity-50 mt-2"
+              >
+                <Save size={16} />
+                <span>{isSavingPolicy ? 'Guardando...' : 'Guardar Políticas'}</span>
+              </button>
+            </div>
           </GlassCard>
         </div>
 
