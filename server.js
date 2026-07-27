@@ -10,6 +10,7 @@ import {
   verifyWebhookSignature,
   handleSubscriptionEvent,
   routeWebhookNotification,
+  runDeferredReconciliation,
   DEBITO_AUTOMATICO_DISCOUNT,
 } from './server/mercadopago.js';
 
@@ -566,6 +567,30 @@ app.post('/api/payments/subscribe', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[payments/subscribe] Unexpected error:', err);
     return res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
+  }
+});
+
+/**
+ * POST /api/payments/reconcile-deferred
+ * requireAuth, requireAdmin. HTTP surface for the D-H reconciliation sweep
+ * (design-appendix). Must be server-side (never mirror `runMonthlyBillingCycle`'s
+ * browser-side shape): it needs both the MP access token and the
+ * service-role RPCs `runDeferredReconciliation` calls internally, neither of
+ * which may reach the browser. `server.js` holds only auth/routing here —
+ * every pass lives in `server/mercadopago.js`, unchanged, so a future
+ * scheduler or Edge Function can call the same function directly.
+ */
+app.post('/api/payments/reconcile-deferred', requireAuth, requireAdmin, async (req, res) => {
+  if (!mercadoPagoEnabled) {
+    return res.status(503).json({ error: 'Servicio de pagos no configurado.' });
+  }
+
+  try {
+    const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch });
+    return res.status(200).json(summary);
+  } catch (err) {
+    console.error('[payments/reconcile-deferred] Unexpected error:', err);
+    return res.status(500).json({ error: 'Error interno del servidor.' });
   }
 });
 
@@ -1420,12 +1445,12 @@ app.post('/api/approve-adhesion', async (req, res) => {
       .eq('id', adhesionId);
 
     // 5b. Mercado Pago débito-automático link back-fill (design D-F "Link
-    // back-fill at approval", steps a-c only — step (d), the D-H sweep call,
-    // lands in PR 4/4.11). Best-effort and NON-BLOCKING: a failure here must
-    // never fail the approval itself. Pass B (PR 4) re-drives this on any
-    // later sweep run using approved_profile_id, independent of this
-    // request completing.
+    // back-fill at approval", steps a-d). Best-effort and NON-BLOCKING: a
+    // failure here must never fail the approval itself. Pass B of the D-H
+    // sweep re-drives steps (b)-(c) on any later run using
+    // approved_profile_id, independent of this request completing.
     if (mercadoPagoEnabled) {
+      let linkedPreapprovalId = null;
       try {
         const { data: subscription } = await supabaseAdmin
           .from('affiliate_payment_subscriptions')
@@ -1441,12 +1466,27 @@ app.post('/api/approve-adhesion', async (req, res) => {
             .eq('id', subscription.id);
 
           if (subscription.mp_preapproval_id) {
+            linkedPreapprovalId = subscription.mp_preapproval_id;
             const preapproval = await mpFetch(`/preapproval/${subscription.mp_preapproval_id}`);
             await handleSubscriptionEvent({ supabaseAdmin }, { resource: preapproval, kind: 'preapproval' });
           }
         }
       } catch (err) {
         console.error('[approve-adhesion] Mercado Pago subscription link back-fill failed (non-blocking):', err.message);
+      }
+
+      // Step (d): a scoped D-H sweep run for just this subscription — the
+      // id comes from the DB row read above, NEVER from the request body.
+      // Covers anything steps (a)-(c) above could not complete synchronously
+      // (e.g. no invoice exists yet for this period) by replaying it through
+      // the same idempotent primitives the live webhook uses. Never blocks
+      // or fails the approval response itself.
+      if (linkedPreapprovalId) {
+        try {
+          await runDeferredReconciliation({ supabaseAdmin, mpFetch }, { preapprovalId: linkedPreapprovalId });
+        } catch (err) {
+          console.error('[approve-adhesion] Scoped D-H sweep failed (non-blocking):', err.message);
+        }
       }
     }
 

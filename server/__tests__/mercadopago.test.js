@@ -7,6 +7,7 @@ import {
   handlePaymentSettlement,
   handleSubscriptionEvent,
   routeWebhookNotification,
+  runDeferredReconciliation,
   DEBITO_AUTOMATICO_DISCOUNT,
 } from '../mercadopago.js';
 
@@ -555,6 +556,124 @@ describe('handlePaymentSettlement', () => {
     // an audit-write failure never masks or reverts the real payment posting.
     expect(result).toMatchObject({ outcome: 'posted', posted: true, coverage_extended: true, auditError: 'audit write failed' });
   });
+
+  it('audits resolution_state=needs_admin (not final) when the settlement RPC posts the money but reports deferred_reason=window_reset (R17)', async () => {
+    const invoice = { id: 'inv-10', entity_id: 'profile-10', entity_type: 'affiliate', status: 'issued', total_amount: 50000 };
+    const mpFetch = vi.fn().mockResolvedValue({
+      id: 'pay-10',
+      status: 'approved',
+      transaction_amount: 50000,
+      external_reference: 'affiliate:profile-10:invoice:inv-10',
+      date_approved: '2026-03-15T10:00:00Z',
+    });
+    const supabaseAdmin = createSupabaseStub({
+      tables: { invoices: { maybeSingle: async () => ({ data: invoice, error: null }) } },
+      rpcResult: {
+        data: { posted: true, movement_id: 'mv-10', invoice_id: 'inv-10', invoice_status: 'paid', coverage_extended: true, deferred_reason: 'window_reset' },
+        error: null,
+      },
+    });
+
+    const result = await handlePaymentSettlement({ supabaseAdmin, mpFetch }, { paymentId: 'pay-10' });
+
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_payment_audit_event', {
+      p_mp_resource_id: 'pay-10',
+      p_mp_status: 'approved',
+      p_outcome: 'window_reset',
+      p_resolution_state: 'needs_admin',
+      p_detail: null,
+      p_invoice_id: 'inv-10',
+      p_profile_id: 'profile-10',
+      p_amount: 50000,
+    });
+    expect(result).toMatchObject({ outcome: 'window_reset', posted: true, coverage_extended: true, auditError: null });
+  });
+
+  it('does not let an ordinary redelivery overwrite an already-needs_admin row back to final (Judgment Day Round 2 fix) — DB-level freeze is verified separately by the pgTAP "freeze-once-needs_admin" tests in supabase/tests/mercadopago.sql', async () => {
+    // This file's shared createSupabaseStub() resolves each RPC name to a
+    // single canned response regardless of call count — it does not model
+    // real Postgres `ON CONFLICT ... DO UPDATE` freeze semantics. To prove
+    // the end-to-end guarantee (a second call's write never actually lands
+    // once the row is needs_admin/final), this test uses a small stateful
+    // rpc stub, scoped locally to this test, that tracks the row's current
+    // resolution_state across two sequential calls and no-ops
+    // record_mercadopago_payment_audit_event once frozen — mirroring what
+    // the 20260728000000 migration's CASE guard does in the real database.
+    // handlePaymentSettlement's own logic (what it ATTEMPTS to write) is
+    // unchanged and still asserted directly; the true persisted-value
+    // guarantee is the pgTAP suite's responsibility.
+    let currentResolutionState = null;
+    const auditCalls = [];
+    const invoice = { id: 'inv-11', entity_id: 'profile-11', entity_type: 'affiliate', status: 'issued', total_amount: 50000 };
+    const mpFetch = vi.fn().mockResolvedValue({
+      id: 'pay-11',
+      status: 'approved',
+      transaction_amount: 50000,
+      external_reference: 'affiliate:profile-11:invoice:inv-11',
+      date_approved: '2026-03-15T10:00:00Z',
+    });
+
+    const makeRpc = (ledgerResult) =>
+      vi.fn((name, args) => {
+        if (name === 'record_mercadopago_payment_audit_event') {
+          auditCalls.push(args);
+          const frozen = currentResolutionState === 'final' || currentResolutionState === 'needs_admin';
+          if (!frozen) currentResolutionState = args.p_resolution_state;
+          return Promise.resolve({ data: null, error: null });
+        }
+        if (name === 'post_payment_movement_from_webhook') {
+          return Promise.resolve(ledgerResult);
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+
+    const supabaseAdmin = {
+      from: (table) => {
+        const handlers = { invoices: { maybeSingle: async () => ({ data: invoice, error: null }) } };
+        const h = handlers[table] || {};
+        const builder = {
+          select: () => builder,
+          eq: () => builder,
+          order: () => builder,
+          limit: () => builder,
+          maybeSingle: async () => (h.maybeSingle ? h.maybeSingle() : { data: null, error: null }),
+        };
+        return builder;
+      },
+      rpc: makeRpc({
+        data: { posted: true, movement_id: 'mv-11', invoice_id: 'inv-11', invoice_status: 'paid', coverage_extended: true, deferred_reason: 'window_reset' },
+        error: null,
+      }),
+    };
+
+    // First call: window_reset -> writes resolution_state=needs_admin.
+    const firstResult = await handlePaymentSettlement({ supabaseAdmin, mpFetch }, { paymentId: 'pay-11' });
+    expect(firstResult).toMatchObject({ outcome: 'window_reset', posted: true });
+    expect(currentResolutionState).toBe('needs_admin');
+
+    // Second call: an ordinary webhook redelivery of the SAME payment
+    // (post_payment_movement_from_webhook's own idempotent
+    // `ON CONFLICT (external_ref) DO NOTHING` guarantees posted:false on
+    // redelivery).
+    supabaseAdmin.rpc = makeRpc({
+      data: { posted: false, movement_id: 'mv-11', invoice_id: 'inv-11', invoice_status: 'paid', coverage_extended: false, deferred_reason: null },
+      error: null,
+    });
+
+    const secondResult = await handlePaymentSettlement({ supabaseAdmin, mpFetch }, { paymentId: 'pay-11' });
+
+    // handlePaymentSettlement's OWN logic is unchanged and still computes
+    // outcome='duplicate' / resolution_state='final' for this input — this
+    // is what it ATTEMPTS to write on the second call.
+    expect(secondResult).toMatchObject({ outcome: 'duplicate', posted: false });
+    expect(auditCalls[1]).toMatchObject({ p_outcome: 'duplicate', p_resolution_state: 'final' });
+
+    // But the row's ACTUAL tracked resolution_state never regresses from
+    // needs_admin back to final — the freeze guard (real DB behavior
+    // verified directly by the pgTAP "freeze-once-needs_admin" tests)
+    // rejects the second write.
+    expect(currentResolutionState).toBe('needs_admin');
+  });
 });
 
 describe('DEBITO_AUTOMATICO_DISCOUNT', () => {
@@ -792,5 +911,422 @@ describe('routeWebhookNotification', () => {
     expect(result).toEqual({ status: 200, body: { outcome: 'ignored', reason: 'unrecognized_topic' } });
     expect(mpFetch).not.toHaveBeenCalled();
     expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+  });
+});
+
+// ── runDeferredReconciliation ─────────────────────────────────────────────
+
+/**
+ * A small in-memory fixture DB, richer than `createSupabaseStub` above:
+ * `runDeferredReconciliation`'s four passes issue `.is()`/`.not()`/`.or()`/
+ * `.lt()`/`.order()`/`.limit()`/`.update()` queries this repo's other tests
+ * never needed. Each `.from(table)` call returns a fresh chainable builder
+ * over a SHARED, mutable fixture array (so `.update()` side effects are
+ * observable across the rest of one test), and the builder itself is
+ * `await`-able (implements `.then()`) to match real supabase-js query
+ * builders, since production code does `const { data } = await query`
+ * without always calling `.maybeSingle()`.
+ */
+function createReconciliationStub({ tables = {}, rpcHandler } = {}) {
+  function sortByCol(rows, col, ascending) {
+    const sorted = [...rows].sort((a, b) => (a[col] > b[col] ? 1 : a[col] < b[col] ? -1 : 0));
+    return ascending === false ? sorted.reverse() : sorted;
+  }
+
+  function evalOrClause(row, clause) {
+    const match = /^([a-zA-Z_]+)\.(ilike|eq)\.(.*)$/.exec(clause);
+    if (!match) return false;
+    const [, col, op, rawVal] = match;
+    if (op === 'eq') return row[col] !== undefined && row[col] !== null && String(row[col]) === rawVal;
+    // Only a trailing '%' wildcard is supported — the only shape this module ever emits.
+    const pattern = rawVal.endsWith('%') ? rawVal.slice(0, -1) : rawVal;
+    return typeof row[col] === 'string' && row[col].startsWith(pattern);
+  }
+
+  function makeBuilder(tableName) {
+    const rows = tables[tableName] || (tables[tableName] = []);
+    let predicate = () => true;
+    let orderCol = null;
+    let orderAscending = true;
+    let limitN = null;
+
+    const addPredicate = (fn) => {
+      const prev = predicate;
+      predicate = (row) => prev(row) && fn(row);
+    };
+
+    const materialize = () => {
+      let result = rows.filter(predicate);
+      if (orderCol) result = sortByCol(result, orderCol, orderAscending);
+      if (limitN != null) result = result.slice(0, limitN);
+      return result;
+    };
+
+    const builder = {
+      select: () => builder,
+      eq: (col, val) => { addPredicate((row) => row[col] === val); return builder; },
+      is: (col, val) => {
+        addPredicate((row) => (val === null ? row[col] === null || row[col] === undefined : row[col] === val));
+        return builder;
+      },
+      not: (col, op, val) => {
+        if (op === 'is' && val === null) addPredicate((row) => row[col] !== null && row[col] !== undefined);
+        return builder;
+      },
+      lt: (col, val) => { addPredicate((row) => row[col] < val); return builder; },
+      or: (expr) => {
+        const clauses = expr.split(',');
+        addPredicate((row) => clauses.some((clause) => evalOrClause(row, clause)));
+        return builder;
+      },
+      order: (col, opts) => { orderCol = col; orderAscending = opts?.ascending !== false; return builder; },
+      limit: (n) => { limitN = n; return builder; },
+      maybeSingle: async () => {
+        const result = materialize();
+        return { data: result[0] || null, error: null };
+      },
+      update: (patch) => ({
+        eq: async (col, val) => {
+          const targets = rows.filter((row) => predicate(row) && row[col] === val);
+          targets.forEach((row) => Object.assign(row, patch));
+          return { data: targets, error: null };
+        },
+      }),
+      then: (resolve) => resolve({ data: materialize(), error: null }),
+    };
+    return builder;
+  }
+
+  const from = (tableName) => makeBuilder(tableName);
+  const rpc = vi.fn(async (name, args) => (rpcHandler ? rpcHandler(name, args) : { data: null, error: null }));
+  return { from, rpc, tables };
+}
+
+describe('runDeferredReconciliation', () => {
+  it('returns an all-zero summary with the documented shape when there is nothing to do', async () => {
+    const supabaseAdmin = createReconciliationStub({ tables: {} });
+    const mpFetch = vi.fn();
+
+    const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+    expect(summary).toEqual({
+      resolved: 0,
+      stillPending: 0,
+      needsAdmin: 0,
+      fetchFailures: 0,
+      linked: 0,
+      cancelledAtMp: 0,
+      reservationsReleased: 0,
+      chargesRecovered: 0,
+    });
+    expect(mpFetch).not.toHaveBeenCalled();
+  });
+
+  describe('Pass A — resolves deferred mercadopago_events', () => {
+    it('resolves a payment-topic deferral by re-entering handlePaymentSettlement, using detail as the preapproval hint (R1/R3)', async () => {
+      const tables = {
+        mercadopago_events: [
+          { id: 'evt-1', event_type: 'payment', mp_resource_id: 'pay-500', outcome: 'no_open_invoice', detail: 'preap-500', resolution_state: 'pending', attempt_count: 1, created_at: '2026-07-01T00:00:00Z' },
+        ],
+        affiliate_payment_subscriptions: [
+          { id: 'sub-500', profile_id: 'prof-1', mp_preapproval_id: 'preap-500', status: 'authorized' },
+        ],
+        invoices: [
+          { id: 'inv-1', entity_type: 'affiliate', entity_id: 'prof-1', status: 'issued', period: '2026-07', total_amount: 1000 },
+        ],
+      };
+      const mpFetch = vi.fn(async (path) => {
+        if (path === '/v1/payments/pay-500') {
+          return { id: 'pay-500', status: 'approved', transaction_amount: 1000, external_reference: null, date_approved: '2026-07-05T00:00:00Z' };
+        }
+        throw new Error(`Unexpected path: ${path}`);
+      });
+      const rpcHandler = (name) => {
+        if (name === 'post_payment_movement_from_webhook') {
+          return { data: { posted: true, movement_id: 'mv-1', invoice_id: 'inv-1', invoice_status: 'paid', coverage_extended: true, deferred_reason: null }, error: null };
+        }
+        if (name === 'record_mercadopago_payment_audit_event') return { data: null, error: null };
+        if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(summary.resolved).toBe(1);
+      expect(summary.stillPending).toBe(0);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('mark_mercadopago_event_resolution', {
+        p_event_id: 'evt-1',
+        p_resolution_state: 'resolved',
+        p_outcome: 'posted',
+        p_resolved_by_ref: 'payment:mercadopago:pay-500',
+      });
+    });
+
+    it('keeps a still-blocked payment deferral pending and rewrites its outcome to the current blocking reason (R3)', async () => {
+      const tables = {
+        mercadopago_events: [
+          { id: 'evt-2', event_type: 'payment', mp_resource_id: 'pay-501', outcome: 'subscription_not_linked', detail: 'preap-501', resolution_state: 'pending', attempt_count: 0, created_at: '2026-07-01T00:00:00Z' },
+        ],
+        affiliate_payment_subscriptions: [
+          { id: 'sub-501', profile_id: 'prof-2', mp_preapproval_id: 'preap-501', status: 'authorized' },
+        ],
+        invoices: [], // no open invoice yet — this is exactly the R3 "linked but still no invoice" case
+      };
+      const mpFetch = vi.fn(async (path) => {
+        if (path === '/v1/payments/pay-501') {
+          return { id: 'pay-501', status: 'approved', transaction_amount: 1000, external_reference: null, date_approved: '2026-07-05T00:00:00Z' };
+        }
+        throw new Error(`Unexpected path: ${path}`);
+      });
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_payment_audit_event') return { data: null, error: null };
+        if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(summary.stillPending).toBe(1);
+      expect(summary.resolved).toBe(0);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('mark_mercadopago_event_resolution', {
+        p_event_id: 'evt-2',
+        p_resolution_state: 'pending',
+        p_outcome: 'no_open_invoice',
+        p_resolved_by_ref: null,
+      });
+    });
+
+    it('resolves a subscription-flavoured deferral by stripping the audit suffix and re-fetching the bare resource id (R2)', async () => {
+      const tables = {
+        mercadopago_events: [
+          { id: 'evt-3', event_type: 'subscription_authorized_payment_processed', mp_resource_id: 'ap-700:unlinked', outcome: 'subscription_not_linked', detail: 'preap-700', resolution_state: 'pending', attempt_count: 0, created_at: '2026-07-01T00:00:00Z' },
+        ],
+      };
+      const mpFetch = vi.fn(async (path) => {
+        if (path === '/authorized_payments/ap-700') {
+          return { id: 'ap-700', status: 'processed', preapproval_id: 'preap-700', payment: { id: 'pay-700' }, last_modified: '2026-07-05T00:00:00Z' };
+        }
+        throw new Error(`Unexpected path: ${path}`);
+      });
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_subscription_event') return { data: 'status_applied', error: null };
+        if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(mpFetch).toHaveBeenCalledWith('/authorized_payments/ap-700');
+      expect(summary.resolved).toBe(1);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('mark_mercadopago_event_resolution', {
+        p_event_id: 'evt-3',
+        p_resolution_state: 'resolved',
+        p_outcome: 'status_applied',
+        p_resolved_by_ref: 'subscription_authorized_payment_processed:ap-700',
+      });
+    });
+
+    it('escalates occurred_at_unresolved to needs_admin on first sight (R23 — a re-fetch will never populate a missing field)', async () => {
+      const tables = {
+        mercadopago_events: [
+          { id: 'evt-4', event_type: 'subscription_preapproval_authorized', mp_resource_id: 'preap-800', outcome: 'status_applied', detail: null, resolution_state: 'pending', attempt_count: 2, created_at: '2026-07-01T00:00:00Z' },
+        ],
+      };
+      const mpFetch = vi.fn(async () => ({ id: 'preap-800', status: 'authorized' })); // no last_modified/date_created -> resolveOccurredAt -> null
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_subscription_event') return { data: 'occurred_at_unresolved', error: null };
+        if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(summary.needsAdmin).toBe(1);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('mark_mercadopago_event_resolution', {
+        p_event_id: 'evt-4',
+        p_resolution_state: 'needs_admin',
+        p_outcome: 'occurred_at_unresolved',
+        p_resolved_by_ref: null,
+      });
+    });
+
+    it('escalates a permanently-blocked deferral to needs_admin once attempt_count reaches the ceiling (R24)', async () => {
+      const tables = {
+        mercadopago_events: [
+          { id: 'evt-5', event_type: 'payment', mp_resource_id: 'pay-502', outcome: 'no_open_invoice', detail: 'preap-502', resolution_state: 'pending', attempt_count: 11, created_at: '2026-07-01T00:00:00Z' },
+        ],
+        affiliate_payment_subscriptions: [
+          { id: 'sub-502', profile_id: 'prof-3', mp_preapproval_id: 'preap-502', status: 'authorized' },
+        ],
+        invoices: [],
+      };
+      const mpFetch = vi.fn(async () => ({ id: 'pay-502', status: 'approved', transaction_amount: 1000, external_reference: null, date_approved: '2026-07-05T00:00:00Z' }));
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_payment_audit_event') return { data: null, error: null };
+        if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(summary.needsAdmin).toBe(1);
+      expect(summary.stillPending).toBe(0);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('mark_mercadopago_event_resolution', expect.objectContaining({
+        p_event_id: 'evt-5',
+        p_resolution_state: 'needs_admin',
+      }));
+    });
+
+    it('counts a transport failure as a fetch failure, not a blocked deferral, and never aborts the rest of the pass (R24)', async () => {
+      const tables = {
+        mercadopago_events: [
+          { id: 'evt-6', event_type: 'subscription_preapproval_authorized', mp_resource_id: 'preap-900', outcome: 'status_applied', detail: null, resolution_state: 'pending', attempt_count: 0, created_at: '2026-07-01T00:00:00Z' },
+          { id: 'evt-7', event_type: 'subscription_preapproval_authorized', mp_resource_id: 'preap-901', outcome: 'status_applied', detail: null, resolution_state: 'pending', attempt_count: 0, created_at: '2026-07-02T00:00:00Z' },
+        ],
+      };
+      const mpFetch = vi.fn(async (path) => {
+        if (path === '/preapproval/preap-900') throw new Error('MP timeout');
+        if (path === '/preapproval/preap-901') return { id: 'preap-901', status: 'authorized', last_modified: '2026-07-05T00:00:00Z' };
+        throw new Error(`Unexpected path: ${path}`);
+      });
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_subscription_event') return { data: 'status_applied', error: null };
+        if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(summary.fetchFailures).toBe(1);
+      expect(summary.stillPending).toBe(0);
+      expect(summary.resolved).toBe(1);
+    });
+  });
+
+  describe('Pass B — link/orphan reconciliation', () => {
+    it('back-fills profile_id once the adhesion is approved, then re-applies the CURRENT MP state (fact 9 / R7)', async () => {
+      const tables = {
+        affiliate_payment_subscriptions: [
+          { id: 'sub-1', profile_id: null, adhesion_request_id: 'adh-1', mp_preapproval_id: 'preap-800', status: 'pending', created_at: '2026-06-01T00:00:00Z' },
+        ],
+        adhesion_requests: [
+          { id: 'adh-1', status: 'approved', approved_profile_id: 'prof-9', created_at: '2026-06-01T00:00:00Z' },
+        ],
+      };
+      const mpFetch = vi.fn(async (path) => {
+        if (path === '/preapproval/preap-800') return { id: 'preap-800', status: 'authorized', last_modified: '2026-06-02T00:00:00Z' };
+        throw new Error(`Unexpected path: ${path}`);
+      });
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_subscription_event') return { data: 'status_applied', error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(summary.linked).toBe(1);
+      expect(tables.affiliate_payment_subscriptions[0].profile_id).toBe('prof-9');
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_subscription_event', expect.objectContaining({
+        p_mp_preapproval_id: 'preap-800',
+        p_new_status: 'authorized',
+      }));
+    });
+
+    it('cancels the preapproval at MP and escalates related deferrals when the adhesion was rejected instead (R6)', async () => {
+      const tables = {
+        affiliate_payment_subscriptions: [
+          { id: 'sub-2', profile_id: null, adhesion_request_id: 'adh-2', mp_preapproval_id: 'preap-900', status: 'pending', created_at: '2026-06-01T00:00:00Z' },
+        ],
+        adhesion_requests: [
+          { id: 'adh-2', status: 'rejected', approved_profile_id: null, created_at: '2026-06-01T00:00:00Z' },
+        ],
+        mercadopago_events: [
+          { id: 'evt-linked', event_type: 'subscription_preapproval_authorized', mp_resource_id: 'preap-900:unlinked', outcome: 'subscription_not_linked', detail: null, resolution_state: 'pending', attempt_count: 0, created_at: '2026-06-01T00:00:00Z' },
+          { id: 'evt-payment', event_type: 'payment', mp_resource_id: 'pay-999', outcome: 'no_open_invoice', detail: 'preap-900', resolution_state: 'pending', attempt_count: 0, created_at: '2026-06-01T00:00:00Z' },
+        ],
+      };
+      const mpFetch = vi.fn(async (path, init) => {
+        if (path === '/preapproval/preap-900' && init?.method === 'PUT') {
+          return { id: 'preap-900', status: 'cancelled', last_modified: '2026-06-03T00:00:00Z' };
+        }
+        throw new Error(`Unexpected call: ${path} ${JSON.stringify(init)}`);
+      });
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_subscription_event') return { data: 'status_applied', error: null };
+        if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      // Scoped to this one preapproval so Pass A's own query only ever sees
+      // the two rows genuinely correlated to it (the same best-effort
+      // ilike/detail correlation Pass B itself uses), keeping this test
+      // focused on Pass B's own escalation behaviour.
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, { preapprovalId: 'preap-900' });
+
+      expect(summary.cancelledAtMp).toBe(1);
+      expect(summary.needsAdmin).toBe(2);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('mark_mercadopago_event_resolution', {
+        p_event_id: 'evt-linked',
+        p_resolution_state: 'needs_admin',
+        p_outcome: 'adhesion_rejected',
+      });
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('mark_mercadopago_event_resolution', {
+        p_event_id: 'evt-payment',
+        p_resolution_state: 'needs_admin',
+        p_outcome: 'adhesion_rejected',
+      });
+    });
+  });
+
+  describe('Pass D — release stale reservations', () => {
+    it('releases only a reservation older than the 30-minute TTL, never a fresh one (R10/R21)', async () => {
+      const oldTs = new Date(Date.now() - 40 * 60 * 1000).toISOString();
+      const freshTs = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const tables = {
+        affiliate_payment_subscriptions: [
+          { id: 'res-old', profile_id: 'prof-x', mp_preapproval_id: null, status: 'pending', created_at: oldTs },
+          { id: 'res-fresh', profile_id: 'prof-y', mp_preapproval_id: null, status: 'pending', created_at: freshTs },
+        ],
+      };
+      const rpcHandler = (name, args) => {
+        if (name === 'release_subscription_reservation') {
+          return { data: args.p_reservation_id === 'res-old', error: null };
+        }
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+      const mpFetch = vi.fn();
+
+      // Unscoped (global) sweep — Pass D never runs for a scoped call.
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(summary.reservationsReleased).toBe(1);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('release_subscription_reservation', { p_reservation_id: 'res-old' });
+      expect(supabaseAdmin.rpc).not.toHaveBeenCalledWith('release_subscription_reservation', { p_reservation_id: 'res-fresh' });
+    });
+
+    it('is skipped entirely for a scoped (preapprovalId) sweep call, since a reservation has no preapproval id to scope to', async () => {
+      const oldTs = new Date(Date.now() - 40 * 60 * 1000).toISOString();
+      const tables = {
+        affiliate_payment_subscriptions: [
+          { id: 'res-old', profile_id: null, mp_preapproval_id: null, status: 'pending', created_at: oldTs },
+        ],
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler: () => ({ data: null, error: null }) });
+      const mpFetch = vi.fn();
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, { preapprovalId: 'some-preapproval' });
+
+      expect(summary.reservationsReleased).toBe(0);
+      expect(supabaseAdmin.rpc).not.toHaveBeenCalledWith('release_subscription_reservation', expect.anything());
+    });
   });
 });

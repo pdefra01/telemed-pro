@@ -902,14 +902,15 @@ SELECT is((SELECT amount FROM public.mercadopago_events WHERE event_type = 'paym
 
 -- Second call, SAME mp_resource_id, genuinely different outcome/resolution_state/detail:
 -- proves full-overwrite semantics for the non-guarded columns (no partial-column staleness).
--- resolution_state moves pending -> needs_admin (not yet final, so the
--- monotonic guard does not apply here).
+-- resolution_state moves pending -> resolved (neither final nor needs_admin,
+-- so the freeze guard does not apply here — those two states are now
+-- exercised by their own dedicated freeze groups elsewhere in this file).
 SELECT public.record_mercadopago_payment_audit_event(
-  'audit-rpc-res-1', 'in_process', 'rpc_error', 'needs_admin', 'second detail',
+  'audit-rpc-res-1', 'in_process', 'rpc_error', 'resolved', 'second detail',
   '10101010-0000-0000-0000-000000000002'::uuid, '22222222-2222-2222-2222-222222222221'::uuid, 60000.00
 );
 SELECT is((SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'rpc_error', 'second call: outcome fully updated (non-duplicate)');
-SELECT is((SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'needs_admin', 'second call: resolution_state fully updated (was not yet final)');
+SELECT is((SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'resolved', 'second call: resolution_state fully updated (was not yet final or needs_admin)');
 SELECT is((SELECT detail FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'second detail', 'second call: detail fully overwritten, proving no partial-column staleness');
 SELECT is((SELECT mp_status FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'in_process', 'second call: mp_status fully overwritten');
 SELECT is((SELECT invoice_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), '10101010-0000-0000-0000-000000000002'::uuid, 'second call: invoice_id fully overwritten');
@@ -975,6 +976,108 @@ SELECT is(
   (SELECT amount FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
   60000.00, 'freeze-once-final: amount unchanged'
 );
+
+-- ================================================================
+-- Group: record_mercadopago_payment_audit_event — freeze also applies to
+-- resolution_state='needs_admin' (Judgment Day Round 2 fix,
+-- 20260728000000_mercadopago_payment_audit_freeze_needs_admin.sql)
+--
+-- Extends the freeze-once-final guard above: handlePaymentSettlement's
+-- window_reset case writes resolution_state='needs_admin' so a human can
+-- review it. Without this extension, the very next ordinary webhook
+-- redelivery of the same payment (outcome='duplicate',
+-- resolution_state='final') would silently overwrite the row back to
+-- 'final' before an admin ever saw it. Mirrors the freeze-once-final,
+-- full-row test pattern above.
+-- ================================================================
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-2', 'approved', 'window_reset', 'needs_admin', 'awaiting admin review',
+  '40404040-0000-0000-0000-000000000004'::uuid, '44444444-4444-4444-4444-444444444444'::uuid, 70000.00
+);
+SELECT is((SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'), 'needs_admin', 'setup: row now holds resolution_state=needs_admin (e.g. a window_reset case awaiting human review)');
+
+-- A subsequent call with a COMPLETELY different payload, including
+-- resolution_state='final' (the exact scenario an ordinary webhook
+-- redelivery -> outcome='duplicate' -> resolution_state='final' write would
+-- produce), must leave every stored column 100% unchanged.
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-2', 'approved', 'duplicate', 'final', NULL,
+  '50505050-0000-0000-0000-000000000005'::uuid, '55555555-5555-5555-5555-555555555555'::uuid, 12345.67
+);
+SELECT is(
+  (SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'),
+  'needs_admin', 'freeze-once-needs_admin: resolution_state does NOT get overwritten from needs_admin back to final by an ordinary redelivery'
+);
+SELECT is(
+  (SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'),
+  'window_reset', 'freeze-once-needs_admin: outcome unchanged (entire row frozen, not just resolution_state)'
+);
+SELECT is(
+  (SELECT mp_status FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'),
+  'approved', 'freeze-once-needs_admin: mp_status unchanged'
+);
+SELECT is(
+  (SELECT detail FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'),
+  'awaiting admin review', 'freeze-once-needs_admin: detail unchanged'
+);
+SELECT is(
+  (SELECT invoice_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'),
+  '40404040-0000-0000-0000-000000000004'::uuid, 'freeze-once-needs_admin: invoice_id unchanged'
+);
+SELECT is(
+  (SELECT profile_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'),
+  '44444444-4444-4444-4444-444444444444'::uuid, 'freeze-once-needs_admin: profile_id unchanged'
+);
+SELECT is(
+  (SELECT amount FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-2'),
+  70000.00, 'freeze-once-needs_admin: amount unchanged'
+);
+
+DELETE FROM public.mercadopago_events WHERE mp_resource_id = 'audit-rpc-res-2';
+
+-- ================================================================
+-- Group: record_mercadopago_payment_audit_event — a row NOT yet at 'final'
+-- or 'needs_admin' (e.g. 'pending') is still NOT frozen: a subsequent call
+-- still fully overwrites every column, exactly as before this extension.
+-- ================================================================
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-3', 'in_process', 'rpc_error', 'pending', 'first pending detail',
+  '60606060-0000-0000-0000-000000000006'::uuid, '66666666-6666-6666-6666-666666666666'::uuid, 11111.11
+);
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-3', 'approved', 'posted', 'pending', 'second pending detail',
+  '70707070-0000-0000-0000-000000000007'::uuid, '77777777-7777-7777-7777-777777777777'::uuid, 22222.22
+);
+SELECT is(
+  (SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-3'),
+  'pending', 'not-yet-frozen: a row still at pending is fully overwritten by a subsequent call'
+);
+SELECT is(
+  (SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-3'),
+  'posted', 'not-yet-frozen: outcome fully overwritten'
+);
+SELECT is(
+  (SELECT mp_status FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-3'),
+  'approved', 'not-yet-frozen: mp_status fully overwritten'
+);
+SELECT is(
+  (SELECT detail FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-3'),
+  'second pending detail', 'not-yet-frozen: detail fully overwritten'
+);
+SELECT is(
+  (SELECT invoice_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-3'),
+  '70707070-0000-0000-0000-000000000007'::uuid, 'not-yet-frozen: invoice_id fully overwritten'
+);
+SELECT is(
+  (SELECT profile_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-3'),
+  '77777777-7777-7777-7777-777777777777'::uuid, 'not-yet-frozen: profile_id fully overwritten'
+);
+SELECT is(
+  (SELECT amount FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-3'),
+  22222.22, 'not-yet-frozen: amount fully overwritten'
+);
+
+DELETE FROM public.mercadopago_events WHERE mp_resource_id = 'audit-rpc-res-3';
 
 -- p_mp_resource_id NULL or '' raises (4-arg throws_ok form — see this
 -- file's own NOTE above on the 3-arg wrapper's argument-order bug).

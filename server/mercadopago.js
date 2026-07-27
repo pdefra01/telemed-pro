@@ -9,10 +9,6 @@
 // PR 2 SCOPE: this file implements ONLY the wire-format primitives —
 // signature verification, key derivation, timestamp resolution, and the two
 // webhook-side handlers (`handlePaymentSettlement`, `handleSubscriptionEvent`).
-// The D-H reconciliation sweep (`runDeferredReconciliation` and its four
-// passes) is Phase 4 / PR 4 per `sdd/mercadopago-integration/tasks` and is
-// deliberately NOT implemented here — see this repo's apply-progress note for
-// PR 2 for why.
 //
 // PR 3 ADDITION: `routeWebhookNotification` — the topic-to-re-fetch-to-
 // handler dispatch table (D-C), factored out of `server.js` so it stays
@@ -20,8 +16,18 @@
 // verifies the signature and maps the returned `{status, body}` onto the
 // HTTP response.
 //
-// Base: sdd/mercadopago-integration design REV 6 (D-A, D-B, D-C, D-D) and its
-// appendix (Interfaces section). Design is FINAL for this change.
+// PR 4 ADDITION: `runDeferredReconciliation` — the D-H reconciliation sweep's
+// four passes (B, A, C, D). A plain function of `(ctx, options)` with no
+// Express/request context, exactly like every other export here, so a future
+// scheduler or Edge Function can call it with zero refactor. It reuses
+// `handlePaymentSettlement`/`handleSubscriptionEvent`/`deriveSubscriptionEventKey`
+// verbatim — it holds NO divergent replay logic of its own (design-appendix
+// D-H/R22: a divergent path would derive its own dedup keys and lose the
+// idempotency guarantee both the live webhook and this sweep depend on).
+//
+// Base: sdd/mercadopago-integration design REV 6 (D-A, D-B, D-C, D-D, D-H)
+// and its appendix (Race Conditions & Recovery, Interfaces). Design is FINAL
+// for this change.
 
 import crypto from 'node:crypto';
 
@@ -44,7 +50,11 @@ export const DEBITO_AUTOMATICO_DISCOUNT = 0.8;
 // is simply never marked final), just wasted retry cycles once the D-H sweep
 // (PR 4) exists. Confirm against a real MP sandbox before relying on
 // two-step/capture=false payments in production.
-const TERMINAL_REJECTED_PAYMENT_STATUSES = ['rejected', 'cancelled', 'refunded', 'charged_back'];
+// Exported (not just module-private) so runDeferredReconciliation's Pass A
+// can classify a re-attempted `not_approved` settlement outcome using the
+// SAME terminal-status list handlePaymentSettlement itself used to decide
+// resolution_state, rather than maintaining a second copy that could drift.
+export const TERMINAL_REJECTED_PAYMENT_STATUSES = ['rejected', 'cancelled', 'refunded', 'charged_back'];
 
 const SIGNATURE_MAX_SKEW_SECONDS = 300;
 
@@ -503,7 +513,11 @@ export async function handlePaymentSettlement(ctx, { paymentId, preapprovalId = 
     invoice_id: invoice.id,
     amount: payment.transaction_amount,
     outcome,
-    resolution_state: 'final',
+    // R17: the settlement RPC posts the money correctly even on
+    // 'window_reset', but a window reset mid-flight means a human should
+    // confirm the reset didn't already cover this period — flag it for
+    // admin review here at the source, instead of 'final'.
+    resolution_state: outcome === 'window_reset' ? 'needs_admin' : 'final',
     // Full-overwrite semantics (RPC comment): must be explicit so a stale
     // rpc_error/ref_mismatch detail from an earlier failed attempt against
     // this same mp_resource_id is actually cleared on success, not left
@@ -667,4 +681,513 @@ export async function routeWebhookNotification(ctx, { topic, dataId }) {
 
   // Unrecognized topic (D-C "other" row): ack without further processing.
   return { status: 200, body: { outcome: 'ignored', reason: 'unrecognized_topic' } };
+}
+
+// ── runDeferredReconciliation ────────────────────────────────────────────
+
+/** After this many sweep attempts a still-blocked deferral is escalated to
+ * `needs_admin` instead of retried forever (design-appendix Pass A). */
+const RECONCILIATION_ATTEMPT_CEILING = 12;
+
+/** Pass C only re-checks a live subscription once its most recently known
+ * event is at least this old, or entirely absent — bounds MP API cost to the
+ * problem, not the roster (design-appendix Pass C). */
+const PASS_C_STALE_DAYS = 35;
+
+/** Mirrors `claim_subscription_enrollment`'s own 30-minute TTL for when a
+ * reservation counts as abandoned (design-appendix Pass D / D-F). */
+const RESERVATION_TTL_MINUTES = 30;
+
+/**
+ * Strips a `mercadopago_events.mp_resource_id` suffix (`:unlinked`,
+ * `:unknown`, `:noclock` — written by `record_mercadopago_subscription_event`
+ * when it deliberately leaves the REAL dedup slot free, D-D) back down to the
+ * bare MP resource id a re-fetch actually needs.
+ *
+ * @param {string} mpResourceId
+ * @returns {string}
+ */
+function baseResourceId(mpResourceId) {
+  const separatorIndex = mpResourceId.indexOf(':');
+  return separatorIndex === -1 ? mpResourceId : mpResourceId.slice(0, separatorIndex);
+}
+
+/**
+ * Which re-fetch kind a subscription-flavoured `mercadopago_events.event_type`
+ * belongs to — the inverse of `deriveSubscriptionEventKey`'s own mapping.
+ * Never applied to the `'payment'` event_type, which has no `kind` (D-C).
+ *
+ * @param {string} eventType
+ * @returns {'preapproval' | 'authorized_payment' | null}
+ */
+function subscriptionKindForEventType(eventType) {
+  if (eventType.startsWith('subscription_authorized_payment')) return 'authorized_payment';
+  if (eventType.startsWith('subscription_preapproval')) return 'preapproval';
+  return null;
+}
+
+/**
+ * Classifies a `handlePaymentSettlement` result for Pass A's own sweep
+ * bookkeeping (never for the payment-topic audit row itself — that write
+ * already happened inside `handlePaymentSettlement`, freeze-once-final,
+ * D-C/`20260727000000`).
+ *
+ * @returns {'resolved' | 'still_pending' | 'needs_admin'}
+ */
+function classifyPaymentSettlementOutcome(result) {
+  if (result.outcome === 'fetch_failed') return 'still_pending';
+
+  if (result.outcome === 'not_approved') {
+    // A non-terminal MP status (pending/in_process/authorized/in_mediation)
+    // may still become 'approved' later — worth another attempt. A terminal
+    // status is a real, final answer; nothing further will ever arrive.
+    return TERMINAL_REJECTED_PAYMENT_STATUSES.includes(result.mpStatus) ? 'resolved' : 'still_pending';
+  }
+
+  // R25: a mismatched or stale reference, or an invoice that no longer
+  // exists, is a human decision — never something a re-fetch resolves.
+  if (result.outcome === 'ref_mismatch' || result.outcome === 'invoice_not_found') return 'needs_admin';
+
+  // R1-R5: still blocked on a dependency (link, invoice, coverage window) or
+  // a transient DB error reading them — worth another attempt.
+  if (
+    result.outcome === 'subscription_not_linked'
+    || result.outcome === 'no_open_invoice'
+    || result.outcome === 'rpc_error'
+  ) {
+    return 'still_pending';
+  }
+
+  // R17: the settlement RPC ran and posted the money correctly, and
+  // `handlePaymentSettlement` already writes resolution_state:'needs_admin'
+  // (not 'final') directly on the row for this outcome, so a human can
+  // confirm the reset didn't already cover this period.
+  if (result.outcome === 'window_reset') return 'needs_admin';
+
+  // Every remaining outcome ('posted', 'duplicate', or any other
+  // deferred_reason: 'no_window', 'balance_due', 'partial_payment',
+  // 'invoice_already_paid', 'invoice_cancelled', 'period_already_extended')
+  // means the settlement RPC actually ran and reached a final, legitimate
+  // business determination. Nothing more to retry.
+  return 'resolved';
+}
+
+/**
+ * Classifies a `handleSubscriptionEvent` outcome string for Pass A/C's own
+ * sweep bookkeeping.
+ *
+ * @returns {'resolved' | 'still_pending' | 'needs_admin'}
+ */
+function classifySubscriptionEventOutcome(outcome) {
+  // R23: fail closed — a re-fetch will never populate a field MP never sends.
+  if (outcome === 'occurred_at_unresolved') return 'needs_admin';
+  // R1/R2: Pass B may link this subscription on a later run within the same
+  // or a future sweep.
+  if (outcome === 'subscription_not_linked') return 'still_pending';
+  if (outcome === 'unknown_subscription' || outcome === 'rpc_error') return 'still_pending';
+  // The re-fetched resource now carries an unmodelled status (e.g. reverted
+  // to 'pending') — try again later in case it changes.
+  if (outcome === 'ignored') return 'still_pending';
+  // 'status_applied' (transition applied), 'transition_ignored' (correctly
+  // superseded by a newer state under the terminal/recency guard) and
+  // 'duplicate_event' (already recorded, likely by a race with the live
+  // webhook — R22) are all "nothing more to do" states.
+  return 'resolved';
+}
+
+/**
+ * Pass B (D-H, runs FIRST): links an orphaned subscription
+ * (`profile_id IS NULL`) to the profile its adhesion created, once that
+ * adhesion is approved (fact 9 / R7) — or cancels it at MP and escalates its
+ * related deferrals when the adhesion was instead rejected (R6, since
+ * `AdhesionRepository.rejectApplication` never touches MP itself).
+ *
+ * @param {{ supabaseAdmin: any, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
+ * @param {{ preapprovalId?: string }} options
+ * @param {Record<string, number>} summary
+ */
+async function runPassB(ctx, options, summary) {
+  const { supabaseAdmin, mpFetch } = ctx;
+
+  let query = supabaseAdmin
+    .from('affiliate_payment_subscriptions')
+    .select('id, adhesion_request_id, mp_preapproval_id, created_at')
+    .is('profile_id', null)
+    .not('mp_preapproval_id', 'is', null);
+  if (options.preapprovalId) query = query.eq('mp_preapproval_id', options.preapprovalId);
+
+  const { data: orphanRows, error } = await query;
+  if (error || !orphanRows) return;
+
+  for (const sub of orphanRows) {
+    if (!sub.adhesion_request_id) continue;
+
+    const { data: adhesion } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('status, approved_profile_id, created_at')
+      .eq('id', sub.adhesion_request_id)
+      .maybeSingle();
+
+    if (!adhesion) continue;
+
+    if (adhesion.status === 'approved' && adhesion.approved_profile_id) {
+      const { error: updateError } = await supabaseAdmin
+        .from('affiliate_payment_subscriptions')
+        .update({ profile_id: adhesion.approved_profile_id })
+        .eq('id', sub.id);
+
+      if (!updateError) {
+        summary.linked++;
+        // Mirrors /api/approve-adhesion's own step (c): now that this row
+        // can finally be linked, re-fetch its CURRENT state at MP and apply
+        // it — best-effort. A failure here does not undo the just-committed
+        // profile_id back-fill; Pass A (below, same run) or a later sweep
+        // still picks up any deferred events this unblocks.
+        try {
+          const preapproval = await mpFetch(`/preapproval/${sub.mp_preapproval_id}`);
+          await handleSubscriptionEvent(ctx, { resource: preapproval, kind: 'preapproval' });
+        } catch (err) {
+          summary.fetchFailures++;
+        }
+      }
+      continue;
+    }
+
+    if (adhesion.status === 'rejected') {
+      // R6: money charged to a non-member is a refund decision, never
+      // automatic. Cancel the preapproval at MP, record the cancellation
+      // through the SAME guarded RPC the webhook uses, then escalate any of
+      // this subscription's still-pending deferrals instead of retrying them
+      // forever against an applicant who was never onboarded.
+      let cancelledResource;
+      try {
+        cancelledResource = await mpFetch(`/preapproval/${sub.mp_preapproval_id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: 'cancelled' }),
+        });
+      } catch (err) {
+        summary.fetchFailures++;
+        continue;
+      }
+
+      await handleSubscriptionEvent(ctx, { resource: cancelledResource, kind: 'preapproval' });
+      summary.cancelledAtMp++;
+
+      // Best-effort correlation: subscription-flavoured deferrals key their
+      // audit row's mp_resource_id off this preapproval id (bare or
+      // ':unlinked'/':unknown' suffixed); payment-flavoured deferrals that
+      // came from this same subscription store the preapproval id in
+      // `detail` instead (see Pass A). mercadopago_events has no direct FK
+      // to affiliate_payment_subscriptions, so both shapes are checked.
+      const { data: relatedDeferrals } = await supabaseAdmin
+        .from('mercadopago_events')
+        .select('id')
+        .eq('resolution_state', 'pending')
+        .or(`mp_resource_id.eq.${sub.mp_preapproval_id},mp_resource_id.ilike.${sub.mp_preapproval_id}:%,detail.eq.${sub.mp_preapproval_id}`);
+
+      for (const deferral of relatedDeferrals || []) {
+        await supabaseAdmin.rpc('mark_mercadopago_event_resolution', {
+          p_event_id: deferral.id,
+          p_resolution_state: 'needs_admin',
+          p_outcome: 'adhesion_rejected',
+        });
+        summary.needsAdmin++;
+      }
+      continue;
+    }
+
+    // adhesion.status is still 'pending' (or any other non-terminal value):
+    // no state change here. Only reported once stale beyond 30 days, so a
+    // normal in-flight signup review isn't flagged as a problem.
+    const ageMs = Date.now() - new Date(adhesion.created_at).getTime();
+    if (ageMs > 30 * 24 * 60 * 60 * 1000) {
+      summary.stillPending++;
+    }
+  }
+}
+
+/**
+ * Pass A (D-H, runs SECOND): re-attempts every `resolution_state='pending'`
+ * `mercadopago_events` row by re-entering the SAME functions the live
+ * webhook calls — never a divergent replay path (R22). Runs after Pass B so
+ * a `subscription_not_linked`/`no_open_invoice` deferral just unblocked by
+ * linking can resolve within this same run.
+ *
+ * @param {{ supabaseAdmin: any, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
+ * @param {{ preapprovalId?: string, limit?: number }} options
+ * @param {Record<string, number>} summary
+ */
+async function runPassA(ctx, options, summary) {
+  const { supabaseAdmin, mpFetch } = ctx;
+  const limit = options.limit ?? 200;
+
+  let query = supabaseAdmin
+    .from('mercadopago_events')
+    .select('*')
+    .eq('resolution_state', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(limit);
+
+  if (options.preapprovalId) {
+    // Same best-effort correlation as Pass B: a subscription-flavoured row's
+    // mp_resource_id is (a suffixed variant of) the preapproval id itself; a
+    // payment-flavoured row instead carries it in `detail`.
+    query = query.or(`mp_resource_id.eq.${options.preapprovalId},mp_resource_id.ilike.${options.preapprovalId}:%,detail.eq.${options.preapprovalId}`);
+  }
+
+  const { data: pendingEvents, error } = await query;
+  if (error || !pendingEvents) return;
+
+  for (const row of pendingEvents) {
+    let classification;
+    let reasonText;
+    let resolvedByRef = null;
+    let isFetchFailure = false;
+
+    try {
+      if (row.event_type === 'payment') {
+        // `detail` carries the preapproval id ONLY on the two outcomes that
+        // came from the subscription-correlation branch of `correlateInvoice`
+        // — there is nowhere else this row remembers it.
+        const preapprovalHint = (row.outcome === 'subscription_not_linked' || row.outcome === 'no_open_invoice')
+          ? row.detail
+          : null;
+
+        const settlement = await handlePaymentSettlement(ctx, {
+          paymentId: baseResourceId(row.mp_resource_id),
+          preapprovalId: preapprovalHint,
+        });
+
+        classification = classifyPaymentSettlementOutcome(settlement);
+        reasonText = settlement.outcome;
+        isFetchFailure = settlement.outcome === 'fetch_failed';
+        if (classification === 'resolved') {
+          resolvedByRef = `payment:mercadopago:${baseResourceId(row.mp_resource_id)}`;
+        }
+      } else {
+        const kind = subscriptionKindForEventType(row.event_type);
+        if (!kind) {
+          classification = 'needs_admin';
+          reasonText = 'unrecognized_event_type';
+        } else {
+          const baseId = baseResourceId(row.mp_resource_id);
+          const path = kind === 'authorized_payment' ? `/authorized_payments/${baseId}` : `/preapproval/${baseId}`;
+          const resource = await mpFetch(path);
+          const lifecycle = await handleSubscriptionEvent(ctx, { resource, kind });
+          classification = classifySubscriptionEventOutcome(lifecycle.outcome);
+          reasonText = lifecycle.outcome;
+          if (classification === 'resolved') resolvedByRef = `${row.event_type}:${baseId}`;
+        }
+      }
+    } catch (err) {
+      // R24: a bad MP re-fetch must not abort the whole pass — record it
+      // against this row only and continue to the next one.
+      classification = 'still_pending';
+      reasonText = `fetch_failed:${err?.message || String(err)}`;
+      isFetchFailure = true;
+    }
+
+    const nextAttemptCount = row.attempt_count + 1;
+    let targetState = classification === 'resolved' ? 'resolved'
+      : classification === 'needs_admin' ? 'needs_admin'
+      : 'pending';
+    if (targetState === 'pending' && nextAttemptCount >= RECONCILIATION_ATTEMPT_CEILING) {
+      // R24: a permanently unresolvable resource escalates carrying its last
+      // blocking reason, rather than retrying forever.
+      targetState = 'needs_admin';
+    }
+
+    // Safe unconditionally, including for payment-topic rows whose own
+    // internal audit write (inside handlePaymentSettlement, via
+    // record_mercadopago_payment_audit_event) may already have moved this
+    // exact row past 'pending' — mark_mercadopago_event_resolution's own
+    // `WHERE resolution_state = 'pending'` guard (R19) makes the call a
+    // no-op in that case. It is still the ONLY place attempt_count/
+    // last_attempt_at get bumped for this sweep's own retry bookkeeping.
+    await supabaseAdmin.rpc('mark_mercadopago_event_resolution', {
+      p_event_id: row.id,
+      p_resolution_state: targetState,
+      p_outcome: reasonText,
+      p_resolved_by_ref: resolvedByRef,
+    });
+
+    if (targetState === 'resolved') summary.resolved++;
+    else if (targetState === 'needs_admin') summary.needsAdmin++;
+    else if (isFetchFailure) summary.fetchFailures++;
+    else summary.stillPending++;
+  }
+}
+
+/**
+ * Pass C (D-H, runs THIRD): Pass A can only re-attempt what was already
+ * logged — a webhook notification MP never delivered (or gave up
+ * redelivering) leaves NO `mercadopago_events` row to find. Bounded to
+ * live (`status='authorized'`) subscriptions whose most recently known event
+ * is stale or absent, so MP API cost is proportional to the problem, not the
+ * roster.
+ *
+ * UNVERIFIED (not one of the two formally BLOCKING design-appendix Open
+ * Questions, but in the same "assumed MP response shape" territory as OQ4/OQ5):
+ * the exact shape of `GET /authorized_payments?preapproval_id={id}` has not
+ * been confirmed against a real MP sandbox. Handled defensively — accepts
+ * either a bare array or a `{ results: [...] }` envelope, and a single bad
+ * fetch only skips that one subscription rather than aborting the pass.
+ *
+ * @param {{ supabaseAdmin: any, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
+ * @param {{ preapprovalId?: string }} options
+ * @param {Record<string, number>} summary
+ */
+async function runPassC(ctx, options, summary) {
+  const { supabaseAdmin, mpFetch } = ctx;
+  const staleCutoff = new Date(Date.now() - PASS_C_STALE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  let query = supabaseAdmin
+    .from('affiliate_payment_subscriptions')
+    .select('id, profile_id, mp_preapproval_id')
+    .eq('status', 'authorized')
+    .not('mp_preapproval_id', 'is', null);
+  if (options.preapprovalId) query = query.eq('mp_preapproval_id', options.preapprovalId);
+
+  const { data: liveSubs, error } = await query;
+  if (error || !liveSubs) return;
+
+  for (const sub of liveSubs) {
+    let isStale = true;
+    if (sub.profile_id) {
+      // Correlates via profile_id (the only column mercadopago_events shares
+      // with a subscription row) rather than mp_preapproval_id, which the
+      // events table does not store directly.
+      const { data: latestEvent } = await supabaseAdmin
+        .from('mercadopago_events')
+        .select('created_at')
+        .eq('profile_id', sub.profile_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestEvent && latestEvent.created_at >= staleCutoff) {
+        isStale = false;
+      }
+    }
+    if (!isStale) continue;
+
+    let listResponse;
+    try {
+      listResponse = await mpFetch(`/authorized_payments?preapproval_id=${sub.mp_preapproval_id}`);
+    } catch (err) {
+      summary.fetchFailures++;
+      continue;
+    }
+    const items = Array.isArray(listResponse) ? listResponse : (listResponse?.results || []);
+
+    for (const item of items) {
+      if (item?.id === undefined || item?.id === null || !item?.status) continue;
+
+      const key = deriveSubscriptionEventKey(item, 'authorized_payment');
+      if (!key) continue; // non-terminal (scheduled/recycling): nothing to recover yet
+
+      const { data: existing } = await supabaseAdmin
+        .from('mercadopago_events')
+        .select('id')
+        .eq('event_type', key.eventType)
+        .eq('mp_resource_id', String(key.mpResourceId))
+        .maybeSingle();
+      if (existing) continue; // already known — Pass A owns its retry, not Pass C
+
+      let resource = item;
+      if (item.status === 'processed' && (item.payment?.id === undefined || item.payment?.id === null)) {
+        // The list endpoint may omit the nested payment detail the
+        // single-resource endpoint includes — re-fetch before settling.
+        try {
+          resource = await mpFetch(`/authorized_payments/${item.id}`);
+        } catch (err) {
+          summary.fetchFailures++;
+          continue;
+        }
+      }
+
+      if (resource.status === 'processed' && resource.payment?.id !== undefined && resource.payment?.id !== null) {
+        // Same ordering as routeWebhookNotification's 'processed' branch:
+        // ledger first, subscription second (D-C).
+        await handlePaymentSettlement(ctx, {
+          paymentId: String(resource.payment.id),
+          preapprovalId: resource.preapproval_id ?? sub.mp_preapproval_id,
+        });
+      }
+      await handleSubscriptionEvent(ctx, { resource, kind: 'authorized_payment' });
+      summary.chargesRecovered++;
+    }
+  }
+}
+
+/**
+ * Pass D (D-H, runs LAST, only for a GLOBAL sweep): deletes unfinalized
+ * enrollment reservations (`mp_preapproval_id IS NULL AND status='pending'`)
+ * older than the TTL — nothing exists at MP for them, so deletion is safe
+ * (R10/R21). By definition a reservation carries no preapproval id, so this
+ * pass has nothing to scope to for a single-subscription sweep call and is
+ * skipped entirely when `options.preapprovalId` is set.
+ *
+ * @param {{ supabaseAdmin: any }} ctx
+ * @param {Record<string, number>} summary
+ */
+async function runPassD(ctx, summary) {
+  const { supabaseAdmin } = ctx;
+  const cutoff = new Date(Date.now() - RESERVATION_TTL_MINUTES * 60 * 1000).toISOString();
+
+  const { data: staleReservations, error } = await supabaseAdmin
+    .from('affiliate_payment_subscriptions')
+    .select('id')
+    .is('mp_preapproval_id', null)
+    .eq('status', 'pending')
+    .lt('created_at', cutoff);
+  if (error || !staleReservations) return;
+
+  for (const reservation of staleReservations) {
+    const { data: released } = await supabaseAdmin.rpc('release_subscription_reservation', {
+      p_reservation_id: reservation.id,
+    });
+    if (released) summary.reservationsReleased++;
+  }
+}
+
+/**
+ * The D-H reconciliation sweep. A plain function of `(ctx, options)` — no
+ * Express/request context, so a future scheduler or Edge Function can call
+ * it with zero refactor (design-appendix Interfaces). Idempotent by
+ * construction: every write this function makes goes through the SAME two
+ * unique-key primitives the live webhook uses (`external_ref` UNIQUE on
+ * `affiliate_account_movements`, composite `(event_type, mp_resource_id)`
+ * UNIQUE on `mercadopago_events`) via the SAME shared functions
+ * (`handlePaymentSettlement`, `handleSubscriptionEvent`,
+ * `deriveSubscriptionEventKey`) — never a divergent replay path (R19/R22).
+ *
+ * Passes run in a fixed order — B before A before C, D last — because that
+ * order is what lets ONE run resolve a whole dependency chain (e.g. R1→R3:
+ * Pass B links an orphaned subscription, then Pass A's retry of its
+ * `subscription_not_linked` deferral succeeds within the same call).
+ *
+ * @param {{ supabaseAdmin: import('@supabase/supabase-js').SupabaseClient, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
+ * @param {{ preapprovalId?: string, limit?: number }} [options] - omitting `preapprovalId` sweeps globally; supplying it scopes every applicable pass to one subscription (used by `/api/approve-adhesion`). Pass D never runs for a scoped call (it has no preapproval id to scope to).
+ * @returns {Promise<{ resolved: number, stillPending: number, needsAdmin: number, fetchFailures: number, linked: number, cancelledAtMp: number, reservationsReleased: number, chargesRecovered: number }>}
+ */
+export async function runDeferredReconciliation(ctx, options = {}) {
+  const summary = {
+    resolved: 0,
+    stillPending: 0,
+    needsAdmin: 0,
+    fetchFailures: 0,
+    linked: 0,
+    cancelledAtMp: 0,
+    reservationsReleased: 0,
+    chargesRecovered: 0,
+  };
+
+  await runPassB(ctx, options, summary);
+  await runPassA(ctx, options, summary);
+  await runPassC(ctx, options, summary);
+  if (!options.preapprovalId) {
+    await runPassD(ctx, summary);
+  }
+
+  return summary;
 }

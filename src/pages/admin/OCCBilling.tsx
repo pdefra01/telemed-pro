@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  DollarSign, Download, FileText, Filter, 
+import {
+  DollarSign, Download, FileText, Filter,
   Search, ExternalLink, Calendar, Receipt,
-  CheckCircle2, Clock, AlertCircle, Plus, Trash2, TrendingUp, BarChart3
+  CheckCircle2, Clock, AlertCircle, Plus, Trash2, TrendingUp, BarChart3, RefreshCw
 } from 'lucide-react';
+import { supabase } from '../../services/supabase';
 import { invoiceRepository } from '../../repositories/InvoiceRepository';
 import { paymentSubscriptionRepository } from '../../repositories/PaymentSubscriptionRepository';
 import { accountingService } from '../../services/AccountingService';
 import { billingService } from '../../services/BillingService';
 import { financialService } from '../../services/FinancialService';
-import { Invoice, OperatingExpense, PLSummary, PaymentSubscription } from '../../types';
+import { Invoice, OperatingExpense, PLSummary, PaymentSubscription, ReconciliationSummary } from '../../types';
 
 /**
  * Formats the `runMonthlyBillingCycle` result summary for the post-cycle
@@ -34,6 +35,51 @@ export function formatCycleResultMessage(result: {
   return message;
 }
 
+/**
+ * Formats `runDeferredReconciliation`'s summary (sdd/mercadopago-integration
+ * design-appendix D-H) for the admin-facing alert, whether shown standalone
+ * (the "Conciliar Pagos" button) or merged onto `formatCycleResultMessage`'s
+ * output (the chained post-cycle alert). Only reports a count when it is
+ * non-zero, except the three "how did it go" headline numbers
+ * (resolved/stillPending/needsAdmin), which are always shown so a zero
+ * result reads as "ran and found nothing to do", not as "didn't run".
+ */
+export function formatSweepSummaryMessage(summary: ReconciliationSummary): string {
+  const lines = [
+    'Conciliación de pagos Mercado Pago:',
+    `Resueltos: ${summary.resolved}`,
+    `Aún pendientes: ${summary.stillPending}`,
+    `Requieren revisión manual: ${summary.needsAdmin}`,
+  ];
+  if (summary.fetchFailures > 0) lines.push(`Fallas de conexión con Mercado Pago: ${summary.fetchFailures}`);
+  if (summary.linked > 0) lines.push(`Suscripciones vinculadas: ${summary.linked}`);
+  if (summary.cancelledAtMp > 0) lines.push(`Canceladas en Mercado Pago: ${summary.cancelledAtMp}`);
+  if (summary.reservationsReleased > 0) lines.push(`Reservas de alta liberadas: ${summary.reservationsReleased}`);
+  if (summary.chargesRecovered > 0) lines.push(`Cargos recuperados: ${summary.chargesRecovered}`);
+  return lines.join('\n');
+}
+
+/**
+ * `POST /api/payments/reconcile-deferred` (requireAuth, requireAdmin).
+ * Server-side only — needs both the MP access token and service-role RPCs,
+ * neither of which may reach the browser (design-appendix D-H).
+ */
+async function fetchReconcileDeferred(): Promise<ReconciliationSummary> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+
+  const res = await fetch('/api/payments/reconcile-deferred', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error || 'Error al conciliar pagos.');
+  }
+  return data as ReconciliationSummary;
+}
+
 const GlassCard: React.FC<{
   children: React.ReactNode;
   className?: string;
@@ -52,6 +98,8 @@ const OCCBilling: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [failedDebits, setFailedDebits] = useState<PaymentSubscription[]>([]);
+  const [unreconciledCount, setUnreconciledCount] = useState(0);
+  const [isReconciling, setIsReconciling] = useState(false);
 
   // P&L States
   const [plPeriod, setPlPeriod] = useState(new Date().toISOString().substring(0, 7)); // YYYY-MM
@@ -90,6 +138,20 @@ const OCCBilling: React.FC = () => {
     }
   };
 
+  /**
+   * Unreconciled-payments badge (design-appendix D-H: "the prompt is '3
+   * pagos sin conciliar', not 'remember to run this'"). Counts
+   * `mercadopago_events` rows the sweep hasn't yet resolved.
+   */
+  const loadUnreconciledCount = async () => {
+    try {
+      const count = await paymentSubscriptionRepository.getUnreconciledCount();
+      setUnreconciledCount(count);
+    } catch (error) {
+      console.error("Error loading unreconciled MP payments count", error);
+    }
+  };
+
   const loadPLData = async () => {
     try {
       setIsLoading(true);
@@ -110,6 +172,7 @@ const OCCBilling: React.FC = () => {
     if (activeTab === 'billing') {
       loadInvoices();
       loadFailedDebits();
+      loadUnreconciledCount();
     } else {
       loadPLData();
     }
@@ -123,18 +186,53 @@ const OCCBilling: React.FC = () => {
 
   const handleProcessCycle = async () => {
     if (!window.confirm('¿Estás seguro de iniciar el ciclo de facturación mensual? Se generarán comprobantes para todos los convenios y afiliados directos.')) return;
-    
+
     try {
       setIsLoading(true);
       const period = new Date().toISOString().substring(0, 7); // Formato YYYY-MM
       const result = await billingService.runMonthlyBillingCycle(period);
-      alert(formatCycleResultMessage(result));
-      await loadInvoices();
+      let message = formatCycleResultMessage(result);
+
+      // Chains the D-H sweep right after the cycle (design-appendix D-H):
+      // the cycle's own newly-issued invoices are the dependency a deferred
+      // MP payment most often waits on, so retrying them immediately here
+      // self-heals that ordering on the same click instead of depending on
+      // an admin remembering a second button.
+      try {
+        const sweepSummary = await fetchReconcileDeferred();
+        message += `\n\n${formatSweepSummaryMessage(sweepSummary)}`;
+      } catch (sweepError) {
+        console.error("Error al conciliar pagos diferidos tras el ciclo", sweepError);
+        message += '\n\nNo se pudo ejecutar la conciliación de pagos automáticamente después del ciclo. Usá el botón "Conciliar Pagos" manualmente.';
+      }
+
+      alert(message);
+      await Promise.all([loadInvoices(), loadUnreconciledCount(), loadFailedDebits()]);
     } catch (error) {
       console.error("Error en ciclo de facturación", error);
       alert("Error al procesar el ciclo.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Standalone trigger for the D-H sweep, for when an admin wants to
+   * conciliate deferred payments without also running the monthly billing
+   * cycle (e.g. right after linking/rejecting an adhesion, or just to clear
+   * the unreconciled badge).
+   */
+  const handleReconcileDeferred = async () => {
+    try {
+      setIsReconciling(true);
+      const summary = await fetchReconcileDeferred();
+      alert(formatSweepSummaryMessage(summary));
+      await Promise.all([loadUnreconciledCount(), loadFailedDebits()]);
+    } catch (error) {
+      console.error("Error al conciliar pagos diferidos", error);
+      alert(error instanceof Error ? error.message : "Error al conciliar pagos.");
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -254,22 +352,46 @@ const OCCBilling: React.FC = () => {
       {activeTab === 'billing' ? (
         <>
           {/* Action Buttons for Billing */}
-          <div className="flex justify-end space-x-4">
-            <button 
-              onClick={handleProcessCycle}
-              disabled={isLoading}
-              className="flex items-center space-x-2 px-6 py-3 bg-white/5 border border-white/10 text-white rounded-2xl font-bold text-sm hover:bg-white/10 transition-all"
-            >
-              <Calendar size={18} />
-              <span>Procesar Ciclo Mensual</span>
-            </button>
-            <button 
-              onClick={handleExport}
-              className="flex items-center space-x-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold text-sm hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-            >
-              <Download size={18} />
-              <span>Exportar para Estudio</span>
-            </button>
+          <div className="flex justify-between items-center gap-4 flex-wrap">
+            {/* Unreconciled-payments badge (design-appendix D-H) — a
+                permanent, always-visible prompt ("3 pagos sin conciliar")
+                instead of relying on an admin remembering to run the sweep. */}
+            {unreconciledCount > 0 ? (
+              <div className="flex items-center space-x-2 px-4 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold uppercase tracking-wide">
+                <AlertCircle size={16} />
+                <span>{unreconciledCount} {unreconciledCount === 1 ? 'pago sin conciliar' : 'pagos sin conciliar'}</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2 px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wide">
+                <CheckCircle2 size={16} />
+                <span>Sin pagos pendientes de conciliar</span>
+              </div>
+            )}
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={handleReconcileDeferred}
+                disabled={isReconciling}
+                className="flex items-center space-x-2 px-6 py-3 bg-white/5 border border-white/10 text-white rounded-2xl font-bold text-sm hover:bg-white/10 transition-all disabled:opacity-50"
+              >
+                <RefreshCw size={18} className={isReconciling ? 'animate-spin' : ''} />
+                <span>Conciliar Pagos</span>
+              </button>
+              <button
+                onClick={handleProcessCycle}
+                disabled={isLoading}
+                className="flex items-center space-x-2 px-6 py-3 bg-white/5 border border-white/10 text-white rounded-2xl font-bold text-sm hover:bg-white/10 transition-all"
+              >
+                <Calendar size={18} />
+                <span>Procesar Ciclo Mensual</span>
+              </button>
+              <button
+                onClick={handleExport}
+                className="flex items-center space-x-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold text-sm hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              >
+                <Download size={18} />
+                <span>Exportar para Estudio</span>
+              </button>
+            </div>
           </div>
 
           {/* Summary Cards */}

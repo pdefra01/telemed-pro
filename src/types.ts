@@ -461,6 +461,22 @@ export interface PaymentSubscription {
   profileEmail?: string;
 }
 
+/**
+ * `runDeferredReconciliation`'s return shape (sdd/mercadopago-integration
+ * design-appendix D-H), surfaced verbatim by `POST /api/payments/reconcile-deferred`.
+ * Consumed by `OCCBilling.tsx`'s chained cycle+sweep alert.
+ */
+export interface ReconciliationSummary {
+  resolved: number;
+  stillPending: number;
+  needsAdmin: number;
+  fetchFailures: number;
+  linked: number;
+  cancelledAtMp: number;
+  reservationsReleased: number;
+  chargesRecovered: number;
+}
+
 export interface Producer {
   id: string;
   name: string;
