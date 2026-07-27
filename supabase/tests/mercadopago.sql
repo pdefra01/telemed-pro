@@ -872,6 +872,132 @@ SELECT is((SELECT resolution_state FROM public.mercadopago_events WHERE id = (SE
 SELECT is((SELECT resolved_by_ref FROM public.mercadopago_events WHERE id = (SELECT id FROM tmp_mmer_id)), 'payment:mercadopago:xyz-1', 'R19: resolved_by_ref not overwritten by the no-op second call');
 
 -- ================================================================
+-- Group: record_mercadopago_payment_audit_event (Judgment Day Round 3
+-- redesign, 20260727000000)
+--
+-- Replaces PR2's client-side `.upsert()` write to mercadopago_events for the
+-- `payment` topic with a SECURITY DEFINER RPC. Unlike
+-- record_mercadopago_subscription_event's DO-NOTHING dedup (correct there
+-- because event_type varies per transition), every payment-topic write uses
+-- the literal event_type='payment', so the composite UNIQUE degrades to bare
+-- mp_resource_id and this RPC instead does DO UPDATE with a single rule
+-- applied uniformly to every column: once a row's resolution_state is
+-- 'final', the ENTIRE row is frozen (every subsequent call is a pure no-op);
+-- until then, every call fully overwrites every column.
+-- ================================================================
+-- resolution_state starts at 'pending' (deliberately NOT 'final') so the
+-- second call below can prove full-overwrite semantics without tripping the
+-- monotonic final-state guard, which is exercised separately further down.
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-1', 'approved', 'posted', 'pending', 'first detail',
+  '10101010-0000-0000-0000-000000000001'::uuid, '11111111-1111-1111-1111-111111111111'::uuid, 50000.00
+);
+SELECT is((SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'posted', 'first call: inserts a new row with the given outcome');
+SELECT is((SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'pending', 'first call: inserts the given resolution_state');
+SELECT is((SELECT detail FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'first detail', 'first call: inserts the given detail');
+SELECT is((SELECT mp_status FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'approved', 'first call: inserts the given mp_status');
+SELECT is((SELECT invoice_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), '10101010-0000-0000-0000-000000000001'::uuid, 'first call: inserts the given invoice_id');
+SELECT is((SELECT profile_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), '11111111-1111-1111-1111-111111111111'::uuid, 'first call: inserts the given profile_id');
+SELECT is((SELECT amount FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 50000.00, 'first call: inserts the given amount');
+
+-- Second call, SAME mp_resource_id, genuinely different outcome/resolution_state/detail:
+-- proves full-overwrite semantics for the non-guarded columns (no partial-column staleness).
+-- resolution_state moves pending -> needs_admin (not yet final, so the
+-- monotonic guard does not apply here).
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-1', 'in_process', 'rpc_error', 'needs_admin', 'second detail',
+  '10101010-0000-0000-0000-000000000002'::uuid, '22222222-2222-2222-2222-222222222221'::uuid, 60000.00
+);
+SELECT is((SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'rpc_error', 'second call: outcome fully updated (non-duplicate)');
+SELECT is((SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'needs_admin', 'second call: resolution_state fully updated (was not yet final)');
+SELECT is((SELECT detail FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'second detail', 'second call: detail fully overwritten, proving no partial-column staleness');
+SELECT is((SELECT mp_status FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'in_process', 'second call: mp_status fully overwritten');
+SELECT is((SELECT invoice_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), '10101010-0000-0000-0000-000000000002'::uuid, 'second call: invoice_id fully overwritten');
+SELECT is((SELECT profile_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), '22222222-2222-2222-2222-222222222221'::uuid, 'second call: profile_id fully overwritten');
+SELECT is((SELECT amount FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 60000.00, 'second call: amount fully overwritten');
+
+-- Bring the row to a real, settled outcome at resolution_state=final, mirroring
+-- what an actual successful settlement write would record.
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-1', 'approved', 'posted', 'final', NULL,
+  '10101010-0000-0000-0000-000000000002'::uuid, '22222222-2222-2222-2222-222222222221'::uuid, 60000.00
+);
+SELECT is((SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'), 'posted', 'setup: row now holds a real outcome (posted) at resolution_state=final');
+
+-- Freeze-once-final guard (Judgment Day Round 3 redesign): an outcome='duplicate'
+-- write (the routine case on an ordinary webhook redelivery of an
+-- already-settled payment) is a no-op on an already-final row, same as every
+-- other subsequent call.
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-1', 'approved', 'duplicate', 'final', NULL,
+  '10101010-0000-0000-0000-000000000002'::uuid, '22222222-2222-2222-2222-222222222221'::uuid, 60000.00
+);
+SELECT is(
+  (SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  'posted', 'freeze-once-final: an outcome=duplicate redelivery does NOT clobber the previously-recorded real outcome (posted)'
+);
+
+-- Freeze-once-final guard, full row: once a row is 'final', a later call
+-- passing COMPLETELY different values for every single column (including a
+-- non-'duplicate' outcome and a non-'final' resolution_state, e.g. a
+-- transient rpc_error on a redundant redelivery) must leave EVERY stored
+-- column 100% unchanged — the whole row is frozen, not just resolution_state
+-- and outcome.
+SELECT public.record_mercadopago_payment_audit_event(
+  'audit-rpc-res-1', 'in_process', 'rpc_error', 'pending', 'transient retry error',
+  '30303030-0000-0000-0000-000000000003'::uuid, '33333333-3333-3333-3333-333333333333'::uuid, 99999.99
+);
+SELECT is(
+  (SELECT resolution_state FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  'final', 'freeze-once-final: resolution_state never regresses from final back to pending'
+);
+SELECT is(
+  (SELECT outcome FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  'posted', 'freeze-once-final: outcome unchanged (entire row frozen, not just resolution_state)'
+);
+SELECT is(
+  (SELECT mp_status FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  'approved', 'freeze-once-final: mp_status unchanged'
+);
+SELECT is(
+  (SELECT detail FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  NULL, 'freeze-once-final: detail unchanged'
+);
+SELECT is(
+  (SELECT invoice_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  '10101010-0000-0000-0000-000000000002'::uuid, 'freeze-once-final: invoice_id unchanged'
+);
+SELECT is(
+  (SELECT profile_id FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  '22222222-2222-2222-2222-222222222221'::uuid, 'freeze-once-final: profile_id unchanged'
+);
+SELECT is(
+  (SELECT amount FROM public.mercadopago_events WHERE event_type = 'payment' AND mp_resource_id = 'audit-rpc-res-1'),
+  60000.00, 'freeze-once-final: amount unchanged'
+);
+
+-- p_mp_resource_id NULL or '' raises (4-arg throws_ok form — see this
+-- file's own NOTE above on the 3-arg wrapper's argument-order bug).
+SELECT throws_ok(
+  $$SELECT public.record_mercadopago_payment_audit_event(NULL, 'approved', 'posted', 'final')$$,
+  'P0001'::char(5),
+  NULL,
+  'record_mercadopago_payment_audit_event rejects a NULL mp_resource_id'
+);
+SELECT throws_ok(
+  $$SELECT public.record_mercadopago_payment_audit_event('', 'approved', 'posted', 'final')$$,
+  'P0001'::char(5),
+  NULL,
+  'record_mercadopago_payment_audit_event rejects an empty-string mp_resource_id'
+);
+
+-- GRANT layer + in-body is_service_role() guard: covered together with the
+-- other 6 sibling RPCs, via pg_temp.check_service_role_only(), in the
+-- "authorization block" group further below in this file.
+
+DELETE FROM public.mercadopago_events WHERE mp_resource_id = 'audit-rpc-res-1';
+
+-- ================================================================
 -- Group: enrollment RPCs — claim / finalize / release (R8-R11, R21)
 -- ================================================================
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
@@ -1034,6 +1160,11 @@ SELECT * FROM pg_temp.check_service_role_only(
   'release_subscription_reservation',
   'public.release_subscription_reservation(uuid)',
   $$SELECT public.release_subscription_reservation(gen_random_uuid())$$
+);
+SELECT * FROM pg_temp.check_service_role_only(
+  'record_mercadopago_payment_audit_event',
+  'public.record_mercadopago_payment_audit_event(text,text,text,text,text,uuid,uuid,numeric)',
+  $$SELECT public.record_mercadopago_payment_audit_event('auth-check-payment-audit', 'approved', 'posted', 'final')$$
 );
 
 -- ================================================================
