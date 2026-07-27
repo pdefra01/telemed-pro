@@ -6,6 +6,7 @@ import {
   resolveOccurredAt,
   handlePaymentSettlement,
   handleSubscriptionEvent,
+  routeWebhookNotification,
   DEBITO_AUTOMATICO_DISCOUNT,
 } from '../mercadopago.js';
 
@@ -628,5 +629,168 @@ describe('handleSubscriptionEvent', () => {
     const result = await handleSubscriptionEvent({ supabaseAdmin }, { resource, kind: 'preapproval' });
 
     expect(result).toEqual({ outcome: 'rpc_error', error: 'connection reset' });
+  });
+});
+
+describe('routeWebhookNotification', () => {
+  /** Dispatches a canned response (or throws) per re-fetch path, so a single
+   * test can cover a multi-hop chain (e.g. authorized_payments -> nested
+   * payment) with distinct responses for each call. */
+  function createMpFetchStub(responses) {
+    return vi.fn(async (path) => {
+      if (!Object.prototype.hasOwnProperty.call(responses, path)) {
+        throw new Error(`Unexpected mpFetch path in test: ${path}`);
+      }
+      const entry = responses[path];
+      if (entry instanceof Error) throw entry;
+      return entry;
+    });
+  }
+
+  it('routes a payment topic straight into handlePaymentSettlement with the raw data.id, no preapprovalId', async () => {
+    const mpFetch = createMpFetchStub({
+      '/v1/payments/pay-100': { id: 'pay-100', status: 'pending' },
+    });
+    const supabaseAdmin = createSupabaseStub();
+
+    const result = await routeWebhookNotification({ supabaseAdmin, mpFetch }, { topic: 'payment', dataId: 'pay-100' });
+
+    expect(result).toEqual({ status: 200, body: { outcome: 'not_approved' } });
+  });
+
+  it('re-fetches /authorized_payments/{id} for subscription_authorized_payment, settles the ledger THEN records the authorized transition, in that order (D-C)', async () => {
+    const callOrder = [];
+    const mpFetch = vi.fn(async (path) => {
+      callOrder.push(path);
+      if (path === '/authorized_payments/ap-1') {
+        return { id: 'ap-1', status: 'processed', preapproval_id: 'preap-1', payment: { id: 'pay-1' } };
+      }
+      if (path === '/v1/payments/pay-1') {
+        return { id: 'pay-1', status: 'pending' };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const supabaseAdmin = createSupabaseStub({ rpcResult: { data: 'status_applied', error: null } });
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_authorized_payment', dataId: 'ap-1' }
+    );
+
+    expect(callOrder).toEqual(['/authorized_payments/ap-1', '/v1/payments/pay-1']);
+    expect(result).toEqual({ status: 200, body: { outcome: 'not_approved', lifecycleOutcome: 'status_applied' } });
+    // The lifecycle write must carry the preapproval_id read from the
+    // re-fetched authorized_payment, not a value invented by the router.
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith(
+      'record_mercadopago_subscription_event',
+      expect.objectContaining({ p_mp_preapproval_id: 'preap-1', p_new_status: 'authorized' })
+    );
+  });
+
+  it('routes a rejected authorized_payment straight to the lifecycle transition, never touching the ledger', async () => {
+    const mpFetch = createMpFetchStub({
+      '/authorized_payments/ap-2': { id: 'ap-2', status: 'rejected', preapproval_id: 'preap-2' },
+    });
+    const supabaseAdmin = createSupabaseStub({ rpcResult: { data: 'status_applied', error: null } });
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_authorized_payment', dataId: 'ap-2' }
+    );
+
+    expect(result).toEqual({ status: 200, body: { outcome: 'status_applied' } });
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalledWith('post_payment_movement_from_webhook', expect.anything());
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith(
+      'record_mercadopago_subscription_event',
+      expect.objectContaining({ p_new_status: 'payment_failed' })
+    );
+  });
+
+  it('acks a non-terminal authorized_payment status (scheduled/recycling) without any RPC call', async () => {
+    const mpFetch = createMpFetchStub({
+      '/authorized_payments/ap-3': { id: 'ap-3', status: 'scheduled', preapproval_id: 'preap-3' },
+    });
+    const supabaseAdmin = createSupabaseStub();
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_authorized_payment', dataId: 'ap-3' }
+    );
+
+    expect(result).toEqual({ status: 200, body: { outcome: 'ignored' } });
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+  });
+
+  it('acks without settling when a processed authorized_payment is missing the nested payment.id', async () => {
+    const mpFetch = createMpFetchStub({
+      '/authorized_payments/ap-4': { id: 'ap-4', status: 'processed', preapproval_id: 'preap-4' },
+    });
+    const supabaseAdmin = createSupabaseStub();
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_authorized_payment', dataId: 'ap-4' }
+    );
+
+    expect(result).toEqual({ status: 200, body: { outcome: 'ignored', reason: 'missing_nested_payment_id' } });
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+  });
+
+  it('returns 502 without any DB access when the authorized_payments re-fetch fails', async () => {
+    const mpFetch = createMpFetchStub({ '/authorized_payments/ap-5': new Error('MP timeout') });
+    const supabaseAdmin = createSupabaseStub();
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_authorized_payment', dataId: 'ap-5' }
+    );
+
+    expect(result.status).toBe(502);
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+  });
+
+  it('re-fetches /preapproval/{id} for subscription_preapproval and routes the lifecycle transition', async () => {
+    const mpFetch = createMpFetchStub({
+      '/preapproval/preap-6': { id: 'preap-6', status: 'authorized', last_modified: '2026-03-15T12:00:00Z' },
+    });
+    const supabaseAdmin = createSupabaseStub({ rpcResult: { data: 'status_applied', error: null } });
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_preapproval', dataId: 'preap-6' }
+    );
+
+    expect(result).toEqual({ status: 200, body: { outcome: 'status_applied' } });
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith(
+      'record_mercadopago_subscription_event',
+      expect.objectContaining({ p_mp_preapproval_id: 'preap-6', p_event_type: 'subscription_preapproval_authorized' })
+    );
+  });
+
+  it('returns 502 without any DB access when the preapproval re-fetch fails', async () => {
+    const mpFetch = createMpFetchStub({ '/preapproval/preap-7': new Error('MP 500') });
+    const supabaseAdmin = createSupabaseStub();
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_preapproval', dataId: 'preap-7' }
+    );
+
+    expect(result.status).toBe(502);
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+  });
+
+  it('acks an unrecognized topic without any re-fetch or DB access (D-C "other" row)', async () => {
+    const mpFetch = vi.fn();
+    const supabaseAdmin = createSupabaseStub();
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'some_future_topic', dataId: 'x-1' }
+    );
+
+    expect(result).toEqual({ status: 200, body: { outcome: 'ignored', reason: 'unrecognized_topic' } });
+    expect(mpFetch).not.toHaveBeenCalled();
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
   });
 });

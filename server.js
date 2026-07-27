@@ -6,6 +6,12 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve, join } from 'path';
 import nodemailer from 'nodemailer';
+import {
+  verifyWebhookSignature,
+  handleSubscriptionEvent,
+  routeWebhookNotification,
+  DEBITO_AUTOMATICO_DISCOUNT,
+} from './server/mercadopago.js';
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -106,6 +112,462 @@ const requireAdmin = async (req, res, next) => {
   }
   next();
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// Mercado Pago integration (sdd/mercadopago-integration, PR 3)
+//
+// All MP wire-format knowledge lives in ./server/mercadopago.js — this
+// section holds only routing, auth (signature/JWT) and HTTP status mapping,
+// per the design-appendix's File Changes note for server.js.
+// ═══════════════════════════════════════════════════════════════════════
+
+const MERCADOPAGO_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN;
+const MERCADOPAGO_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+const PUBLIC_APP_URL = process.env.PUBLIC_APP_URL || '';
+const MERCADOPAGO_API_BASE = 'https://api.mercadopago.com';
+
+// D-C: missing credentials => every MP-facing endpoint self-disables (404
+// for the webhook, 503 for the rest) instead of throwing at request time.
+const mercadoPagoEnabled = Boolean(MERCADOPAGO_ACCESS_TOKEN && MERCADOPAGO_WEBHOOK_SECRET);
+if (!mercadoPagoEnabled) {
+  console.warn('⚠️ WARNING: Missing MERCADOPAGO_ACCESS_TOKEN/MERCADOPAGO_WEBHOOK_SECRET — Mercado Pago endpoints are disabled.');
+}
+
+/**
+ * Thin fetch wrapper around Mercado Pago's REST API. Matches the
+ * `mpFetch: (path: string) => Promise<any>` contract `server/mercadopago.js`
+ * depends on for its GET-only re-fetches; extended here with an optional
+ * `init` so the endpoints below (create/cancel a preapproval, create a
+ * Checkout Pro preference) can reuse the same auth-header wiring instead of
+ * duplicating it per call site.
+ */
+async function mpFetch(path, init = {}) {
+  const response = await fetch(`${MERCADOPAGO_API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Authorization': `Bearer ${MERCADOPAGO_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const error = new Error(`Mercado Pago API error ${response.status}${payload?.message ? `: ${payload.message}` : ''}`);
+    error.status = response.status;
+    error.mpResponse = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
+/**
+ * Resolves a plan by its requested name, falling back to the admin-marked
+ * default plan when no name matches — mirrors /api/approve-adhesion's plan
+ * resolution (2c) for the signup-time preapproval endpoint below, which
+ * needs the plan's LIVE monthly_cost before any profile/plan_id snapshot
+ * exists. Kept as its own small helper rather than refactoring
+ * /api/approve-adhesion's inline (already-shipped) resolution, to keep this
+ * PR's blast radius on that endpoint limited to the MP back-fill addition.
+ */
+async function resolvePlanByRequestedName(requestedPlanName) {
+  const cleanName = (requestedPlanName || '').trim();
+  if (cleanName) {
+    const { data: matchedPlan } = await supabaseAdmin
+      .from('plans')
+      .select('id, name, monthly_cost')
+      .eq('name', cleanName)
+      .maybeSingle();
+    if (matchedPlan) return matchedPlan;
+  }
+  const { data: fallbackPlan } = await supabaseAdmin
+    .from('plans')
+    .select('id, name, monthly_cost')
+    .eq('is_default', true)
+    .maybeSingle();
+  return fallbackPlan || null;
+}
+
+/**
+ * POST /api/webhooks/mercadopago
+ * Signature-verified, session-free receiver (D-C). Mounted here — before any
+ * requireAuth/requireAdmin usage in this file — because MP notifications
+ * carry no Supabase user JWT. Never trusts the notification body beyond
+ * `type`/`data.id`: routeWebhookNotification always re-fetches the
+ * authoritative resource from MP before acting.
+ */
+app.post('/api/webhooks/mercadopago', async (req, res) => {
+  if (!mercadoPagoEnabled) {
+    return res.status(404).end();
+  }
+
+  const rawDataId = req.body?.data?.id;
+  const dataId = rawDataId !== undefined && rawDataId !== null ? String(rawDataId) : null;
+  const topic = req.body?.type;
+
+  if (!dataId) {
+    return res.status(400).json({ error: 'missing_data_id' });
+  }
+
+  // 401 before any DB access (D-C).
+  if (!verifyWebhookSignature(req.headers, dataId, MERCADOPAGO_WEBHOOK_SECRET)) {
+    return res.status(401).json({ error: 'invalid_signature' });
+  }
+
+  try {
+    const { status, body } = await routeWebhookNotification({ supabaseAdmin, mpFetch }, { topic, dataId });
+    return res.status(status).json(body);
+  } catch (err) {
+    console.error('[webhooks/mercadopago] Unexpected error:', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+/**
+ * POST /api/adhesion/preapproval
+ * Public, mirrors /api/adhesion/check-duplicates. Creates the MP preapproval
+ * for a just-submitted débito-automático signup and records a subscription
+ * row with profile_id NULL (D-F) — the profile does not exist yet at this
+ * point in the flow. MP/plan-resolution failures return { ok:false } and
+ * NEVER an error status the frontend would treat as fatal: Decision #5
+ * requires the adhesion itself to still complete.
+ */
+app.post('/api/adhesion/preapproval', async (req, res) => {
+  if (!mercadoPagoEnabled) {
+    return res.status(503).json({ ok: false, error: 'Servicio de pagos no configurado.' });
+  }
+
+  const { adhesionRequestId } = req.body;
+  if (!adhesionRequestId) {
+    return res.status(400).json({ ok: false, error: 'Falta el campo adhesionRequestId.' });
+  }
+
+  try {
+    // Idempotent on double-submit (R8): a prior successful call already
+    // created and recorded the preapproval for this adhesion request.
+    const { data: existing } = await supabaseAdmin
+      .from('affiliate_payment_subscriptions')
+      .select('mp_preapproval_id')
+      .eq('adhesion_request_id', adhesionRequestId)
+      .maybeSingle();
+
+    if (existing?.mp_preapproval_id) {
+      try {
+        const preapproval = await mpFetch(`/preapproval/${existing.mp_preapproval_id}`);
+        return res.status(200).json({ ok: true, initPoint: preapproval.init_point });
+      } catch (err) {
+        console.error('[adhesion/preapproval] Re-fetch of existing preapproval failed:', err.message);
+        return res.status(200).json({ ok: false });
+      }
+    }
+
+    const { data: request, error: fetchError } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('titular_email, titular_dni, plan_type')
+      .eq('id', adhesionRequestId)
+      .single();
+
+    if (fetchError || !request) {
+      console.error('[adhesion/preapproval] Adhesion request not found:', fetchError?.message);
+      return res.status(200).json({ ok: false });
+    }
+
+    const payerEmail = request.titular_email?.trim() || `${request.titular_dni.trim()}@medinex-paciente.com`;
+    const plan = await resolvePlanByRequestedName(request.plan_type);
+    if (!plan) {
+      console.error('[adhesion/preapproval] No plan resolved (requested or default) for adhesion', adhesionRequestId);
+      return res.status(200).json({ ok: false });
+    }
+
+    const discountedMonthlyCost = Number((plan.monthly_cost * DEBITO_AUTOMATICO_DISCOUNT).toFixed(2));
+
+    let preapproval;
+    try {
+      preapproval = await mpFetch('/preapproval', {
+        method: 'POST',
+        body: JSON.stringify({
+          reason: `Medinex - ${plan.name} - Débito Automático`,
+          external_reference: `adhesion:${adhesionRequestId}`,
+          payer_email: payerEmail,
+          back_url: `${PUBLIC_APP_URL}/`,
+          auto_recurring: {
+            frequency: 1,
+            frequency_type: 'months',
+            transaction_amount: discountedMonthlyCost,
+            currency_id: 'ARS',
+          },
+          status: 'pending',
+        }),
+      });
+    } catch (err) {
+      console.error('[adhesion/preapproval] MP preapproval creation failed:', err.message);
+      return res.status(200).json({ ok: false });
+    }
+
+    const { error: insertError } = await supabaseAdmin
+      .from('affiliate_payment_subscriptions')
+      .insert({
+        profile_id: null,
+        adhesion_request_id: adhesionRequestId,
+        mp_preapproval_id: preapproval.id,
+        status: 'pending',
+        discounted_monthly_cost: discountedMonthlyCost,
+      });
+
+    if (insertError) {
+      // Partial unique index on adhesion_request_id (R8): a concurrent call
+      // already recorded a row for this same adhesion request. The MP
+      // preapproval this call just created becomes an orphan at MP — Pass B
+      // (PR 4) only cancels REJECTED adhesions' preapprovals, so this is
+      // logged for operator visibility rather than auto-cancelled here.
+      console.error('[adhesion/preapproval] Failed to record subscription row (likely concurrent duplicate):', insertError.message);
+      return res.status(200).json({ ok: false });
+    }
+
+    return res.status(200).json({ ok: true, initPoint: preapproval.init_point });
+  } catch (err) {
+    console.error('[adhesion/preapproval] Unexpected error:', err);
+    return res.status(200).json({ ok: false });
+  }
+});
+
+/**
+ * POST /api/payments/checkout-preference
+ * requireAuth. Creates a Checkout Pro preference for the caller's OWN
+ * invoice. Re-verifies ownership server-side via supabaseAdmin — never
+ * trusts a client-supplied owner id (D-G/R25, titular-only).
+ */
+app.post('/api/payments/checkout-preference', requireAuth, async (req, res) => {
+  if (!mercadoPagoEnabled) {
+    return res.status(503).json({ error: 'Servicio de pagos no configurado.' });
+  }
+
+  const { invoiceId } = req.body;
+  if (!invoiceId) {
+    return res.status(400).json({ error: 'Falta el campo invoiceId.' });
+  }
+
+  try {
+    const { data: invoice, error: fetchError } = await supabaseAdmin
+      .from('invoices')
+      .select('*')
+      .eq('id', invoiceId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!invoice) {
+      return res.status(404).json({ error: 'Factura no encontrada.' });
+    }
+
+    if (invoice.entity_type !== 'affiliate' || String(invoice.entity_id) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado para pagar esta factura.' });
+    }
+
+    if (invoice.status !== 'issued') {
+      return res.status(409).json({ error: `La factura no está en estado pagable (estado actual: ${invoice.status}).` });
+    }
+
+    const preference = await mpFetch('/checkout/preferences', {
+      method: 'POST',
+      body: JSON.stringify({
+        items: [{
+          title: `Medinex - Cuota ${invoice.period}`,
+          quantity: 1,
+          unit_price: Number(invoice.total_amount),
+          currency_id: 'ARS',
+        }],
+        // D-C's invoice-correlation contract: entity comes from the re-read
+        // invoice row, this reference string is only ever a cross-check.
+        external_reference: `affiliate:${invoice.entity_id}:invoice:${invoice.id}`,
+        payer: { email: req.user.email },
+        back_urls: {
+          success: `${PUBLIC_APP_URL}/`,
+          pending: `${PUBLIC_APP_URL}/`,
+          failure: `${PUBLIC_APP_URL}/`,
+        },
+        auto_return: 'approved',
+      }),
+    });
+
+    return res.status(200).json({ initPoint: preference.init_point });
+  } catch (err) {
+    console.error('[payments/checkout-preference] Error:', err.message);
+    return res.status(500).json({ error: 'Error al generar el link de pago.' });
+  }
+});
+
+/**
+ * Creates the MP preapproval for an already-reserved enrollment slot
+ * (D-F "reserved" branch) and finalizes it. Shared by both the fresh
+ * reservation path and the stale_pending re-claim path in
+ * POST /api/payments/subscribe below.
+ */
+async function createAndFinalizeSubscription(req, res, reservationId) {
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('plan_id, email')
+    .eq('id', req.user.id)
+    .maybeSingle();
+
+  if (profileError || !profile?.plan_id) {
+    await supabaseAdmin.rpc('release_subscription_reservation', { p_reservation_id: reservationId });
+    return res.status(400).json({ ok: false, error: 'El afiliado no tiene un plan asignado.' });
+  }
+
+  const { data: plan, error: planError } = await supabaseAdmin
+    .from('plans')
+    .select('name, monthly_cost')
+    .eq('id', profile.plan_id)
+    .maybeSingle();
+
+  if (planError || !plan) {
+    await supabaseAdmin.rpc('release_subscription_reservation', { p_reservation_id: reservationId });
+    return res.status(400).json({ ok: false, error: 'No se pudo resolver el plan del afiliado.' });
+  }
+
+  const discountedMonthlyCost = Number((plan.monthly_cost * DEBITO_AUTOMATICO_DISCOUNT).toFixed(2));
+
+  let preapproval;
+  try {
+    preapproval = await mpFetch('/preapproval', {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: `Medinex - ${plan.name} - Débito Automático`,
+        external_reference: `affiliate:${req.user.id}`,
+        payer_email: profile.email || req.user.email,
+        back_url: `${PUBLIC_APP_URL}/`,
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: 'months',
+          transaction_amount: discountedMonthlyCost,
+          currency_id: 'ARS',
+        },
+        status: 'pending',
+      }),
+    });
+  } catch (err) {
+    console.error('[payments/subscribe] MP preapproval creation failed:', err.message);
+    await supabaseAdmin.rpc('release_subscription_reservation', { p_reservation_id: reservationId });
+    return res.status(502).json({ ok: false, error: 'No se pudo crear la suscripción en Mercado Pago.' });
+  }
+
+  const { data: finalizeResult, error: finalizeError } = await supabaseAdmin.rpc('finalize_subscription_enrollment', {
+    p_reservation_id: reservationId,
+    p_mp_preapproval_id: String(preapproval.id),
+    p_discounted_monthly_cost: discountedMonthlyCost,
+  });
+
+  if (finalizeError) {
+    // Judgment Day Round 1: a transient failure of the finalize RPC call
+    // itself (network blip, DB timeout) still leaves a real, live MP
+    // preapproval created above with mp_preapproval_id never written to any
+    // row. Compensate exactly like the reservation_missing branch below:
+    // cancel the orphaned preapproval and release the reservation so it
+    // isn't left stuck in its pre-finalize state.
+    console.error('[payments/subscribe] finalize_subscription_enrollment RPC call failed:', finalizeError.message);
+    try {
+      await mpFetch(`/preapproval/${preapproval.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+    } catch (err) {
+      console.error('[payments/subscribe] Failed to cancel orphaned preapproval after finalizeError:', err.message);
+    }
+    await supabaseAdmin.rpc('release_subscription_reservation', { p_reservation_id: reservationId });
+    return res.status(502).json({ ok: false, error: 'No se pudo finalizar la suscripción en Mercado Pago.' });
+  }
+
+  if (finalizeResult === 'reservation_missing') {
+    // R21: the reservation was garbage-collected (sweep Pass D, PR 4) before
+    // this call arrived. Cancel the just-created preapproval and fail
+    // closed — never insert a replacement row.
+    try {
+      await mpFetch(`/preapproval/${preapproval.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+    } catch (err) {
+      console.error('[payments/subscribe] Failed to cancel orphaned preapproval after reservation_missing:', err.message);
+    }
+    return res.status(409).json({ ok: false, reason: 'reservation_missing' });
+  }
+
+  return res.status(200).json({ ok: true, initPoint: preapproval.init_point });
+}
+
+/**
+ * POST /api/payments/subscribe
+ * requireAuth. D-F's re-enrollment flow: reserve-before-any-MP-call via
+ * claim_subscription_enrollment, so two concurrent calls can never both
+ * create a live preapproval for the same affiliate (R8/R9).
+ */
+app.post('/api/payments/subscribe', requireAuth, async (req, res) => {
+  if (!mercadoPagoEnabled) {
+    return res.status(503).json({ ok: false, error: 'Servicio de pagos no configurado.' });
+  }
+
+  try {
+    const { data: claim, error: claimError } = await supabaseAdmin.rpc('claim_subscription_enrollment', {
+      p_profile_id: req.user.id,
+    });
+    if (claimError) throw claimError;
+
+    if (claim.claim === 'already_live') {
+      return res.status(409).json({
+        ok: false,
+        reason: 'already_subscribed',
+        status: claim.existing_status,
+        mpPreapprovalId: claim.existing_mp_id,
+      });
+    }
+
+    if (claim.claim === 'stale_pending') {
+      // R11: cancel the abandoned preapproval at MP FIRST; fail closed if
+      // that cancel fails — never create a second preapproval beside one
+      // that can still activate.
+      // UNVERIFIED (design-appendix Open Question 6): assumes MP accepts
+      // PUT /preapproval/{id} { status: 'cancelled' } from a never-authorized
+      // ('pending') preapproval. If MP rejects that transition, this branch
+      // always 409s and re-enrollment stays blocked until the abandoned
+      // authorization expires on MP's own side.
+      let cancelledResource;
+      try {
+        cancelledResource = await mpFetch(`/preapproval/${claim.existing_mp_id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: 'cancelled' }),
+        });
+      } catch (err) {
+        console.error('[payments/subscribe] Failed to cancel stale preapproval at MP:', err.message);
+        return res.status(409).json({ ok: false, reason: 'stale_pending_cancel_failed' });
+      }
+
+      // Records the cancellation through the SAME guarded RPC the webhook
+      // uses (never a raw UPDATE), per D-F.
+      await handleSubscriptionEvent({ supabaseAdmin }, { resource: cancelledResource, kind: 'preapproval' });
+
+      const { data: reclaim, error: reclaimError } = await supabaseAdmin.rpc('claim_subscription_enrollment', {
+        p_profile_id: req.user.id,
+      });
+      if (reclaimError) throw reclaimError;
+
+      if (reclaim.claim !== 'reserved') {
+        // Still not reservable (e.g. it re-activated at MP right before our
+        // cancel landed) — fail closed rather than risk a double preapproval.
+        return res.status(409).json({ ok: false, reason: 'stale_pending_reclaim_failed' });
+      }
+
+      return await createAndFinalizeSubscription(req, res, reclaim.reservation_id);
+    }
+
+    // 'reserved'
+    return await createAndFinalizeSubscription(req, res, claim.reservation_id);
+  } catch (err) {
+    console.error('[payments/subscribe] Unexpected error:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
+  }
+});
 
 // Rechazar métodos distintos a POST explícitamente
 app.all('/api/livekit-token', (req, res, next) => {
@@ -947,12 +1409,46 @@ app.post('/api/approve-adhesion', async (req, res) => {
       }
     }
 
-    // 5. Marcar la solicitud como aprobada
+    // 5. Marcar la solicitud como aprobada. approved_profile_id records the
+    // link (design D-F, fact 9) — this endpoint previously recorded nothing
+    // beyond status='approved', leaving any signup-time MP subscription's
+    // profile_id link unrecoverable if the back-fill below failed.
     console.log(`[approve-adhesion] Marcando solicitud como aprobada...`);
     await supabaseAdmin
       .from('adhesion_requests')
-      .update({ status: 'approved' })
+      .update({ status: 'approved', approved_profile_id: userId })
       .eq('id', adhesionId);
+
+    // 5b. Mercado Pago débito-automático link back-fill (design D-F "Link
+    // back-fill at approval", steps a-c only — step (d), the D-H sweep call,
+    // lands in PR 4/4.11). Best-effort and NON-BLOCKING: a failure here must
+    // never fail the approval itself. Pass B (PR 4) re-drives this on any
+    // later sweep run using approved_profile_id, independent of this
+    // request completing.
+    if (mercadoPagoEnabled) {
+      try {
+        const { data: subscription } = await supabaseAdmin
+          .from('affiliate_payment_subscriptions')
+          .select('id, mp_preapproval_id')
+          .eq('adhesion_request_id', adhesionId)
+          .is('profile_id', null)
+          .maybeSingle();
+
+        if (subscription) {
+          await supabaseAdmin
+            .from('affiliate_payment_subscriptions')
+            .update({ profile_id: userId })
+            .eq('id', subscription.id);
+
+          if (subscription.mp_preapproval_id) {
+            const preapproval = await mpFetch(`/preapproval/${subscription.mp_preapproval_id}`);
+            await handleSubscriptionEvent({ supabaseAdmin }, { resource: preapproval, kind: 'preapproval' });
+          }
+        }
+      } catch (err) {
+        console.error('[approve-adhesion] Mercado Pago subscription link back-fill failed (non-blocking):', err.message);
+      }
+    }
 
     console.log(`[approve-adhesion] Solicitud aprobada con éxito para titular: ${targetEmail}`);
     res.status(200).json({ message: 'Solicitud aprobada exitosamente y paciente registrado.', userId });

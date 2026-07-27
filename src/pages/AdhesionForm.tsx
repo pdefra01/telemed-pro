@@ -368,7 +368,28 @@ export const AdhesionForm: React.FC = () => {
         email_verified: EMAIL_VERIFICATION_REQUIRED ? isEmailVerified : true
       };
 
-      await adhesionRepository.submitApplication(payload);
+      const { id: adhesionRequestId } = await adhesionRepository.submitApplication(payload);
+
+      // Débito automático: best-effort MP preapproval creation. On failure
+      // the form still completes (Resolved Decision #5) — enrollment is
+      // best-effort, adhesion approval is not blocked by it. The manual/
+      // Checkout Pro payment path remains available regardless.
+      if (plan.paymentMethod === 'debit') {
+        try {
+          const preapprovalRes = await fetch('/api/adhesion/preapproval', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adhesionRequestId })
+          });
+          const preapprovalResult = await preapprovalRes.json().catch(() => ({ ok: false }));
+          if (!preapprovalResult.ok) {
+            console.warn('[AdhesionForm] No se pudo crear la suscripción de débito automático en Mercado Pago; la solicitud continúa.');
+          }
+        } catch (mpError) {
+          console.warn('[AdhesionForm] Error al contactar el servicio de Mercado Pago; la solicitud continúa.', mpError);
+        }
+      }
+
       setStep(6); // Success screen
       toast("Solicitud de adhesión enviada con éxito!", "success");
     } catch (err: any) {

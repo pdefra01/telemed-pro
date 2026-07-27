@@ -36,9 +36,13 @@ export interface AdhesionRequest {
 
 export class AdhesionRepository {
   /**
-   * Envía una solicitud de adhesión de forma pública (para el formulario QR)
+   * Envía una solicitud de adhesión de forma pública (para el formulario QR).
+   * Returns the created row's id so the caller (AdhesionForm.tsx) can create
+   * the débito-automático MP preapproval against it (sdd/mercadopago-integration
+   * D-F) — the profile does not exist yet at this point in the flow, so
+   * `adhesion_request_id` is the only stable handle available.
    */
-  async submitApplication(data: AdhesionRequest): Promise<void> {
+  async submitApplication(data: AdhesionRequest): Promise<{ id: string }> {
     // Pre-insert duplicate check (DNI + CUIL) against affiliates, family members
     // and pending requests, for the titular and every family member.
     const checkResponse = await fetch('/api/adhesion/check-duplicates', {
@@ -88,9 +92,19 @@ export class AdhesionRepository {
       }
     }
 
+    // The anon client has no SELECT policy on adhesion_requests (only
+    // "Admins can view adhesion requests" — see
+    // supabase/migrations/20260718000000_create_adhesion_requests.sql:38-46),
+    // and Postgres RLS applies the SELECT policy to an INSERT's RETURNING
+    // clause too. Generating the id client-side and skipping .select() avoids
+    // depending on a SELECT permission the anon role does not have
+    // (Judgment Day Round 1 finding).
+    const generatedId = crypto.randomUUID();
+
     const { error } = await supabase
       .from('adhesion_requests')
       .insert({
+        id: generatedId,
         titular_name: data.titular_name,
         titular_first_name: data.titular_first_name || null,
         titular_last_name: data.titular_last_name || null,
@@ -124,8 +138,10 @@ export class AdhesionRepository {
 
     if (error) {
       console.error("Error submitting adhesion request:", error);
-      throw new Error(error.message || "Error al enviar la solicitud.");
+      throw new Error(error?.message || "Error al enviar la solicitud.");
     }
+
+    return { id: generatedId };
   }
 
   /**

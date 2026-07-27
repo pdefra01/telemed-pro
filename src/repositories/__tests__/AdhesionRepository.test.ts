@@ -43,6 +43,8 @@ describe('AdhesionRepository', () => {
   });
 
   it('calls POST /api/adhesion/check-duplicates before inserting the adhesion request', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'adhesion-1' });
+
     const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ok: true })
@@ -52,7 +54,7 @@ describe('AdhesionRepository', () => {
     vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
     const request = buildRequest();
-    await repository.submitApplication(request);
+    const result = await repository.submitApplication(request);
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion/check-duplicates', expect.objectContaining({
       method: 'POST',
@@ -67,6 +69,14 @@ describe('AdhesionRepository', () => {
 
     // check-duplicates must be called before the insert
     expect(fetchSpy.mock.invocationCallOrder[0]).toBeLessThan(insertMock.mock.invocationCallOrder[0]);
+
+    // The id is generated client-side (no SELECT policy exists for the anon
+    // role, so the caller cannot rely on a post-insert .select().single())
+    // and returned so the caller (AdhesionForm.tsx) can create the
+    // débito-automático MP preapproval against it.
+    expect(result).toEqual({ id: 'adhesion-1' });
+
+    vi.unstubAllGlobals();
   });
 
   it('includes titular_cuil in the insert payload and preserves cuil in each family member entry', async () => {
@@ -158,5 +168,19 @@ describe('AdhesionRepository', () => {
     );
 
     expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('throws when the insert itself fails, instead of silently returning an undefined id', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true })
+    } as Response);
+
+    const insertMock = vi.fn().mockResolvedValue({ error: { message: 'insert failed' } });
+    vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+    const request = buildRequest();
+
+    await expect(repository.submitApplication(request)).rejects.toThrow('insert failed');
   });
 });

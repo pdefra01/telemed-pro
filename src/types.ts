@@ -434,6 +434,33 @@ export interface DoctorWorkShift {
   officeName?: string;
 }
 
+/**
+ * `affiliate_payment_subscriptions` lifecycle status (sdd/mercadopago-integration
+ * design D-D). One-way per `mpPreapprovalId`: pending -> authorized ->
+ * cancelled (terminal); authorized <-> payment_failed is the only
+ * oscillation. No `paused` state (Resolved Decision #7) — an MP-side pause
+ * is recorded as `cancelled`.
+ */
+export type PaymentSubscriptionStatus = 'pending' | 'authorized' | 'payment_failed' | 'cancelled';
+
+export interface PaymentSubscription {
+  id: string;
+  profileId: string | null;
+  adhesionRequestId: string | null;
+  mpPreapprovalId: string | null;
+  status: PaymentSubscriptionStatus;
+  statusChangedAt: string | null;
+  discountedMonthlyCost: number | null;
+  discountThroughPeriod: string | null; // 'YYYY-MM'
+  lastFailureAt: string | null;
+  failureCount: number;
+  createdAt: string;
+  updatedAt: string;
+  /** Only populated by queries that embed a `profiles` join (e.g. getFailedDebits). */
+  profileName?: string;
+  profileEmail?: string;
+}
+
 export interface Producer {
   id: string;
   name: string;

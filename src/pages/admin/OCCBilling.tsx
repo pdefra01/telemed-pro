@@ -5,10 +5,11 @@ import {
   CheckCircle2, Clock, AlertCircle, Plus, Trash2, TrendingUp, BarChart3
 } from 'lucide-react';
 import { invoiceRepository } from '../../repositories/InvoiceRepository';
+import { paymentSubscriptionRepository } from '../../repositories/PaymentSubscriptionRepository';
 import { accountingService } from '../../services/AccountingService';
 import { billingService } from '../../services/BillingService';
 import { financialService } from '../../services/FinancialService';
-import { Invoice, OperatingExpense, PLSummary } from '../../types';
+import { Invoice, OperatingExpense, PLSummary, PaymentSubscription } from '../../types';
 
 /**
  * Formats the `runMonthlyBillingCycle` result summary for the post-cycle
@@ -50,6 +51,7 @@ const OCCBilling: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [failedDebits, setFailedDebits] = useState<PaymentSubscription[]>([]);
 
   // P&L States
   const [plPeriod, setPlPeriod] = useState(new Date().toISOString().substring(0, 7)); // YYYY-MM
@@ -74,6 +76,20 @@ const OCCBilling: React.FC = () => {
     }
   };
 
+  /**
+   * "Débitos Fallidos" panel data (sdd/mercadopago-integration spec
+   * "Admin-Visible Alert On Exhausted Retries"): loaded independently of
+   * `loadInvoices` so a failure here never blocks the invoices table.
+   */
+  const loadFailedDebits = async () => {
+    try {
+      const data = await paymentSubscriptionRepository.getFailedDebits();
+      setFailedDebits(data);
+    } catch (error) {
+      console.error("Error loading failed débitos automáticos", error);
+    }
+  };
+
   const loadPLData = async () => {
     try {
       setIsLoading(true);
@@ -93,6 +109,7 @@ const OCCBilling: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'billing') {
       loadInvoices();
+      loadFailedDebits();
     } else {
       loadPLData();
     }
@@ -275,6 +292,43 @@ const OCCBilling: React.FC = () => {
               <p className="text-indigo-400 text-[10px] font-bold mt-2">Cierre automático programado</p>
             </GlassCard>
           </div>
+
+          {/* Débitos Fallidos (sdd/mercadopago-integration) — admin-visible signal
+              instead of any automatic delinquency/payment-method switch. */}
+          <GlassCard className="p-8 border-l-4 border-l-rose-500">
+            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <AlertCircle className="text-rose-400" size={20} />
+              <span>Débitos Fallidos{failedDebits.length > 0 ? ` (${failedDebits.length})` : ''}</span>
+            </h3>
+            {failedDebits.length === 0 ? (
+              <div className="text-center text-slate-500 italic py-6">No hay débitos automáticos fallidos registrados.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-slate-500 text-[10px] uppercase tracking-widest font-bold">
+                      <th className="pb-4">Afiliado</th>
+                      <th className="pb-4">Última Falla</th>
+                      <th className="pb-4">Intentos</th>
+                      <th className="pb-4">Preapproval MP</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {failedDebits.map(sub => (
+                      <tr key={sub.id} className="hover:bg-white/5 transition-colors">
+                        <td className="py-4 text-white font-bold">{sub.profileName || sub.profileId || 'N/D'}</td>
+                        <td className="py-4 text-slate-400 text-xs">
+                          {sub.lastFailureAt ? new Date(sub.lastFailureAt).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="py-4 text-rose-400 font-bold">{sub.failureCount}</td>
+                        <td className="py-4 text-slate-500 text-xs font-mono">{sub.mpPreapprovalId || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </GlassCard>
 
           {/* Table Section */}
           <GlassCard className="p-8">

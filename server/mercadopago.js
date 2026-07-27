@@ -14,6 +14,12 @@
 // deliberately NOT implemented here — see this repo's apply-progress note for
 // PR 2 for why.
 //
+// PR 3 ADDITION: `routeWebhookNotification` — the topic-to-re-fetch-to-
+// handler dispatch table (D-C), factored out of `server.js` so it stays
+// unit-testable without an Express/Supabase harness. `server.js` itself only
+// verifies the signature and maps the returned `{status, body}` onto the
+// HTTP response.
+//
 // Base: sdd/mercadopago-integration design REV 6 (D-A, D-B, D-C, D-D) and its
 // appendix (Interfaces section). Design is FINAL for this change.
 
@@ -567,4 +573,98 @@ export async function handleSubscriptionEvent(ctx, { resource, kind }) {
   }
 
   return { outcome: data };
+}
+
+// ── routeWebhookNotification ─────────────────────────────────────────────
+
+/**
+ * PR 3: the webhook HTTP layer's ONLY remaining piece of MP wire-format
+ * knowledge beyond `verifyWebhookSignature` — which endpoint to re-fetch for
+ * a given notification `type`, and which handler consumes the result (D-C's
+ * routing table). Deliberately still knows nothing about Express — factored
+ * out here (rather than left inline in `server.js`) so it stays unit-testable
+ * with the same stubbed-`ctx` pattern PR 2's tests already use, keeping
+ * `server.js` itself down to routing/auth/HTTP-status mapping only, per the
+ * design-appendix's File Changes note for `server.js`.
+ *
+ * `payment`-topic notifications correlate SOLELY via `external_reference`
+ * (Checkout Pro) — no `preapprovalId` is threaded through for this topic.
+ * A débito-automático charge's own correlation happens through the
+ * `subscription_authorized_payment` topic below, which supplies
+ * `preapproval_id` directly from the re-fetched authorized_payment resource.
+ * This is a deliberate scope decision (not one of the two BLOCKING Open
+ * Questions), documented here so a future reader doesn't mistake the
+ * omission for a bug.
+ *
+ * @param {{ supabaseAdmin: import('@supabase/supabase-js').SupabaseClient, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
+ * @param {{ topic: string | undefined, dataId: string }} params
+ * @returns {Promise<{ status: number, body: Record<string, any> }>}
+ */
+export async function routeWebhookNotification(ctx, { topic, dataId }) {
+  const { mpFetch } = ctx;
+
+  if (topic === 'payment') {
+    const result = await handlePaymentSettlement(ctx, { paymentId: dataId });
+    return { status: 200, body: { outcome: result.outcome } };
+  }
+
+  if (topic === 'subscription_authorized_payment') {
+    let authorizedPayment;
+    try {
+      // UNVERIFIED (design-appendix Open Question 4 — BLOCKING): assumes
+      // data.id on this topic IS the authorized_payment id, re-fetched here.
+      // If MP sends the payment id directly instead, this re-fetch chain and
+      // handlePaymentSettlement's paymentId resolution both need correcting
+      // together.
+      authorizedPayment = await mpFetch(`/authorized_payments/${dataId}`);
+    } catch (err) {
+      return { status: 502, body: { error: 'mp_fetch_failed', detail: err?.message || String(err) } };
+    }
+
+    if (!authorizedPayment || authorizedPayment.status === undefined || authorizedPayment.status === null) {
+      return { status: 200, body: { outcome: 'ignored', reason: 'empty_authorized_payment_response' } };
+    }
+
+    if (authorizedPayment.status === 'processed') {
+      const nestedPaymentId = authorizedPayment.payment?.id;
+      if (nestedPaymentId === undefined || nestedPaymentId === null) {
+        return { status: 200, body: { outcome: 'ignored', reason: 'missing_nested_payment_id' } };
+      }
+      // "processed performs TWO writes in TWO transactions: ledger first
+      // (money is the priority), subscription second" (D-C). Their dedup
+      // keys are independent, so a crash between them self-heals on
+      // redelivery or the D-H sweep (PR 4).
+      const settlement = await handlePaymentSettlement(ctx, {
+        paymentId: String(nestedPaymentId),
+        preapprovalId: authorizedPayment.preapproval_id ?? null,
+      });
+      const lifecycle = await handleSubscriptionEvent(ctx, { resource: authorizedPayment, kind: 'authorized_payment' });
+      return { status: 200, body: { outcome: settlement.outcome, lifecycleOutcome: lifecycle.outcome } };
+    }
+
+    // 'rejected' -> payment_failed (no ledger write); 'scheduled'/'recycling'
+    // -> deriveSubscriptionEventKey returns null, handleSubscriptionEvent
+    // no-ops as 'ignored'.
+    const lifecycle = await handleSubscriptionEvent(ctx, { resource: authorizedPayment, kind: 'authorized_payment' });
+    return { status: 200, body: { outcome: lifecycle.outcome } };
+  }
+
+  if (topic === 'subscription_preapproval') {
+    let preapproval;
+    try {
+      preapproval = await mpFetch(`/preapproval/${dataId}`);
+    } catch (err) {
+      return { status: 502, body: { error: 'mp_fetch_failed', detail: err?.message || String(err) } };
+    }
+
+    if (!preapproval || preapproval.status === undefined || preapproval.status === null) {
+      return { status: 200, body: { outcome: 'ignored', reason: 'empty_preapproval_response' } };
+    }
+
+    const lifecycle = await handleSubscriptionEvent(ctx, { resource: preapproval, kind: 'preapproval' });
+    return { status: 200, body: { outcome: lifecycle.outcome } };
+  }
+
+  // Unrecognized topic (D-C "other" row): ack without further processing.
+  return { status: 200, body: { outcome: 'ignored', reason: 'unrecognized_topic' } };
 }

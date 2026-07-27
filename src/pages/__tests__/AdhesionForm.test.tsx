@@ -132,4 +132,48 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
       expect(mockToast).toHaveBeenCalledWith('Este DNI ya se encuentra afiliado a Medinex.', 'error');
     });
   });
+
+  it('creates an MP preapproval for débito automático after a successful submission, then still shows the success screen', async () => {
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-99' });
+    const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, initPoint: 'https://mp.test/init' })
+    } as Response);
+
+    const { container } = renderForm();
+    await advanceToSignatureStep(); // default payment method is 'debit'
+
+    fireEvent.click(screen.getByLabelText(/Autorizo el tratamiento de mis datos personales/i));
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    fireEvent.mouseDown(canvas);
+    fireEvent.mouseUp(canvas);
+
+    fireEvent.click(screen.getByRole('button', { name: /Enviar Solicitud/i }));
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion/preapproval', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ adhesionRequestId: 'adhesion-99' })
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
+  });
+
+  it('still shows the success screen when the MP preapproval creation fails (Resolved Decision #5)', async () => {
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-100' });
+    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: false }) } as Response);
+
+    const { container } = renderForm();
+    await advanceToSignatureStep();
+
+    fireEvent.click(screen.getByLabelText(/Autorizo el tratamiento de mis datos personales/i));
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    fireEvent.mouseDown(canvas);
+    fireEvent.mouseUp(canvas);
+
+    fireEvent.click(screen.getByRole('button', { name: /Enviar Solicitud/i }));
+
+    await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
+  });
 });
