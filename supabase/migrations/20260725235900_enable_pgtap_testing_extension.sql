@@ -1,0 +1,15 @@
+-- Migration: Enable pgTAP testing extension (pgTAP harness bootstrap)
+-- Description: `supabase/tests/` does not exist in this repo yet. This is the
+-- minimal infra needed for `supabase test db` / `pg_prove` to run pgTAP
+-- assertions (has_table, throws_ok, ok, is, finish, etc.) against the local
+-- database. pgTAP ships with the Supabase Postgres image but is not created
+-- by default. Deliberately a standalone migration, separate from the
+-- mercadopago-integration feature migration (20260726000000), because this
+-- is testing infrastructure, not a feature DB object — keeping it separate
+-- means the feature migration's rollback (Migration/Rollout inventory) never
+-- has to account for a test-only extension.
+--
+-- `extensions` schema already exists on the Supabase Postgres image (see
+-- config.toml `api.extra_search_path = ["public", "extensions"]`), so this
+-- follows the platform's own convention for where extensions are installed.
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
