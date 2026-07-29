@@ -173,13 +173,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         avgSessionMinutes: 0
     });
 
-    useEffect(() => {
-        const loadKPIs = async () => {
-            const kpis = await dashboardRepository.getDoctorKPIs(user.id, kpiTimeframe);
-            setDynamicKPIs(kpis);
-        };
-        loadKPIs();
-    }, [user.id, kpiTimeframe]);
+    // El useEffect individual de loadKPIs se elimina porque ahora se carga
+    // junto con el polling de la cola para mantener los números frescos.
 
     const location = useLocation();
 
@@ -197,11 +192,14 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     useEffect(() => {
         const fetchAppointments = async () => {
             try {
-                // Usar el nuevo Command Center View para la cola activa
-                const [queueData, allAppts] = await Promise.all([
+                // Usar el nuevo Command Center View para la cola activa, y traer KPIs al mismo tiempo
+                const [queueData, allAppts, kpis] = await Promise.all([
                     dashboardRepository.getDoctorQueue(user.id),
-                    appointmentRepository.getDoctorAppointments(user.id)
+                    appointmentRepository.getDoctorAppointments(user.id),
+                    dashboardRepository.getDoctorKPIs(user.id, kpiTimeframe)
                 ]);
+
+                setDynamicKPIs(kpis);
 
                 // Mapear la cola desde la vista
                 const mappedQueue = queueData.map(row => ({
@@ -293,7 +291,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             subscription.unsubscribe();
             supabase.removeChannel(channel);
         };
-    }, [user.id]);
+    }, [user.id, kpiTimeframe]);
 
     useEffect(() => {
         const fetchDetails = async () => {
