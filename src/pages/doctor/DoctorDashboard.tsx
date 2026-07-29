@@ -215,24 +215,26 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 }));
 
                 setQueueAppointments((prevQueue) => {
-                    // Si ya teníamos elementos en la cola (evitamos disparar en la carga inicial de la página),
-                    // detectamos si hay algún paciente recién ingresado a la sala de espera ('waiting')
+                    // Si ya teníamos elementos en la cola, detectamos si hay algún turno
+                    // recién confirmado que NO estaba confirmado en el ciclo anterior.
+                    // 'confirmed' es el estado real que indica que el paciente confirmó
+                    // su asistencia — 'waiting' no es un status válido en la DB.
                     if (prevQueue && prevQueue.length > 0) {
-                        const newlyWaiting = mappedQueue.find(newAppt => {
-                            if (newAppt.status !== 'waiting') return false;
-                            
-                            // Verificar si este turno ya estaba en espera en la cola anterior
-                            const wasWaiting = prevQueue.some(oldAppt => 
-                                oldAppt.id === newAppt.id && oldAppt.status === 'waiting'
+                        const newlyConfirmed = mappedQueue.find(newAppt => {
+                            if (newAppt.status !== 'confirmed') return false;
+
+                            // Verificar si este turno YA estaba confirmado antes (evitar re-disparar)
+                            const wasAlreadyConfirmed = prevQueue.some(oldAppt =>
+                                oldAppt.id === newAppt.id && oldAppt.status === 'confirmed'
                             );
-                            return !wasWaiting;
+                            return !wasAlreadyConfirmed;
                         });
 
-                        if (newlyWaiting) {
+                        if (newlyConfirmed) {
                             playArrivalSound();
                             setActiveArrivalAlert({
-                                patientName: newlyWaiting.patientName,
-                                appointmentId: newlyWaiting.id
+                                patientName: newlyConfirmed.patientName,
+                                appointmentId: newlyConfirmed.id
                             });
                         }
                     }
