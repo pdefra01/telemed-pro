@@ -13,6 +13,7 @@ import { doctorShiftRepository } from '../../repositories/DoctorShiftRepository'
 import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, Download, ExternalLink, History, FolderOpen, Pill } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { playArrivalSound } from '../../utils/audio';
 
 interface Props {
     user: Doctor;
@@ -39,6 +40,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [historyView, setHistoryView] = useState<'records' | 'documents'>('records');
     const [isFetchingPatientHistory, setIsFetchingPatientHistory] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [activeArrivalAlert, setActiveArrivalAlert] = useState<{ patientName: string; appointmentId: string } | null>(null);
     const [searchDni, setSearchDni] = useState('');
     const [isSearchingDni, setIsSearchingDni] = useState(false);
 
@@ -212,7 +214,30 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                     consultationMetadata: row.consultation_metadata || {},
                 }));
 
-                setQueueAppointments(mappedQueue);
+                setQueueAppointments((prevQueue) => {
+                    // Si ya teníamos elementos en la cola (evitamos disparar en la carga inicial de la página),
+                    // detectamos si hay algún paciente recién ingresado a la sala de espera ('waiting')
+                    if (prevQueue && prevQueue.length > 0) {
+                        const newlyWaiting = mappedQueue.find(newAppt => {
+                            if (newAppt.status !== 'waiting') return false;
+                            
+                            // Verificar si este turno ya estaba en espera en la cola anterior
+                            const wasWaiting = prevQueue.some(oldAppt => 
+                                oldAppt.id === newAppt.id && oldAppt.status === 'waiting'
+                            );
+                            return !wasWaiting;
+                        });
+
+                        if (newlyWaiting) {
+                            playArrivalSound();
+                            setActiveArrivalAlert({
+                                patientName: newlyWaiting.patientName,
+                                appointmentId: newlyWaiting.id
+                            });
+                        }
+                    }
+                    return mappedQueue;
+                });
                 setHistoryAppointments(allAppts.filter(a => a.status === 'completed'));
             } catch (error) {
                 console.error("Error cargando turnos:", error);
@@ -322,6 +347,61 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                         <button onClick={() => setToast(null)} className="ml-4 hover:scale-110 transition-transform">
                             <X size={16} />
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Patient Arrival Alert Banner */}
+            {activeArrivalAlert && (
+                <div className="fixed bottom-6 right-6 z-[200] max-w-md w-full animate-in fade-in slide-in-from-bottom-10 duration-500">
+                    <div className="bg-slate-900/90 backdrop-blur-2xl border border-emerald-500/40 rounded-3xl p-5 shadow-2xl shadow-emerald-950/20 relative overflow-hidden flex flex-col gap-4">
+                        {/* Glow decorativo de fondo */}
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                        
+                        <div className="flex items-start gap-4">
+                            {/* Radar y campana */}
+                            <div className="relative flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+                                <Zap size={22} className="animate-pulse" />
+                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                </span>
+                            </div>
+
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block">¡Paciente en sala de espera!</span>
+                                <h4 className="text-base font-bold text-white leading-tight">
+                                    {activeArrivalAlert.patientName}
+                                </h4>
+                                <p className="text-xs text-slate-400">
+                                    Acaba de ingresar a la sala de espera para su consulta programada.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-2 border-t border-white/5">
+                            <button
+                                onClick={() => {
+                                    // Seleccionar el turno correspondiente en la cola
+                                    const appt = queueAppointments.find(a => a.id === activeArrivalAlert.appointmentId);
+                                    if (appt) {
+                                        setSelectedAppointment(appt);
+                                        setSelectedPatientId(appt.patientId);
+                                    }
+                                    setActiveArrivalAlert(null);
+                                }}
+                                className="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                <span>Ver Ficha del Paciente</span>
+                                <ArrowRight size={14} />
+                            </button>
+                            <button
+                                onClick={() => setActiveArrivalAlert(null)}
+                                className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all border border-white/5 cursor-pointer"
+                            >
+                                Entendido
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

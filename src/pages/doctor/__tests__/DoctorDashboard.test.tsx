@@ -34,6 +34,11 @@ vi.mock('../../../repositories/PrescriptionRepository', () => ({
 vi.mock('../../../repositories/DashboardRepository', () => ({
   dashboardRepository: {
     getDoctorQueue: vi.fn().mockResolvedValue([]),
+    getDoctorKPIs: vi.fn().mockResolvedValue({
+      pendingConsultations: 0,
+      effectiveConsultations: 0,
+      avgSessionMinutes: 0
+    }),
   },
 }));
 
