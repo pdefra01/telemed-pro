@@ -7,6 +7,8 @@ import {
 import { supabase } from '../../services/supabase';
 import { invoiceRepository } from '../../repositories/InvoiceRepository';
 import { paymentSubscriptionRepository } from '../../repositories/PaymentSubscriptionRepository';
+import { affiliateRepository } from '../../repositories/AffiliateRepository';
+import { PdfService } from '../../services/PdfService';
 import { accountingService } from '../../services/AccountingService';
 import { billingService } from '../../services/BillingService';
 import { financialService } from '../../services/FinancialService';
@@ -121,6 +123,21 @@ const OCCBilling: React.FC = () => {
       console.error("Error loading invoices", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownloadPdf = async (e: React.MouseEvent, inv: Invoice) => {
+    e.stopPropagation();
+    try {
+      let patientData: any = { name: 'Consumidor Final', dni: '', email: '' };
+      if (inv.entityType === 'affiliate') {
+        const p = await affiliateRepository.getById(inv.entityId);
+        if (p) patientData = p;
+      }
+      await PdfService.generateReceiptPDF(inv, patientData);
+    } catch (error) {
+      console.error('Error generating PDF', error);
+      alert('Error generando PDF');
     }
   };
 
@@ -537,7 +554,10 @@ const OCCBilling: React.FC = () => {
                       </td>
                       <td className="py-4 text-right">
                         <div className="flex justify-end space-x-2">
-                          <button className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors">
+                          <button 
+                            onClick={(e) => handleDownloadPdf(e, inv)}
+                            className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors"
+                          >
                             <Download size={14} />
                           </button>
                           <button 

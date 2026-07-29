@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, Edit2, Trash2, AlertCircle, Shield, User as UserIcon,
   Building2, Filter, Key, ShieldCheck, Mail, Phone, MapPin,
-  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw
+  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw, FileText
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../../repositories/AffiliateRepository';
 import { adhesionRepository, AdhesionRequest } from '../../repositories/AdhesionRepository';
+import { AffiliateLedgerModal } from './AffiliateLedgerModal';
 import { planRepository } from '../../repositories/PlanRepository';
 import { Patient, Plan } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
@@ -38,6 +39,8 @@ const Affiliates: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [resetPasswordPatient, setResetPasswordPatient] = useState<Patient | null>(null);
+  // Ledger state
+  const [selectedLedgerPatient, setSelectedLedgerPatient] = useState<string | null>(null);
   // Mapa patientId -> coverageActive, poblado tras cargar el padrón. Ausencia
   // de entrada (no `false`) significa "todavía no verificado" — nunca se
   // asume vencida sin haber leído el estado real.
@@ -476,6 +479,13 @@ const Affiliates: React.FC = () => {
                         >
                           <Edit2 size={16} />
                         </button>
+                        <button
+                          onClick={() => setSelectedLedgerPatient(patient.id)}
+                          className="p-2 bg-white/5 hover:bg-indigo-500/20 text-indigo-400 rounded-xl transition-colors border border-white/5"
+                          title="Ver Cuenta Corriente"
+                        >
+                          <FileText size={16} />
+                        </button>
                         {shouldShowRenewCoverage(patient, coverageActiveMap) && (
                           <button
                             onClick={() => handleRenewCoverage(patient)}
@@ -819,6 +829,13 @@ const Affiliates: React.FC = () => {
           onClose={() => setResetPasswordPatient(null)}
         />
       )}
+
+      {/* Ledger Modal */}
+      <AffiliateLedgerModal 
+        isOpen={!!selectedLedgerPatient} 
+        onClose={() => setSelectedLedgerPatient(null)} 
+        patientId={selectedLedgerPatient || ''} 
+      />
 
       {/* View Adhesion Request Detail Modal */}
       {selectedRequest && (

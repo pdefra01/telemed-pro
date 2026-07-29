@@ -21,6 +21,14 @@ export interface PostBillingChargeParams {
   externalRef: string;
 }
 
+export interface PostManualAdjustmentParams {
+  entityId: string;
+  amount: number;
+  type: 'payment' | 'adjustment' | 'charge';
+  externalRef: string;
+  source: string;
+}
+
 export interface PostPaymentMovementParams {
   invoiceId: string;
   entityId: string;
@@ -95,6 +103,23 @@ export class AccountMovementRepository {
       p_period: params.period,
       p_amount: params.amount,
       p_external_ref: params.externalRef,
+    });
+
+    if (error) throw error;
+    return this.mapMovement(data);
+  }
+
+  /**
+   * Idempotent manual adjustment/payment posting for a direct affiliate
+   * without linking to a specific invoice.
+   */
+  async postManualAdjustment(params: PostManualAdjustmentParams): Promise<AccountMovement> {
+    const { data, error } = await supabase.rpc('post_manual_adjustment', {
+      p_entity_id: params.entityId,
+      p_amount: params.amount,
+      p_type: params.type,
+      p_external_ref: params.externalRef,
+      p_source: params.source,
     });
 
     if (error) throw error;

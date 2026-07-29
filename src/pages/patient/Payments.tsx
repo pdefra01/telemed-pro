@@ -6,6 +6,7 @@ import { Patient, Invoice } from '../../types';
 import { supabase } from '../../services/supabase';
 import { accountMovementRepository, AccountMovement } from '../../repositories/AccountMovementRepository';
 import { invoiceRepository } from '../../repositories/InvoiceRepository';
+import { PdfService } from '../../services/PdfService';
 
 interface PaymentsProps {
     user: Patient;
@@ -322,9 +323,9 @@ const Payments: React.FC<PaymentsProps> = ({ user }) => {
                                         {isPayment && (
                                             <Button
                                                 variant="ghost"
-                                                onClick={() => receiptUrl && window.open(receiptUrl, '_blank')}
-                                                disabled={!receiptUrl}
-                                                title={receiptUrl ? 'Descargar comprobante' : 'Comprobante no disponible'}
+                                                onClick={() => linkedInvoice && PdfService.generateReceiptPDF(linkedInvoice, user)}
+                                                disabled={!linkedInvoice}
+                                                title={linkedInvoice ? 'Descargar comprobante' : 'Comprobante no disponible'}
                                                 className="w-10 sm:w-12 h-10 sm:h-12 p-0 bg-white/5 hover:bg-emerald-500 hover:text-white rounded-lg sm:rounded-xl border border-white/5 transition-all group-hover:scale-110 flex-shrink-0"
                                                 icon={<Download size={16} />}
                                             />
