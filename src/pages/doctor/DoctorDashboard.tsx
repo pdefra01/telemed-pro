@@ -247,6 +247,15 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         };
         fetchAppointments();
 
+        // Polling fallback cada 30s: garantiza que la cola se sincronice aunque
+        // Supabase Realtime no dispare (ej: tabla 'appointments' fuera de la
+        // publicación supabase_realtime, o evento de cancelación del paciente
+        // que no llega al canal del médico).
+        const pollingInterval = setInterval(() => {
+            console.log('[DoctorDashboard] Polling fallback: refrescando cola...');
+            fetchAppointments();
+        }, 30_000);
+
         // Suscripción a notificaciones en tiempo real
         const subscription = notificationRepository.subscribeToNotifications(user.id, (notif) => {
             console.log("Nueva notificación recibida:", notif);
@@ -256,21 +265,26 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             }
         });
 
-        // Suscripción en tiempo real a la tabla de appointments
+        // Suscripción en tiempo real a la tabla de appointments.
+        // Canal nombrado con user.id para evitar colisiones si varios médicos
+        // tienen el dashboard abierto simultáneamente.
         const channel = supabase
-            .channel('doctor-dashboard-appointments')
+            .channel(`doctor-dashboard-${user.id}`)
             .on('postgres_changes', { 
                 event: '*', 
                 schema: 'public', 
                 table: 'appointments',
                 filter: `doctor_id=eq.${user.id}`
             }, () => {
-                console.log("Cambio detectado en appointments local, refrescando cola...");
+                console.log('Cambio detectado en appointments, refrescando cola...');
                 fetchAppointments();
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log(`[DoctorDashboard] Realtime channel status: ${status}`);
+            });
 
         return () => {
+            clearInterval(pollingInterval);
             subscription.unsubscribe();
             supabase.removeChannel(channel);
         };
