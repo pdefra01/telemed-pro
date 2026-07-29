@@ -39,6 +39,7 @@ RUN npm install --omit=dev
 # Copy the built frontend and the server code
 COPY --from=builder /app/dist ./dist
 COPY server.js ./
+COPY server ./server
 
 # Set environment to production
 ENV NODE_ENV=production
