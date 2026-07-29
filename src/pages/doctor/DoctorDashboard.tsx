@@ -92,6 +92,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     // Ref para saber si la primera carga ya ocurrió — evita disparar alertas
     // en el fetch inicial (cuando prevQueue todavía es el array vacío del estado).
     const isInitialLoadRef = React.useRef(true);
+    const prevQueueRef = React.useRef<Appointment[]>([]);
 
     const [activeShift, setActiveShift] = useState<DoctorWorkShift | null>(null);
     const [shiftDurationText, setShiftDurationText] = useState('00h 00m 00s');
@@ -218,36 +219,30 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                     consultationMetadata: row.consultation_metadata || {},
                 }));
 
-                setQueueAppointments((prevQueue) => {
-                    // Saltear la primera carga para no disparar alertas con los turnos
-                    // que ya existían cuando el médico abrió el dashboard.
-                    // isInitialLoadRef se mantiene en true hasta que este bloque corre
-                    // por primera vez; a partir del segundo fetch (polling o realtime)
-                    // ya detectamos diferencias reales.
-                    if (!isInitialLoadRef.current) {
-                        const newlyConfirmed = mappedQueue.find(newAppt => {
-                            if (newAppt.status !== 'confirmed') return false;
+                // Lógica de alerta movida fuera del updater (debe ser pura en React)
+                if (!isInitialLoadRef.current) {
+                    const newlyConfirmed = mappedQueue.find(newAppt => {
+                        if (newAppt.status !== 'confirmed') return false;
 
-                            // El turno es "nuevo para el médico" si no existía antes
-                            // en la cola O si existía pero con otro status.
-                            const wasAlreadyConfirmed = prevQueue.some(oldAppt =>
-                                oldAppt.id === newAppt.id && oldAppt.status === 'confirmed'
-                            );
-                            return !wasAlreadyConfirmed;
+                        const wasAlreadyConfirmed = prevQueueRef.current.some(oldAppt =>
+                            oldAppt.id === newAppt.id && oldAppt.status === 'confirmed'
+                        );
+                        return !wasAlreadyConfirmed;
+                    });
+
+                    if (newlyConfirmed) {
+                        playArrivalSound();
+                        setActiveArrivalAlert({
+                            patientName: newlyConfirmed.patientName,
+                            appointmentId: newlyConfirmed.id
                         });
-
-                        if (newlyConfirmed) {
-                            playArrivalSound();
-                            setActiveArrivalAlert({
-                                patientName: newlyConfirmed.patientName,
-                                appointmentId: newlyConfirmed.id
-                            });
-                        }
-                    } else {
-                        isInitialLoadRef.current = false;
                     }
-                    return mappedQueue;
-                });
+                } else {
+                    isInitialLoadRef.current = false;
+                }
+                
+                prevQueueRef.current = mappedQueue;
+                setQueueAppointments(mappedQueue);
                 setHistoryAppointments(allAppts.filter(a => a.status === 'completed'));
             } catch (error) {
                 console.error("Error cargando turnos:", error);
