@@ -89,6 +89,10 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         }
     };
 
+    // Ref para saber si la primera carga ya ocurrió — evita disparar alertas
+    // en el fetch inicial (cuando prevQueue todavía es el array vacío del estado).
+    const isInitialLoadRef = React.useRef(true);
+
     const [activeShift, setActiveShift] = useState<DoctorWorkShift | null>(null);
     const [shiftDurationText, setShiftDurationText] = useState('00h 00m 00s');
     const [isShiftLoading, setIsShiftLoading] = useState(false);
@@ -215,15 +219,17 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 }));
 
                 setQueueAppointments((prevQueue) => {
-                    // Si ya teníamos elementos en la cola, detectamos si hay algún turno
-                    // recién confirmado que NO estaba confirmado en el ciclo anterior.
-                    // 'confirmed' es el estado real que indica que el paciente confirmó
-                    // su asistencia — 'waiting' no es un status válido en la DB.
-                    if (prevQueue && prevQueue.length > 0) {
+                    // Saltear la primera carga para no disparar alertas con los turnos
+                    // que ya existían cuando el médico abrió el dashboard.
+                    // isInitialLoadRef se mantiene en true hasta que este bloque corre
+                    // por primera vez; a partir del segundo fetch (polling o realtime)
+                    // ya detectamos diferencias reales.
+                    if (!isInitialLoadRef.current) {
                         const newlyConfirmed = mappedQueue.find(newAppt => {
                             if (newAppt.status !== 'confirmed') return false;
 
-                            // Verificar si este turno YA estaba confirmado antes (evitar re-disparar)
+                            // El turno es "nuevo para el médico" si no existía antes
+                            // en la cola O si existía pero con otro status.
                             const wasAlreadyConfirmed = prevQueue.some(oldAppt =>
                                 oldAppt.id === newAppt.id && oldAppt.status === 'confirmed'
                             );
@@ -237,6 +243,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 appointmentId: newlyConfirmed.id
                             });
                         }
+                    } else {
+                        isInitialLoadRef.current = false;
                     }
                     return mappedQueue;
                 });
