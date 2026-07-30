@@ -65,9 +65,9 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
       setAmount('');
       setShowForm(false);
       await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error posting manual adjustment:', error);
-      alert('Hubo un error al registrar el movimiento.');
+      alert(`Hubo un error al registrar el movimiento: ${error?.message || JSON.stringify(error)}`);
     } finally {
       setIsSubmitting(false);
     }
