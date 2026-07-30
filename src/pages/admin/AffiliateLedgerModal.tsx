@@ -3,6 +3,7 @@ import { X, RefreshCw, Plus, ArrowUpRight, ArrowDownRight, Activity } from 'luci
 import { accountMovementRepository, AccountMovement } from '../../repositories/AccountMovementRepository';
 import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { Patient } from '../../types';
+import { supabase } from '../../services/supabase';
 
 interface AffiliateLedgerModalProps {
   isOpen: boolean;
@@ -34,8 +35,23 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const p = await affiliateRepository.getById(patientId);
-      setPatient(p as Patient);
+      const { data: p, error: pErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', patientId)
+        .single();
+      
+      if (pErr) throw pErr;
+      
+      const mappedPatient = {
+        id: p.id,
+        name: p.full_name,
+        dni: p.dni,
+        planName: p.plan_name,
+        email: p.email
+      } as any;
+
+      setPatient(mappedPatient);
 
       const bal = await accountMovementRepository.getBalance(patientId);
       setBalance(bal);
