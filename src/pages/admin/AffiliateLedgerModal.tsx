@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, Plus, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
+import { X, RefreshCw, Plus, ArrowUpRight, ArrowDownRight, Activity, AlertCircle, FileText } from 'lucide-react';
 import { accountMovementRepository, AccountMovement } from '../../repositories/AccountMovementRepository';
 import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { Patient } from '../../types';
 import { supabase } from '../../services/supabase';
 import { PdfService } from '../../services/PdfService';
-import { FileText } from 'lucide-react';
+
+/** Punto de venta. Centralizado aquí para no dispersarlo en UI y PDFs. */
+export const RECEIPT_POS_PREFIX = '0001';
 
 interface AffiliateLedgerModalProps {
   isOpen: boolean;
@@ -25,6 +27,7 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
   const [type, setType] = useState<'payment' | 'adjustment' | 'charge'>('payment');
   const [source, setSource] = useState('Efectivo / Manual');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && patientId) {
@@ -76,6 +79,7 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
     }
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await accountMovementRepository.postManualAdjustment({
         entityId: patientId,
@@ -89,7 +93,7 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
       await loadData();
     } catch (error: any) {
       console.error('Error posting manual adjustment:', error);
-      alert(`Hubo un error al registrar el movimiento: ${error?.message || JSON.stringify(error)}`);
+      setSubmitError(error?.message || 'Error al registrar el movimiento.');
     } finally {
       setIsSubmitting(false);
     }
@@ -161,7 +165,7 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
                       <label className="block text-xs font-bold text-slate-400 mb-1">Tipo</label>
                       <select 
                         value={type} 
-                        onChange={(e: any) => setType(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setType(e.target.value as 'payment' | 'adjustment' | 'charge')}
                         className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500"
                       >
                         <option value="payment">Pago (Acredita saldo)</option>
@@ -202,6 +206,12 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
                       </button>
                     </div>
                   </form>
+                  {submitError && (
+                    <div className="mt-3 flex items-center gap-2 text-rose-400 text-sm bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-2">
+                      <AlertCircle size={15} className="flex-shrink-0" />
+                      <span>{submitError}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -247,7 +257,7 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
                               <div className="text-slate-500 font-mono mt-0.5 max-w-[150px] truncate" title={mov.externalRef || ''}>
                                 {mov.invoiceId 
                                   ? `Factura: ${mov.invoiceId.split('-')[0]}` 
-                                  : (mov.receiptNumber ? `Recibo 0001-${String(mov.receiptNumber).padStart(8, '0')}` : mov.externalRef)}
+                                  : (mov.receiptNumber ? `Recibo ${RECEIPT_POS_PREFIX}-${String(mov.receiptNumber).padStart(8, '0')}` : mov.externalRef)}
                               </div>
                             </td>
                             <td className={`px-6 py-4 text-sm font-bold text-right ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>

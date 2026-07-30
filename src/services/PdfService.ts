@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Invoice, Patient } from '../types';
 import logoMedinex from '../logo_medinex.jpeg';
+import { RECEIPT_POS_PREFIX } from '../pages/admin/AffiliateLedgerModal';
 
 export const PdfService = {
     /**
@@ -78,7 +79,7 @@ export const PdfService = {
         doc.setFontSize(10);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
         const displayNum = invoice.invoiceNumber 
-            ? `0001-${String(invoice.invoiceNumber).padStart(8, '0')}` 
+            ? `${RECEIPT_POS_PREFIX}-${String(invoice.invoiceNumber).padStart(8, '0')}` 
             : invoice.id.split('-')[0].toUpperCase();
 
         doc.text(`N° de Comprobante: ${displayNum}`, 130, 72);
@@ -222,7 +223,7 @@ export const PdfService = {
         doc.setFontSize(10);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
         const receiptNumberStr = movement.receiptNumber 
-            ? `0001-${String(movement.receiptNumber).padStart(8, '0')}`
+            ? `${RECEIPT_POS_PREFIX}-${String(movement.receiptNumber).padStart(8, '0')}`
             : (movement.id ? movement.id.split('-')[0].toUpperCase() : 'MANUAL');
 
         doc.text(`N° de Comprobante: ${receiptNumberStr}`, 130, 72);
