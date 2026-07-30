@@ -4,6 +4,8 @@ import { accountMovementRepository, AccountMovement } from '../../repositories/A
 import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { Patient } from '../../types';
 import { supabase } from '../../services/supabase';
+import { PdfService } from '../../services/PdfService';
+import { FileText } from 'lucide-react';
 
 interface AffiliateLedgerModalProps {
   isOpen: boolean;
@@ -212,12 +214,13 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
                       <th className="px-6 py-4">Concepto</th>
                       <th className="px-6 py-4">Ref / Factura</th>
                       <th className="px-6 py-4 text-right">Monto</th>
+                      <th className="px-6 py-4 text-right">Recibo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {movements.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-6 py-10 text-center text-slate-500 italic">
+                        <td colSpan={5} className="px-6 py-10 text-center text-slate-500 italic">
                           No hay movimientos registrados.
                         </td>
                       </tr>
@@ -247,6 +250,17 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
                             </td>
                             <td className={`px-6 py-4 text-sm font-bold text-right ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {isCredit ? '+' : '-'}${mov.amount.toLocaleString()}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              {isCredit && patient && (
+                                <button
+                                  onClick={() => PdfService.generateMovementReceiptPDF(mov, patient)}
+                                  className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5"
+                                  title="Descargar Recibo"
+                                >
+                                  <FileText size={16} />
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );

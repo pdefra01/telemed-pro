@@ -131,8 +131,18 @@ const OCCBilling: React.FC = () => {
     try {
       let patientData: any = { name: 'Consumidor Final', dni: '', email: '' };
       if (inv.entityType === 'affiliate') {
-        const p = await affiliateRepository.getById(inv.entityId);
-        if (p) patientData = p;
+        const { data: p } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', inv.entityId)
+          .single();
+        if (p) {
+          patientData = {
+            name: p.full_name,
+            dni: p.dni,
+            email: p.email
+          };
+        }
       }
       await PdfService.generateReceiptPDF(inv, patientData);
     } catch (error) {

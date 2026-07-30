@@ -29,9 +29,9 @@ export const PdfService = {
         });
 
         // Colors
-        const primaryColor = [16, 185, 129]; // Emerald 500
-        const darkColor = [15, 23, 42]; // Slate 900
-        const grayColor = [100, 116, 139]; // Slate 500
+        const primaryColor: [number, number, number] = [16, 185, 129]; // Emerald 500
+        const darkColor: [number, number, number] = [15, 23, 42]; // Slate 900
+        const grayColor: [number, number, number] = [100, 116, 139]; // Slate 500
 
         try {
             // Load Logo
@@ -68,7 +68,7 @@ export const PdfService = {
         doc.text('Facturar a:', 14, 65);
         doc.setFontSize(10);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-        doc.text(`Paciente: ${patient.name || patient.full_name || 'Consumidor Final'}`, 14, 72);
+        doc.text(`Paciente: ${patient.name || 'Consumidor Final'}`, 14, 72);
         doc.text(`DNI: ${patient.dni || 'No provisto'}`, 14, 77);
         doc.text(`Email: ${patient.email || ''}`, 14, 82);
 
@@ -156,5 +156,130 @@ export const PdfService = {
 
         // Save
         doc.save(`Recibo_TelemedPro_${invoice.period}_${patient.dni || 'Paciente'}.pdf`);
+    },
+
+    /**
+     * Generates and downloads a PDF receipt for a manual payment/movement.
+     */
+    generateMovementReceiptPDF: async (movement: any, patient: Patient) => {
+        // Create new PDF document
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        // Colors
+        const primaryColor: [number, number, number] = [16, 185, 129]; // Emerald 500
+        const darkColor: [number, number, number] = [15, 23, 42]; // Slate 900
+        const grayColor: [number, number, number] = [100, 116, 139]; // Slate 500
+
+        try {
+            // Load Logo
+            const logo = await PdfService.loadImage(logoMedinex);
+            // Draw logo
+            doc.addImage(logo, 'JPEG', 14, 15, 30, 30);
+        } catch (error) {
+            console.warn('Could not load logo for PDF', error);
+            doc.setFontSize(22);
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.text('Medinex', 14, 25);
+        }
+
+        // Header - Company Info
+        doc.setFontSize(20);
+        doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+        doc.text('RECIBO DE PAGO', 130, 25);
+
+        doc.setFontSize(10);
+        doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+        doc.text('Telemed-Pro by Medinex', 130, 32);
+        doc.text('Av. Corrientes 1234, CABA', 130, 37);
+        doc.text('CUIT: 30-12345678-9', 130, 42);
+        doc.text('contacto@medinex.com.ar', 130, 47);
+
+        // Divider
+        doc.setDrawColor(226, 232, 240); // Slate 200
+        doc.line(14, 55, 196, 55);
+
+        // Patient Info & Receipt Meta
+        doc.setFontSize(12);
+        doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+        doc.text('Recibí de:', 14, 65);
+        doc.setFontSize(10);
+        doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+        doc.text(`Paciente: ${patient.name || 'Consumidor Final'}`, 14, 72);
+        doc.text(`DNI: ${patient.dni || 'No provisto'}`, 14, 77);
+        doc.text(`Email: ${patient.email || ''}`, 14, 82);
+
+        doc.setFontSize(12);
+        doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+        doc.text('Detalles del Recibo:', 130, 65);
+        doc.setFontSize(10);
+        doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+        doc.text(`N° de Comprobante: ${movement.id ? movement.id.split('-')[0].toUpperCase() : 'MANUAL'}`, 130, 72);
+        doc.text(`Fecha: ${new Date(movement.createdAt).toLocaleDateString()}`, 130, 77);
+        doc.text(`Forma de Pago: ${movement.source || 'Efectivo/Manual'}`, 130, 82);
+
+        // Table
+        const tableBody = [
+            [
+                movement.type === 'payment' ? 'Pago a cuenta / Cobro' : 'Ajuste de saldo',
+                '1',
+                `$${movement.amount.toLocaleString()}`,
+                `$${movement.amount.toLocaleString()}`
+            ]
+        ];
+
+        autoTable(doc, {
+            startY: 100,
+            head: [['Descripción', 'Cant.', 'Precio Unit.', 'Subtotal']],
+            body: tableBody,
+            theme: 'plain',
+            headStyles: {
+                fillColor: [248, 250, 252], // Slate 50
+                textColor: darkColor,
+                fontStyle: 'bold',
+                lineWidth: 0.1,
+                lineColor: [226, 232, 240], // Slate 200
+            },
+            bodyStyles: {
+                textColor: grayColor,
+                lineWidth: 0.1,
+                lineColor: [226, 232, 240], // Slate 200
+            },
+            alternateRowStyles: {
+                fillColor: [255, 255, 255]
+            },
+            columnStyles: {
+                0: { cellWidth: 90 },
+                1: { cellWidth: 20, halign: 'center' },
+                2: { cellWidth: 35, halign: 'right' },
+                3: { cellWidth: 35, halign: 'right' },
+            }
+        });
+
+        // Totals
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        
+        doc.setFontSize(10);
+        doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+        doc.text('Total Pagado:', 130, finalY);
+        
+        doc.setFontSize(14);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`$${movement.amount.toLocaleString()}`, 180, finalY, { align: 'right' });
+
+        // Footer
+        const pageHeight = doc.internal.pageSize.height;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(148, 163, 184); // Slate 400
+        doc.text('Este documento es un comprobante de pago no válido como factura.', 105, pageHeight - 20, { align: 'center' });
+        doc.text('Gracias por elegir Telemed-Pro by Medinex.', 105, pageHeight - 15, { align: 'center' });
+
+        // Download
+        doc.save(`Recibo_Medinex_${patient.dni || 'Paciente'}_${new Date().getTime()}.pdf`);
     }
 };
