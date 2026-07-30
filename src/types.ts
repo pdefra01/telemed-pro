@@ -181,16 +181,17 @@ export interface TaxConfiguration {
 
 export interface Invoice {
   id: string;
-  entityType: 'affiliate' | 'agreement';
+  entityType: 'affiliate' | 'agreement' | 'producer';
   entityId: string;
   period: string;
   netAmount: number;
   taxAmount: number;
   totalAmount: number;
-  taxDetails?: any[];
-  status: 'issued' | 'paid' | 'cancelled';
+  taxDetails?: Record<string, any>;
+  status: 'draft' | 'issued' | 'paid' | 'void';
   pdfUrl?: string;
   createdAt: string;
+  invoiceNumber?: number;
 }
 
 export interface OperatingExpense {

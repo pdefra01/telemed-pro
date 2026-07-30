@@ -23,6 +23,7 @@ function mapRowToInvoice(row: any): Invoice {
     status: row.status,
     pdfUrl: row.pdf_url ?? undefined,
     createdAt: row.created_at,
+    invoiceNumber: row.invoice_number,
   };
 }
 

@@ -245,7 +245,9 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
                             <td className="px-6 py-4 text-xs">
                               <div className="text-slate-300">{mov.source || 'Sistema'}</div>
                               <div className="text-slate-500 font-mono mt-0.5 max-w-[150px] truncate" title={mov.externalRef || ''}>
-                                {mov.invoiceId ? `Factura: ${mov.invoiceId.split('-')[0]}` : mov.externalRef}
+                                {mov.invoiceId 
+                                  ? `Factura: ${mov.invoiceId.split('-')[0]}` 
+                                  : (mov.receiptNumber ? `Recibo 0001-${String(mov.receiptNumber).padStart(8, '0')}` : mov.externalRef)}
                               </div>
                             </td>
                             <td className={`px-6 py-4 text-sm font-bold text-right ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>

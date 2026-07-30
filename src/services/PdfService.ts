@@ -77,7 +77,11 @@ export const PdfService = {
         doc.text('Detalles del Recibo:', 130, 65);
         doc.setFontSize(10);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-        doc.text(`N° de Comprobante: ${invoice.id.split('-')[0].toUpperCase()}`, 130, 72);
+        const displayNum = invoice.invoiceNumber 
+            ? `0001-${String(invoice.invoiceNumber).padStart(8, '0')}` 
+            : invoice.id.split('-')[0].toUpperCase();
+
+        doc.text(`N° de Comprobante: ${displayNum}`, 130, 72);
         doc.text(`Fecha de Emisión: ${new Date(invoice.createdAt).toLocaleDateString()}`, 130, 77);
         doc.text(`Período de Cobertura: ${invoice.period}`, 130, 82);
         doc.text(`Estado: ${invoice.status === 'paid' ? 'PAGADO' : invoice.status.toUpperCase()}`, 130, 87);
@@ -217,7 +221,11 @@ export const PdfService = {
         doc.text('Detalles del Recibo:', 130, 65);
         doc.setFontSize(10);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-        doc.text(`N° de Comprobante: ${movement.id ? movement.id.split('-')[0].toUpperCase() : 'MANUAL'}`, 130, 72);
+        const receiptNumberStr = movement.receiptNumber 
+            ? `0001-${String(movement.receiptNumber).padStart(8, '0')}`
+            : (movement.id ? movement.id.split('-')[0].toUpperCase() : 'MANUAL');
+
+        doc.text(`N° de Comprobante: ${receiptNumberStr}`, 130, 72);
         doc.text(`Fecha: ${new Date(movement.createdAt).toLocaleDateString()}`, 130, 77);
         doc.text(`Forma de Pago: ${movement.source || 'Efectivo/Manual'}`, 130, 82);
 

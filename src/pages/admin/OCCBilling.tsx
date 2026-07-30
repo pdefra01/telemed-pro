@@ -529,7 +529,9 @@ const OCCBilling: React.FC = () => {
                             <FileText size={16} />
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-white uppercase">{inv.id.substring(0, 8)}</p>
+                            <p className="text-xs font-bold text-white uppercase">
+                              {inv.invoiceNumber ? `0001-${String(inv.invoiceNumber).padStart(8, '0')}` : inv.id.substring(0, 8)}
+                            </p>
                             <p className="text-[10px] text-slate-500">{new Date(inv.createdAt).toLocaleDateString()}</p>
                           </div>
                         </div>

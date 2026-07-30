@@ -12,6 +12,7 @@ export interface AccountMovement {
   invoiceId: string | null;
   source: string | null;
   createdAt: string;
+  receiptNumber?: number;
 }
 
 export interface PostBillingChargeParams {
@@ -156,6 +157,7 @@ export class AccountMovementRepository {
       invoiceId: row.invoice_id,
       source: row.source,
       createdAt: row.created_at,
+      receiptNumber: row.receipt_number,
     };
   }
 }
