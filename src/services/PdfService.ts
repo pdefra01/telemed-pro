@@ -34,18 +34,12 @@ export const PdfService = {
         const darkColor: [number, number, number] = [15, 23, 42]; // Slate 900
         const grayColor: [number, number, number] = [100, 116, 139]; // Slate 500
 
-        try {
-            // Load Logo
-            const logo = await PdfService.loadImage(logoMedinex);
-            // Draw logo (adjust width/height based on aspect ratio, approx 40x40)
-            doc.addImage(logo, 'JPEG', 14, 15, 30, 30);
-        } catch (error) {
-            console.warn('Could not load logo for PDF', error);
-            // Fallback: draw text if logo fails
-            doc.setFontSize(22);
-            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-            doc.text('Medinex', 14, 25);
-        }
+        // Company name as text header (replace logo area)
+        doc.setFontSize(22);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.setFont('helvetica', 'bold');
+        doc.text('CRISAS SAS', 14, 25);
+        doc.setFont('helvetica', 'normal');
 
         // Header - Company Info
         doc.setFontSize(20);
@@ -54,10 +48,9 @@ export const PdfService = {
 
         doc.setFontSize(10);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-        doc.text('Telemed-Pro by Medinex', 130, 32);
-        doc.text('Av. Corrientes 1234, CABA', 130, 37);
-        doc.text('CUIT: 30-12345678-9', 130, 42);
-        doc.text('contacto@medinex.com.ar', 130, 47);
+        doc.text('CRISAS SAS', 130, 32);
+        doc.text('Alvarado, Cerrillos, Salta', 130, 37);
+        doc.text('CUIT: 30-71937706-4', 130, 42);
 
         // Divider
         doc.setDrawColor(226, 232, 240); // Slate 200
@@ -157,10 +150,10 @@ export const PdfService = {
         doc.setFontSize(8);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
         doc.text('Este documento es un comprobante de pago generado electrónicamente.', 105, 280, { align: 'center' });
-        doc.text('Medinex Telemedicina - Todos los derechos reservados.', 105, 285, { align: 'center' });
+        doc.text('CRISAS SAS — Todos los derechos reservados.', 105, 285, { align: 'center' });
 
         // Save
-        doc.save(`Recibo_TelemedPro_${invoice.period}_${patient.dni || 'Paciente'}.pdf`);
+        doc.save(`Recibo_CRISAS_${invoice.period}_${patient.dni || 'Paciente'}.pdf`);
     },
 
     /**
@@ -179,17 +172,12 @@ export const PdfService = {
         const darkColor: [number, number, number] = [15, 23, 42]; // Slate 900
         const grayColor: [number, number, number] = [100, 116, 139]; // Slate 500
 
-        try {
-            // Load Logo
-            const logo = await PdfService.loadImage(logoMedinex);
-            // Draw logo
-            doc.addImage(logo, 'JPEG', 14, 15, 30, 30);
-        } catch (error) {
-            console.warn('Could not load logo for PDF', error);
-            doc.setFontSize(22);
-            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-            doc.text('Medinex', 14, 25);
-        }
+        // Company name as text header (replace logo area)
+        doc.setFontSize(22);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.setFont('helvetica', 'bold');
+        doc.text('CRISAS SAS', 14, 25);
+        doc.setFont('helvetica', 'normal');
 
         // Header - Company Info
         doc.setFontSize(20);
@@ -198,10 +186,9 @@ export const PdfService = {
 
         doc.setFontSize(10);
         doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-        doc.text('Telemed-Pro by Medinex', 130, 32);
-        doc.text('Av. Corrientes 1234, CABA', 130, 37);
-        doc.text('CUIT: 30-12345678-9', 130, 42);
-        doc.text('contacto@medinex.com.ar', 130, 47);
+        doc.text('CRISAS SAS', 130, 32);
+        doc.text('Alvarado, Cerrillos, Salta', 130, 37);
+        doc.text('CUIT: 30-71937706-4', 130, 42);
 
         // Divider
         doc.setDrawColor(226, 232, 240); // Slate 200
@@ -286,9 +273,9 @@ export const PdfService = {
         doc.setFontSize(9);
         doc.setTextColor(148, 163, 184); // Slate 400
         doc.text('Este documento es un comprobante de pago no válido como factura.', 105, pageHeight - 20, { align: 'center' });
-        doc.text('Gracias por elegir Telemed-Pro by Medinex.', 105, pageHeight - 15, { align: 'center' });
+        doc.text('CRISAS SAS — Cerrillos, Salta.', 105, pageHeight - 15, { align: 'center' });
 
         // Download
-        doc.save(`Recibo_Medinex_${patient.dni || 'Paciente'}_${new Date().getTime()}.pdf`);
+        doc.save(`Recibo_CRISAS_${patient.dni || 'Paciente'}_${new Date().getTime()}.pdf`);
     }
 };
