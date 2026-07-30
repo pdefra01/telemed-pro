@@ -89,6 +89,9 @@ export const AdhesionForm: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
 
+  // MP Preapproval link for debit subscriptions
+  const [mpInitPoint, setMpInitPoint] = useState<string | null>(null);
+
   // Countdown timer para el reenvío de OTP
   useEffect(() => {
     if (countdown > 0) {
@@ -384,6 +387,8 @@ export const AdhesionForm: React.FC = () => {
           const preapprovalResult = await preapprovalRes.json().catch(() => ({ ok: false }));
           if (!preapprovalResult.ok) {
             console.warn('[AdhesionForm] No se pudo crear la suscripción de débito automático en Mercado Pago; la solicitud continúa.');
+          } else if (preapprovalResult.initPoint) {
+            setMpInitPoint(preapprovalResult.initPoint);
           }
         } catch (mpError) {
           console.warn('[AdhesionForm] Error al contactar el servicio de Mercado Pago; la solicitud continúa.', mpError);
@@ -1241,6 +1246,24 @@ export const AdhesionForm: React.FC = () => {
                 <li>Podrás descargar la App de <strong>MEDINEX</strong> y loguearte directamente usando tu DNI (<span className="text-white font-bold">{titular.dni}</span>) como usuario y contraseña temporal.</li>
               </ol>
             </div>
+
+            {mpInitPoint && (
+              <div className="mb-8">
+                <a
+                  href={mpInitPoint}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-[#009ee3] hover:bg-[#0089c7] text-white font-bold py-4 px-8 rounded-2xl transition-all inline-flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,158,227,0.25)] active:scale-95 cursor-pointer w-full max-w-sm"
+                >
+                  <svg viewBox="0 0 452 355" fill="none" className="w-6 h-6 mr-1" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M129.563 325.326L48.2435 244.02C40.9419 236.717 40.9419 224.877 48.2435 217.574L199.167 66.6631C206.469 59.3615 218.31 59.3615 225.612 66.6631L332.617 173.668V21.4392C332.617 11.1176 340.985 2.75 351.306 2.75H433.311C443.633 2.75 452.001 11.1176 452.001 21.4392V333.684C452.001 344 443.633 352.368 433.311 352.368H351.306C340.985 352.368 332.617 344 332.617 333.684V202.973L254.918 280.672C247.617 287.973 235.776 287.973 228.474 280.672L129.563 325.326Z" fill="white"/>
+                    <path d="M128.272 322.956L18.6892 213.373C3.5975 198.281 3.5975 173.813 18.6892 158.721L156.401 21.0093C171.493 5.91761 195.961 5.91761 211.053 21.0093L235.534 45.49L128.272 322.956Z" fill="white"/>
+                  </svg>
+                  Adherir Tarjeta en Mercado Pago
+                </a>
+                <p className="text-slate-500 text-[10px] mt-3">Serás redirigido a la plataforma segura de Mercado Pago.</p>
+              </div>
+            )}
 
             <button 
               onClick={() => {
