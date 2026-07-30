@@ -51,7 +51,11 @@ export const AffiliateLedgerModal: React.FC<AffiliateLedgerModalProps> = ({ isOp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
+    console.log('handleSubmit triggered with amount:', amount);
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      console.log('Invalid amount, returning early');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
