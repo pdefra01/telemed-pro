@@ -30,6 +30,34 @@ app.use(express.json({ limit: '10kb' }));
 // Mirrored by EMAIL_VERIFICATION_REQUIRED in src/pages/AdhesionForm.tsx — flip both together.
 const EMAIL_VERIFICATION_REQUIRED = false;
 
+/**
+ * Returns an ISO 8601 timestamp for the next occurrence of the given day-of-month
+ * in America/Argentina/Buenos_Aires (UTC-3, no DST).
+ * If today IS the billing day, we still advance to next month so the affiliate
+ * gets a full cycle before the first charge.
+ * @param {number} billingDay - day of month (1-28) to charge (e.g. 10)
+ * @returns {string} e.g. "2026-08-10T00:00:00.000-03:00"
+ */
+function nextBillingDate(billingDay) {
+  const now = new Date();
+  // Work in UTC-3 (Argentina, no DST)
+  const offsetMs = -3 * 60 * 60 * 1000;
+  const localNow = new Date(now.getTime() + offsetMs);
+  let year = localNow.getUTCFullYear();
+  let month = localNow.getUTCMonth(); // 0-indexed
+  const today = localNow.getUTCDate();
+
+  // Advance to next month if today >= billingDay (give the affiliate a full first cycle)
+  if (today >= billingDay) {
+    month += 1;
+    if (month > 11) { month = 0; year += 1; }
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${year}-${pad(month + 1)}-${pad(billingDay)}T00:00:00.000-03:00`;
+}
+
+
 // Health check endpoint for Coolify
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime() });
@@ -298,6 +326,7 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
             frequency_type: 'months',
             transaction_amount: discountedMonthlyCost,
             currency_id: 'ARS',
+            start_date: nextBillingDate(10),
           },
           status: 'pending',
         }),
@@ -444,6 +473,7 @@ async function createAndFinalizeSubscription(req, res, reservationId) {
           frequency_type: 'months',
           transaction_amount: discountedMonthlyCost,
           currency_id: 'ARS',
+          start_date: nextBillingDate(10),
         },
         status: 'pending',
       }),
