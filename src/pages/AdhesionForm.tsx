@@ -14,6 +14,14 @@ import logoMedinex from '../logo_medinex.jpeg';
 // Mirrored by EMAIL_VERIFICATION_REQUIRED in server.js — flip both together.
 const EMAIL_VERIFICATION_REQUIRED = false;
 
+const PROVINCIAS_ARGENTINA = [
+  'Buenos Aires', 'Ciudad Autónoma de Buenos Aires', 'Catamarca', 'Chaco',
+  'Chubut', 'Córdoba', 'Corrientes', 'Entre Ríos', 'Formosa', 'Jujuy',
+  'La Pampa', 'La Rioja', 'Mendoza', 'Misiones', 'Neuquén', 'Río Negro',
+  'Salta', 'San Juan', 'San Luis', 'Santa Cruz', 'Santa Fe',
+  'Santiago del Estero', 'Tierra del Fuego', 'Tucumán'
+];
+
 // Glass Container for Step Card
 const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl ${className}`}>
@@ -576,14 +584,15 @@ export const AdhesionForm: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Provincia *</label>
-                  <input 
-                    type="text" 
-                    placeholder="Salta"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                  <select 
+                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
                     value={titular.province}
                     onChange={(e) => setTitular({ ...titular, province: e.target.value })}
-                    required
-                  />
+                  >
+                    {PROVINCIAS_ARGENTINA.map(prov => (
+                      <option key={prov} value={prov}>{prov}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Ciudad *</label>
