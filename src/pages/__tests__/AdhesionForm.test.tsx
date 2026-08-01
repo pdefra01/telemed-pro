@@ -5,10 +5,18 @@ import { MemoryRouter } from 'react-router-dom';
 import { AdhesionForm } from '../AdhesionForm';
 import { adhesionRepository } from '../../repositories/AdhesionRepository';
 
-// Mock AdhesionRepository
+// Mock AdhesionRepository and PlanRepository
 vi.mock('../../repositories/AdhesionRepository', () => ({
   adhesionRepository: {
     submitApplication: vi.fn()
+  }
+}));
+
+vi.mock('../../repositories/PlanRepository', () => ({
+  planRepository: {
+    getAll: vi.fn().mockResolvedValue([
+      { id: 'plan-1', name: 'Plan Familiar Medinex', monthlyCost: 25000, bonifiedConsultations: 6, isUnlimited: false, maxFamilyMembers: 4, isDefault: true, paidMonths: 1, bonusMonths: 0 }
+    ])
   }
 }));
 

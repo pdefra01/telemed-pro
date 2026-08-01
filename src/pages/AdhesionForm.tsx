@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { adhesionRepository, AdhesionRequest } from '../repositories/AdhesionRepository';
+import { planRepository } from '../repositories/PlanRepository';
+import { Plan } from '../types';
 import logoMedinex from '../logo_medinex.jpeg';
 
 // Toggle to suspend email OTP verification without removing the feature.
@@ -44,6 +46,32 @@ export const AdhesionForm: React.FC = () => {
     civilStatus: 'Soltero/a',
     healthInsurance: '',
   });
+
+  const [activePlan, setActivePlan] = useState<Plan | null>(null);
+
+  useEffect(() => {
+    const loadPlan = async () => {
+      try {
+        const plans = await planRepository.getAll();
+        const defaultOrMedinex = plans.find(p => p.isDefault) || plans.find(p => p.name === 'Plan Familiar Medinex') || plans[0];
+        if (defaultOrMedinex) {
+          setActivePlan(defaultOrMedinex);
+        }
+      } catch (err) {
+        console.warn("Could not load plans dynamically from DB, using fallback values", err);
+      }
+    };
+    loadPlan();
+  }, []);
+
+  const baseMonthlyCost = activePlan ? activePlan.monthlyCost : 25000;
+  const maxFamilyMembersCount = activePlan ? activePlan.maxFamilyMembers : 4;
+  const planDisplayName = activePlan ? activePlan.name : 'Plan Familiar Medinex';
+  const debitMonthlyCost = Math.round(baseMonthlyCost * 0.8);
+  const prepaid6TotalCost = debitMonthlyCost * 6;
+  const prepaid12TotalCost = debitMonthlyCost * 12;
+
+  const formatCurrency = (val: number) => `$${val.toLocaleString('es-AR')}`;
 
   const [plan, setPlan] = useState({
     type: 'Plan Familiar Medinex',
@@ -259,8 +287,8 @@ export const AdhesionForm: React.FC = () => {
       return;
     }
 
-    if (familyMembers.length >= 4) {
-      toast("El Plan Familiar incluye hasta 4 integrantes adicionales al titular", "warning");
+    if (familyMembers.length >= maxFamilyMembersCount) {
+      toast(`El ${planDisplayName} incluye hasta ${maxFamilyMembersCount} integrantes adicionales al titular`, "warning");
       return;
     }
 
@@ -689,18 +717,18 @@ export const AdhesionForm: React.FC = () => {
               </div>
               <h2 className="text-3xl font-bold tracking-tight text-white">2. Plan Familiar y Forma de Pago</h2>
             </div>
-            <p className="text-slate-400 text-sm mb-8">El Plan Familiar MEDINEX cubre al titular y hasta 4 integrantes convivientes adicionales.</p>
+            <p className="text-slate-400 text-sm mb-8">El {planDisplayName} cubre al titular y hasta {maxFamilyMembersCount} integrantes convivientes adicionales.</p>
 
             {/* Plan Info Card */}
             <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/20 rounded-3xl p-6 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]">
               <div>
-                <span className="text-[10px] uppercase font-bold px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PLAN FAMILIAR MEDINEX</span>
+                <span className="text-[10px] uppercase font-bold px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{planDisplayName.toUpperCase()}</span>
                 <h3 className="text-xl font-bold text-white mt-3">Cobertura Completa Familiar</h3>
-                <p className="text-slate-400 text-sm mt-1 max-w-md">Incluye hasta 5 integrantes convivientes en total (titular + 4 adicionales) con acceso a videoconsultas ilimitadas y recetas digitales.</p>
+                <p className="text-slate-400 text-sm mt-1 max-w-md">Incluye hasta {maxFamilyMembersCount + 1} integrantes convivientes en total (titular + {maxFamilyMembersCount} adicionales) con acceso a videoconsultas ilimitadas y recetas digitales.</p>
               </div>
               <div className="text-left md:text-right">
                 <p className="text-xs text-slate-400 font-medium">Valor Estándar</p>
-                <h4 className="text-3xl font-extrabold text-white">$50.000<span className="text-sm font-medium text-slate-400">/ mes</span></h4>
+                <h4 className="text-3xl font-extrabold text-white">{formatCurrency(baseMonthlyCost)}<span className="text-sm font-medium text-slate-400">/ mes</span></h4>
               </div>
             </div>
 
@@ -722,7 +750,7 @@ export const AdhesionForm: React.FC = () => {
                 </div>
                 <div className="mt-6 flex justify-between items-end">
                   <span className="text-xs text-slate-500 font-semibold">Mensual</span>
-                  <span className="text-xl font-bold text-white">$50.000</span>
+                  <span className="text-xl font-bold text-white">{formatCurrency(baseMonthlyCost)}</span>
                 </div>
               </div>
 
@@ -745,7 +773,7 @@ export const AdhesionForm: React.FC = () => {
                 </div>
                 <div className="mt-6 flex justify-between items-end">
                   <span className="text-xs text-emerald-400 font-semibold">20% Descuento</span>
-                  <span className="text-xl font-bold text-white">$40.000 <span className="text-xs font-normal text-slate-400">/ mes</span></span>
+                  <span className="text-xl font-bold text-white">{formatCurrency(debitMonthlyCost)} <span className="text-xs font-normal text-slate-400">/ mes</span></span>
                 </div>
               </div>
 
@@ -764,7 +792,7 @@ export const AdhesionForm: React.FC = () => {
                 </div>
                 <div className="mt-6 flex justify-between items-end">
                   <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">7 Meses Cobertura</span>
-                  <span className="text-xl font-bold text-white">$240.000 <span className="text-xs font-normal text-slate-500">único</span></span>
+                  <span className="text-xl font-bold text-white">{formatCurrency(prepaid6TotalCost)} <span className="text-xs font-normal text-slate-500">único</span></span>
                 </div>
               </div>
 
@@ -783,7 +811,7 @@ export const AdhesionForm: React.FC = () => {
                 </div>
                 <div className="mt-6 flex justify-between items-end">
                   <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">14 Meses Cobertura</span>
-                  <span className="text-xl font-bold text-white">$480.000 <span className="text-xs font-normal text-slate-500">único</span></span>
+                  <span className="text-xl font-bold text-white">{formatCurrency(prepaid12TotalCost)} <span className="text-xs font-normal text-slate-500">único</span></span>
                 </div>
               </div>
             </div>
