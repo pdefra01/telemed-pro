@@ -9,6 +9,8 @@ export interface AdhesionRequest {
   titular_cuil?: string;
   titular_birth_date: string;
   titular_address: string;
+  titular_province?: string;
+  titular_city?: string;
   titular_locality: string;
   titular_neighborhood: string;
   titular_email: string;

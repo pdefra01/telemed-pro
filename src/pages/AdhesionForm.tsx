@@ -39,8 +39,10 @@ export const AdhesionForm: React.FC = () => {
     cuil: '',
     birthDate: '',
     address: '',
-    locality: '',
-    neighborhood: '',
+    province: 'Salta',
+    city: 'Salta',
+    locality: 'Salta',
+    neighborhood: 'Centro',
     email: '',
     phone: '',
     civilStatus: 'Soltero/a',
@@ -326,7 +328,7 @@ export const AdhesionForm: React.FC = () => {
   const handleNextStep = () => {
     // Validations
     if (step === 1) {
-      if (!titular.firstName || !titular.lastName || !titular.dni || !titular.cuil || !titular.birthDate || !titular.address || !titular.locality || !titular.neighborhood || !titular.email || !titular.phone) {
+      if (!titular.firstName || !titular.lastName || !titular.dni || !titular.cuil || !titular.birthDate || !titular.address || !titular.province || !titular.city || !titular.neighborhood || !titular.email || !titular.phone) {
         toast("Por favor completá todos los campos obligatorios del titular", "warning");
         return;
       }
@@ -376,7 +378,9 @@ export const AdhesionForm: React.FC = () => {
         titular_cuil: titular.cuil,
         titular_birth_date: titular.birthDate,
         titular_address: titular.address,
-        titular_locality: titular.locality,
+        titular_province: titular.province,
+        titular_city: titular.city,
+        titular_locality: titular.city || titular.locality,
         titular_neighborhood: titular.neighborhood,
         titular_email: titular.email,
         titular_phone: titular.phone,
@@ -569,15 +573,26 @@ export const AdhesionForm: React.FC = () => {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Localidad *</label>
+                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Provincia *</label>
                   <input 
                     type="text" 
-                    placeholder="Rosario"
+                    placeholder="Salta"
                     className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
-                    value={titular.locality}
-                    onChange={(e) => setTitular({ ...titular, locality: e.target.value })}
+                    value={titular.province}
+                    onChange={(e) => setTitular({ ...titular, province: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Ciudad *</label>
+                  <input 
+                    type="text" 
+                    placeholder="Salta"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                    value={titular.city}
+                    onChange={(e) => setTitular({ ...titular, city: e.target.value, locality: e.target.value })}
                     required
                   />
                 </div>
