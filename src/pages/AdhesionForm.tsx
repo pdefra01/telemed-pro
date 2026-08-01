@@ -85,6 +85,56 @@ export const AdhesionForm: React.FC = () => {
   });
 
   const [activePlan, setActivePlan] = useState<Plan | null>(null);
+  const [availableCities, setAvailableCities] = useState<string[]>(CIUDADES_POR_PROVINCIA['Salta'] || []);
+  const [isLoadingCities, setIsLoadingCities] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCitiesFromGeoref = async () => {
+      if (!titular.province) return;
+      setIsLoadingCities(true);
+      try {
+        const res = await fetch(`https://apis.datos.gob.ar/georef/api/localidades?provincia=${encodeURIComponent(titular.province)}&max=1000&orden=nombre`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.localidades && Array.isArray(data.localidades) && data.localidades.length > 0) {
+            const cityNames = Array.from(new Set(data.localidades.map((loc: any) => loc.nombre.trim()))).sort() as string[];
+            if (isMounted && cityNames.length > 0) {
+              setAvailableCities(cityNames);
+              setTitular(prev => {
+                if (!cityNames.includes(prev.city)) {
+                  const defaultCity = cityNames[0];
+                  return { ...prev, city: defaultCity, locality: defaultCity };
+                }
+                return prev;
+              });
+              setIsLoadingCities(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Georef AR API unavailable, using local dictionary fallback", err);
+      }
+
+      if (isMounted) {
+        const fallbackList = CIUDADES_POR_PROVINCIA[titular.province] || [titular.province];
+        setAvailableCities(fallbackList);
+        setTitular(prev => {
+          if (!fallbackList.includes(prev.city)) {
+            const defaultCity = fallbackList[0];
+            return { ...prev, city: defaultCity, locality: defaultCity };
+          }
+          return prev;
+        });
+        setIsLoadingCities(false);
+      }
+    };
+
+    fetchCitiesFromGeoref();
+
+    return () => { isMounted = false; };
+  }, [titular.province]);
 
   useEffect(() => {
     const loadPlan = async () => {
@@ -632,13 +682,16 @@ export const AdhesionForm: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Ciudad *</label>
+                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">
+                    Ciudad * {isLoadingCities && <span className="text-emerald-400 font-normal text-[10px] lowercase">(cargando...)</span>}
+                  </label>
                   <select
-                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors disabled:opacity-50"
                     value={titular.city}
                     onChange={(e) => setTitular({ ...titular, city: e.target.value, locality: e.target.value })}
+                    disabled={isLoadingCities}
                   >
-                    {(CIUDADES_POR_PROVINCIA[titular.province] || [titular.city || 'Salta']).map(ciudad => (
+                    {(availableCities.length > 0 ? availableCities : [titular.city || 'Salta']).map(ciudad => (
                       <option key={ciudad} value={ciudad}>{ciudad}</option>
                     ))}
                   </select>
