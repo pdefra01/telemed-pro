@@ -114,6 +114,8 @@ export class AdhesionRepository {
         titular_cuil: data.titular_cuil || null,
         titular_birth_date: data.titular_birth_date,
         titular_address: data.titular_address,
+        titular_province: data.titular_province || null,
+        titular_city: data.titular_city || null,
         titular_locality: data.titular_locality,
         titular_neighborhood: data.titular_neighborhood,
         titular_email: data.titular_email,
