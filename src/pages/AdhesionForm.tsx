@@ -22,6 +22,33 @@ const PROVINCIAS_ARGENTINA = [
   'Santiago del Estero', 'Tierra del Fuego', 'Tucumán'
 ];
 
+const CIUDADES_POR_PROVINCIA: Record<string, string[]> = {
+  'Salta': ['Salta', 'San Ramón de la Nueva Orán', 'Tartagal', 'Cafayate', 'Metán', 'Rosario de la Frontera', 'General Güemes', 'Embarcación', 'Pichanal', 'Joaquín V. González'],
+  'Buenos Aires': ['La Plata', 'Mar del Plata', 'Bahía Blanca', 'Tandil', 'Quilmes', 'Lomas de Zamora', 'Lanús', 'San Isidro', 'Vicente López', 'Tigre', 'Avellaneda', 'Moreno', 'Merlo', 'Morón', 'Pilar', 'Escobar', 'San Martín', 'Olavarría', 'Pergamino', 'Junín', 'Necochea'],
+  'Ciudad Autónoma de Buenos Aires': ['CABA'],
+  'Catamarca': ['San Fernando del Valle de Catamarca', 'Andalgalá', 'Tinogasta', 'Belén', 'Recreo', 'Santa María'],
+  'Chaco': ['Resistencia', 'Sáenz Peña', 'Villa Ángela', 'Charata', 'General San Martín', 'Castelli'],
+  'Chubut': ['Rawson', 'Comodoro Rivadavia', 'Trelew', 'Puerto Madryn', 'Esquel', 'Rada Tilly'],
+  'Córdoba': ['Córdoba', 'Río Cuarto', 'Villa María', 'Carlos Paz', 'San Francisco', 'Alta Gracia', 'Río Tercero', 'Bell Ville'],
+  'Corrientes': ['Corrientes', 'Goya', 'Paso de los Libres', 'Curuzú Cuatiá', 'Mercedes', 'Bella Vista'],
+  'Entre Ríos': ['Paraná', 'Concordia', 'Gualeguaychú', 'Concepción del Uruguay', 'Gualeguay', 'Villaguay'],
+  'Formosa': ['Formosa', 'Clorinda', 'Pirané', 'El Colorado'],
+  'Jujuy': ['San Salvador de Jujuy', 'Palpalá', 'San Pedro', 'Libertador General San Martín', 'Tilcara', 'Humahuaca'],
+  'La Pampa': ['Santa Rosa', 'General Pico', 'Toay', 'General Acha'],
+  'La Rioja': ['La Rioja', 'Chilecito', 'Aimogasta', 'Chamical'],
+  'Mendoza': ['Mendoza', 'San Rafael', 'Godoy Cruz', 'Guaymallén', 'Las Heras', 'Maipú', 'Luján de Cuyo', 'San Martín'],
+  'Misiones': ['Posadas', 'Oberá', 'Eldorado', 'Puerto Iguazú', 'Apóstoles'],
+  'Neuquén': ['Neuquén', 'San Martín de los Andes', 'Villa La Angostura', 'Cutral Có', 'Plottier', 'Zapala'],
+  'Río Negro': ['Viedma', 'San Carlos de Bariloche', 'General Roca', 'Cipolletti', 'Villa Regina'],
+  'San Juan': ['San Juan', 'Rawson', 'Chimbas', 'Rivadavia', 'Pocito', 'Caucete'],
+  'San Luis': ['San Luis', 'Villa Mercedes', 'Merlo'],
+  'Santa Cruz': ['Río Gallegos', 'Caleta Olivia', 'El Calafate', 'Puerto Deseado', 'Pico Truncado'],
+  'Santa Fe': ['Rosario', 'Santa Fe', 'Rafaela', 'Venado Tuerto', 'Reconquista', 'Santo Tomé', 'Villa Gobernador Gálvez'],
+  'Santiago del Estero': ['Santiago del Estero', 'La Banda', 'Termas de Río Hondo', 'Añatuya'],
+  'Tierra del Fuego': ['Ushuaia', 'Río Grande', 'Tolhuin'],
+  'Tucumán': ['San Miguel de Tucumán', 'Yerba Buena', 'Tafí Viejo', 'Concepción', 'Banda del Río Salí', 'Aguilares']
+};
+
 // Glass Container for Step Card
 const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl ${className}`}>
@@ -587,7 +614,17 @@ export const AdhesionForm: React.FC = () => {
                   <select 
                     className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
                     value={titular.province}
-                    onChange={(e) => setTitular({ ...titular, province: e.target.value })}
+                    onChange={(e) => {
+                      const selectedProv = e.target.value;
+                      const cities = CIUDADES_POR_PROVINCIA[selectedProv] || [];
+                      const firstCity = cities.length > 0 ? cities[0] : selectedProv;
+                      setTitular(prev => ({
+                        ...prev,
+                        province: selectedProv,
+                        city: firstCity,
+                        locality: firstCity
+                      }));
+                    }}
                   >
                     {PROVINCIAS_ARGENTINA.map(prov => (
                       <option key={prov} value={prov}>{prov}</option>
@@ -596,14 +633,15 @@ export const AdhesionForm: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Ciudad *</label>
-                  <input 
-                    type="text" 
-                    placeholder="Salta"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                  <select
+                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
                     value={titular.city}
                     onChange={(e) => setTitular({ ...titular, city: e.target.value, locality: e.target.value })}
-                    required
-                  />
+                  >
+                    {(CIUDADES_POR_PROVINCIA[titular.province] || [titular.city || 'Salta']).map(ciudad => (
+                      <option key={ciudad} value={ciudad}>{ciudad}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Barrio *</label>

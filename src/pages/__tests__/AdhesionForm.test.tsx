@@ -40,12 +40,10 @@ const fillTitularStep1 = (options?: { skipCuil?: boolean; cuilValue?: string }) 
   const birthDateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
   fireEvent.change(birthDateInput, { target: { value: '1990-01-01' } });
   fireEvent.change(screen.getByPlaceholderText('Ej: Av. Belgrano 1234, Piso 2 A'), { target: { value: 'Calle Falsa 123' } });
-  const saltaInputs = screen.getAllByPlaceholderText('Salta');
-  if (saltaInputs.length > 0) {
-    fireEvent.change(saltaInputs[0], { target: { value: 'Salta' } });
-    if (saltaInputs.length > 1) {
-      fireEvent.change(saltaInputs[1], { target: { value: 'Salta' } });
-    }
+  const selects = document.querySelectorAll('select');
+  if (selects.length >= 3) {
+    fireEvent.change(selects[1], { target: { value: 'Salta' } });
+    fireEvent.change(selects[2], { target: { value: 'Salta' } });
   }
   fireEvent.change(screen.getByPlaceholderText('Centro'), { target: { value: 'Centro' } });
   fireEvent.change(screen.getByPlaceholderText('nombre@ejemplo.com'), { target: { value: 'juan@test.com' } });
