@@ -11,8 +11,8 @@ import { Plan } from '../types';
 import logoMedinex from '../logo_medinex.jpeg';
 
 // Toggle to suspend email OTP verification without removing the feature.
-// Mirrored by EMAIL_VERIFICATION_REQUIRED in server.js — flip both together.
-const EMAIL_VERIFICATION_REQUIRED = false;
+// Default false for dev/tests; enable via VITE_EMAIL_VERIFICATION_REQUIRED=true env var.
+const EMAIL_VERIFICATION_REQUIRED = import.meta.env.VITE_EMAIL_VERIFICATION_REQUIRED === 'true';
 
 const PROVINCIAS_ARGENTINA = [
   'Buenos Aires', 'Ciudad Autónoma de Buenos Aires', 'Catamarca', 'Chaco',

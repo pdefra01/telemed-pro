@@ -425,7 +425,9 @@ export async function handlePaymentSettlement(ctx, { paymentId, preapprovalId = 
       mp_resource_id: mpResourceId,
       mp_status: payment.status,
       outcome: 'not_approved',
-      resolution_state: TERMINAL_REJECTED_PAYMENT_STATUSES.includes(payment.status) ? 'final' : 'pending',
+      resolution_state: (payment.status === 'refunded' || payment.status === 'charged_back')
+        ? 'needs_admin'
+        : TERMINAL_REJECTED_PAYMENT_STATUSES.includes(payment.status) ? 'final' : 'pending',
       detail: null,
       invoice_id: null,
       profile_id: null,
