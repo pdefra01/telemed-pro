@@ -1,23 +1,33 @@
 schema: spec-driven
 
 context: |
-  Tech stack: React 19, TypeScript, Vite, Supabase, LiveKit, Tailwind CSS 4
-  Architecture: Clean Architecture (Repositories, Services), Pages/Components
-  Testing: Vitest, React Testing Library
+  Tech stack: React 19, TypeScript ~5.8, Vite 6, Tailwind CSS 4, Express 5 (server.js), Supabase, LiveKit, Zod
+  Architecture: Clean Architecture (Repositories in src/repositories, Services in src/services), Pages/Components
+  Testing: Vitest, React Testing Library, Playwright (E2E)
   Style: standard, lucide-react icons
 
 strict_tdd: true
 
+testing:
+  runner: vitest
+  command: npm run test
+  coverage: npx vitest run --coverage
+  typecheck: npx tsc --noEmit
+  layers:
+    unit: vitest
+    integration: vitest + @testing-library/react
+    e2e: playwright
+
 rules:
   proposal:
-    - Identify affected repositories or services
+    - Identify affected repositories, services, or server endpoints
   specs:
     - Use Given/When/Then format for scenarios
   design:
-    - Document architectural boundaries (UI -> Repository -> Supabase)
+    - Document architectural boundaries (UI -> Service -> Repository -> Supabase / Server API)
   tasks:
-    - Separate logic testing from UI testing tasks
+    - Separate logic/repository testing from UI component testing tasks
   apply:
-    - Write tests FIRST (TDD)
+    - Write tests FIRST (TDD) before implementation code
   verify:
-    - Ensure all unit tests pass
+    - Ensure all unit and integration tests pass cleanly

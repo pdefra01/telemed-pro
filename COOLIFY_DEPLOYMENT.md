@@ -42,6 +42,8 @@ Configurar estas variables en la sección **Environment Variables** de Coolify p
 | `SUPABASE_SERVICE_ROLE_KEY` | Clave secreta administrativa (Service Role) | `eyJhbGciOi...` |
 | `LIVEKIT_API_KEY` | Clave API de LiveKit para firmar tokens | `APIxxxxxx` |
 | `LIVEKIT_API_SECRET` | Clave secreta API de LiveKit | `secretxxxxxx` |
+| `MERCADOPAGO_ACCESS_TOKEN` | Token de acceso de producción para Mercado Pago | `APP_USR-...` |
+| `MERCADOPAGO_WEBHOOK_SECRET` | Secreto para verificar firmas de webhooks | `...` |
 
 ---
 

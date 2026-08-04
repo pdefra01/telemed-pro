@@ -33,6 +33,7 @@ export interface AdhesionRequest {
   status?: 'pending' | 'approved' | 'rejected';
   promoter_id?: string;
   email_verified?: boolean;
+  preferred_billing_day?: number;
   created_at?: string;
 }
 
@@ -137,7 +138,8 @@ export class AdhesionRepository {
         signature_base64: data.signature_base64,
         status: 'pending',
         promoter_id: data.promoter_id || null,
-        email_verified: data.email_verified || false
+        email_verified: data.email_verified || false,
+        preferred_billing_day: data.preferred_billing_day || 10
       });
 
     if (error) {

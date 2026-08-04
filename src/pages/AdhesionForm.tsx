@@ -7,6 +7,7 @@ import {
 import { useToast } from '../context/ToastContext';
 import { adhesionRepository, AdhesionRequest } from '../repositories/AdhesionRepository';
 import { planRepository } from '../repositories/PlanRepository';
+import { systemSettingsRepository } from '../repositories/SystemSettingsRepository';
 import { Plan } from '../types';
 import logoMedinex from '../logo_medinex.jpeg';
 
@@ -151,6 +152,27 @@ export const AdhesionForm: React.FC = () => {
     loadPlan();
   }, []);
 
+  const [availableBillingDays, setAvailableBillingDays] = useState<number[]>([1, 10]);
+
+  useEffect(() => {
+    const fetchBillingDays = async () => {
+      try {
+        const days = await systemSettingsRepository.getByKey('debit_billing_days');
+        if (Array.isArray(days) && days.length > 0) {
+          const sorted = days.sort((a: number, b: number) => a - b);
+          setAvailableBillingDays(sorted);
+          setPlan(prev => ({
+            ...prev,
+            preferredBillingDay: sorted.includes(prev.preferredBillingDay) ? prev.preferredBillingDay : sorted[0]
+          }));
+        }
+      } catch (err) {
+        console.warn("Could not load debit_billing_days from settings, using default [1, 10]", err);
+      }
+    };
+    fetchBillingDays();
+  }, []);
+
   const baseMonthlyCost = activePlan ? activePlan.monthlyCost : 25000;
   const maxFamilyMembersCount = activePlan ? activePlan.maxFamilyMembers : 4;
   const planDisplayName = activePlan ? activePlan.name : 'Plan Familiar Medinex';
@@ -164,6 +186,7 @@ export const AdhesionForm: React.FC = () => {
     type: 'Plan Familiar Medinex',
     paymentMethod: 'debit', // 'monthly' | 'debit' | 'prepaid_6' | 'prepaid_12'
     paymentDetail: 'Tarjeta de Crédito',
+    preferredBillingDay: 10, // 1 | 10
   });
 
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
@@ -477,6 +500,7 @@ export const AdhesionForm: React.FC = () => {
         plan_type: plan.type,
         payment_method: plan.paymentMethod,
         payment_detail: plan.paymentDetail,
+        preferred_billing_day: plan.preferredBillingDay,
         family_members: familyMembers,
         medical_history: medical.history,
         medical_history_other: medical.historyOther,
@@ -941,19 +965,35 @@ export const AdhesionForm: React.FC = () => {
 
             {/* Payment Details Input */}
             {plan.paymentMethod === 'debit' && (
-              <div className="mb-8 animate-in fade-in duration-300">
-                <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Marca / Tarjeta de Débito Automático</label>
-                <select 
-                  className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
-                  value={plan.paymentDetail}
-                  onChange={(e) => setPlan({ ...plan, paymentDetail: e.target.value })}
-                >
-                  <option value="Tarjeta de Crédito Visa">Tarjeta de Crédito Visa</option>
-                  <option value="Tarjeta de Crédito MasterCard">Tarjeta de Crédito MasterCard</option>
-                  <option value="Tarjeta de Crédito American Express">Tarjeta de Crédito American Express</option>
-                  <option value="Tarjeta de Débito Visa Débito">Tarjeta de Débito Visa Débito</option>
-                  <option value="Tarjeta de Débito Maestro">Tarjeta de Débito Maestro</option>
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-in fade-in duration-300">
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Marca / Tarjeta de Débito Automático</label>
+                  <select 
+                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                    value={plan.paymentDetail}
+                    onChange={(e) => setPlan({ ...plan, paymentDetail: e.target.value })}
+                  >
+                    <option value="Tarjeta de Crédito Visa">Tarjeta de Crédito Visa</option>
+                    <option value="Tarjeta de Crédito MasterCard">Tarjeta de Crédito MasterCard</option>
+                    <option value="Tarjeta de Crédito American Express">Tarjeta de Crédito American Express</option>
+                    <option value="Tarjeta de Débito Visa Débito">Tarjeta de Débito Visa Débito</option>
+                    <option value="Tarjeta de Débito Maestro">Tarjeta de Débito Maestro</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Día de Débito Mensual Preferido</label>
+                  <select 
+                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                    value={plan.preferredBillingDay}
+                    onChange={(e) => setPlan({ ...plan, preferredBillingDay: Number(e.target.value) })}
+                  >
+                    {availableBillingDays.map(day => (
+                      <option key={day} value={day}>
+                        Día {day} de cada mes {day === 10 ? '(Recomendado)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
 

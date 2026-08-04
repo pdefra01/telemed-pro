@@ -455,6 +455,7 @@ export interface PaymentSubscription {
   discountThroughPeriod: string | null; // 'YYYY-MM'
   lastFailureAt: string | null;
   failureCount: number;
+  billingDay?: number;
   createdAt: string;
   updatedAt: string;
   /** Only populated by queries that embed a `profiles` join (e.g. getFailedDebits). */

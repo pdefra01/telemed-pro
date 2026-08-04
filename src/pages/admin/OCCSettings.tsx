@@ -48,19 +48,27 @@ const OCCSettings: React.FC = () => {
   });
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
 
+  const [debitBillingDays, setDebitBillingDays] = useState<number[]>([1, 10]);
+  const [newBillingDayInput, setNewBillingDayInput] = useState<string>('');
+  const [isSavingDebitDays, setIsSavingDebitDays] = useState(false);
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [taxesData, policy, officesData, sessionPolicyData] = await Promise.all([
+        const [taxesData, policy, officesData, sessionPolicyData, debitDaysData] = await Promise.all([
           taxRepository.getAll(),
           systemSettingsRepository.getByKey('delinquency_policy'),
           officeLocationRepository.getAllOffices(),
-          systemSettingsRepository.getByKey('session_security_policy')
+          systemSettingsRepository.getByKey('session_security_policy'),
+          systemSettingsRepository.getByKey('debit_billing_days')
         ]);
         setTaxes(taxesData);
         if (policy) setDelinquencyPolicy(policy);
         setOffices(officesData);
         if (sessionPolicyData) setSessionPolicy(sessionPolicyData);
+        if (Array.isArray(debitDaysData) && debitDaysData.length > 0) {
+          setDebitBillingDays(debitDaysData.sort((a: number, b: number) => a - b));
+        }
       } catch (error) {
         console.error("Error loading settings", error);
       } finally {
@@ -83,6 +91,44 @@ const OCCSettings: React.FC = () => {
     } finally {
       setIsSavingPolicy(false);
     }
+  };
+
+  const handleSaveDebitBillingDays = async (updatedDays: number[]) => {
+    setIsSavingDebitDays(true);
+    try {
+      const sorted = [...updatedDays].sort((a, b) => a - b);
+      await systemSettingsRepository.update('debit_billing_days', sorted);
+      setDebitBillingDays(sorted);
+      toast("Días de débito automático actualizados correctamente", 'success');
+    } catch (error) {
+      toast("Error al actualizar días de débito", 'error');
+    } finally {
+      setIsSavingDebitDays(false);
+    }
+  };
+
+  const handleAddBillingDay = () => {
+    const day = parseInt(newBillingDayInput, 10);
+    if (isNaN(day) || day < 1 || day > 28) {
+      toast("Ingresá un día válido del 1 al 28", 'error');
+      return;
+    }
+    if (debitBillingDays.includes(day)) {
+      toast("Ese día ya está en la lista de opciones", 'error');
+      return;
+    }
+    const updated = [...debitBillingDays, day].sort((a, b) => a - b);
+    setNewBillingDayInput('');
+    handleSaveDebitBillingDays(updated);
+  };
+
+  const handleRemoveBillingDay = (dayToRemove: number) => {
+    if (debitBillingDays.length <= 1) {
+      toast("Debe haber al menos 1 día de débito configurado", 'error');
+      return;
+    }
+    const updated = debitBillingDays.filter(d => d !== dayToRemove);
+    handleSaveDebitBillingDays(updated);
   };
 
   const handleUseCurrentLocation = async () => {
@@ -436,6 +482,65 @@ const OCCSettings: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Parametrización de Días de Débito Automático */}
+      <GlassCard className="p-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-white flex items-center">
+              <Clock size={20} className="mr-2 text-emerald-500" />
+              Días de Débito Automático (Mercado Pago)
+            </h3>
+            <p className="text-slate-400 text-xs mt-1">
+              Parametrizá qué días del mes (del 1 al 28) están disponibles en el formulario de adhesión para que los afiliados elijan la fecha de su cobro recurrente.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-4">
+            Días de Débito Habilitados Actualmente
+          </label>
+          <div className="flex flex-wrap gap-3 mb-6">
+            {debitBillingDays.map((day) => (
+              <div 
+                key={day}
+                className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 text-white font-bold text-sm shadow-md"
+              >
+                <span>Día {day}</span>
+                <button
+                  onClick={() => handleRemoveBillingDay(day)}
+                  disabled={isSavingDebitDays}
+                  className="text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                  title="Quitar este día"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 max-w-md">
+            <input 
+              type="number"
+              min={1}
+              max={28}
+              placeholder="Ej: 5 (del 1 al 28)"
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 flex-1 font-mono"
+              value={newBillingDayInput}
+              onChange={(e) => setNewBillingDayInput(e.target.value)}
+            />
+            <button
+              onClick={handleAddBillingDay}
+              disabled={isSavingDebitDays || !newBillingDayInput}
+              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/10"
+            >
+              <Plus size={14} />
+              <span>Agregar Día</span>
+            </button>
+          </div>
+        </div>
+      </GlassCard>
 
       {/* Add Office Modal */}
       {isOfficeModalOpen && (

@@ -294,7 +294,7 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
 
     const { data: request, error: fetchError } = await supabaseAdmin
       .from('adhesion_requests')
-      .select('titular_email, titular_dni, plan_type')
+      .select('titular_email, titular_dni, plan_type, preferred_billing_day')
       .eq('id', adhesionRequestId)
       .single();
 
@@ -311,6 +311,8 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
     }
 
     const discountedMonthlyCost = Number((plan.monthly_cost * DEBITO_AUTOMATICO_DISCOUNT).toFixed(2));
+    const requestedDay = Number(request.preferred_billing_day);
+    const billingDay = Number.isInteger(requestedDay) && requestedDay >= 1 && requestedDay <= 28 ? requestedDay : 10;
 
     let preapproval;
     try {
@@ -326,7 +328,7 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
             frequency_type: 'months',
             transaction_amount: discountedMonthlyCost,
             currency_id: 'ARS',
-            start_date: nextBillingDate(10),
+            start_date: nextBillingDate(billingDay),
           },
           status: 'pending',
         }),
@@ -344,6 +346,7 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
         mp_preapproval_id: preapproval.id,
         status: 'pending',
         discounted_monthly_cost: discountedMonthlyCost,
+        billing_day: billingDay,
       });
 
     if (insertError) {

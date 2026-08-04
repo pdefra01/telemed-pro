@@ -9,22 +9,22 @@
 
 ## 1. Objetivo
 
-Permitir que un paciente pueda adherirse al plan de cobertura médica y autorizar un débito automático mensual a través de Mercado Pago, sin necesidad de ingresar los datos de su tarjeta directamente en la plataforma. El cobro se realiza siempre el **día 10 de cada mes**.
+Permitir que un paciente pueda adherirse al plan de cobertura médica y autorizar un débito automático mensual a través de Mercado Pago, sin necesidad de ingresar los datos de su tarjeta directamente en la plataforma. El cobro se realiza según el día elegido por el afiliado en la adhesión (**día 1 o día 10 de cada mes**; por defecto día 10).
 
 ---
 
 ## 2. Flujo Completo del Usuario
 
 ```
-[Paciente] Completa el Formulario de Adhesión
+[Paciente] Completa el Formulario de Adhesión (Selecciona fecha de débito: Día 1 o Día 10)
         ↓
-[Backend] Crea la orden de preapproval en MP
+[Backend] Crea la orden de preapproval en MP con la fecha de débito seleccionada
         ↓
 [Paciente] Es redirigido a la pasarela de MP
         ↓
 [Paciente] Inicia sesión en MP y autoriza la tarjeta
         ↓
-[MP] Notifica via Webhook al backend (día 10 de cada mes)
+[MP] Notifica via Webhook al backend en la fecha programada (día 1 o 10 de cada mes)
         ↓
 [Backend] Verifica el pago, registra el movimiento con número de recibo
         ↓
