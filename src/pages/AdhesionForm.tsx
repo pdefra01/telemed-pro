@@ -849,6 +849,14 @@ export const AdhesionForm: React.FC = () => {
 
             {/* Payment Method Selector Grid */}
             <label className="block text-slate-400 text-xs font-bold uppercase mb-4">Modalidad de Pago y Promociones</label>
+            
+            <div className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-4 py-3 rounded-2xl mb-6 text-sm flex items-start gap-3 shadow-lg">
+              <Sparkles size={20} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+              <p>
+                <strong className="font-extrabold tracking-wide">PROMOCION AGOSTO:</strong> PAGA $25.000 el primer mes por su GRUPO FAMILIAR, luego $ 40.000 o $ 50.000 según acuerdo
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
               {/* Option 1: Monthly */}
               <div 
