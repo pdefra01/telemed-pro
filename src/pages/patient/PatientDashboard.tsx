@@ -897,19 +897,27 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             ? (new Date(selectedDate + 'T12:00:00').getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6)
                                             : (new Date().getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6);
 
-                                        const getAvailableSlotsForDoctor = (doc: Doctor, day: number): string[] => {
-                                            if (!doc || !doc.availability || !Array.isArray(doc.availability) || doc.availability.length === 0) {
-                                                return [];
+                                        const getSlotsForDoctorAndDay = (doc: Doctor | null, day: number): string[] => {
+                                            if (!doc || !doc.availability || !Array.isArray(doc.availability)) return [];
+                                            
+                                            // Handle legacy string[] array
+                                            if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
+                                                if (!doc.availability[0].trim().startsWith('{')) {
+                                                    return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
+                                                }
                                             }
-                                            if (typeof doc.availability[0] === 'string') {
-                                                return doc.availability as unknown as string[];
+
+                                            // Handle DaySchedule[] structured array
+                                            const daySchedule = doc.availability.find(e => typeof e === 'object' && e !== null && e.day === day);
+                                            if (daySchedule && Array.isArray(daySchedule.slots)) {
+                                                return daySchedule.slots.filter(s => typeof s === 'string');
                                             }
-                                            const daySchedule = doc.availability.find(e => e.day === day);
-                                            return daySchedule?.slots ?? [];
+                                            
+                                            return [];
                                         };
 
                                         const filteredDoctors = availableDoctors.filter(
-                                            doc => getAvailableSlotsForDoctor(doc, selectedDayOfWeek).length > 0
+                                            doc => getSlotsForDoctorAndDay(doc, selectedDayOfWeek).length > 0
                                         );
 
                                         if (isLoadingDoctors) {
@@ -1003,10 +1011,17 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                             ? new Date(newDateVal + 'T12:00:00').getDay()
                                                             : -1;
                                                         if (selectedDoctor) {
-                                                            const slots = Array.isArray(selectedDoctor.availability) && typeof selectedDoctor.availability[0] === 'string'
-                                                                ? (selectedDoctor.availability as unknown as string[])
-                                                                : (selectedDoctor.availability?.find(s => s.day === dayOfWeek)?.slots ?? []);
-                                                            if (slots.length === 0) {
+                                                            const getSlots = (doc: Doctor, day: number): string[] => {
+                                                                if (!doc || !doc.availability || !Array.isArray(doc.availability)) return [];
+                                                                if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
+                                                                    if (!doc.availability[0].trim().startsWith('{')) {
+                                                                        return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
+                                                                    }
+                                                                }
+                                                                const daySchedule = doc.availability.find(e => typeof e === 'object' && e !== null && e.day === day);
+                                                                return (daySchedule && Array.isArray(daySchedule.slots)) ? daySchedule.slots.filter(s => typeof s === 'string') : [];
+                                                            };
+                                                            if (getSlots(selectedDoctor, dayOfWeek).length === 0) {
                                                                 setSelectedDoctor(null);
                                                             }
                                                         }
@@ -1024,10 +1039,17 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
 
                                                         const todayDayOfWeek = new Date().getDay();
                                                         if (selectedDoctor) {
-                                                            const slots = Array.isArray(selectedDoctor.availability) && typeof selectedDoctor.availability[0] === 'string'
-                                                                ? (selectedDoctor.availability as unknown as string[])
-                                                                : (selectedDoctor.availability?.find(s => s.day === todayDayOfWeek)?.slots ?? []);
-                                                            if (slots.length === 0) {
+                                                            const getSlots = (doc: Doctor, day: number): string[] => {
+                                                                if (!doc || !doc.availability || !Array.isArray(doc.availability)) return [];
+                                                                if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
+                                                                    if (!doc.availability[0].trim().startsWith('{')) {
+                                                                        return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
+                                                                    }
+                                                                }
+                                                                const daySchedule = doc.availability.find(e => typeof e === 'object' && e !== null && e.day === day);
+                                                                return (daySchedule && Array.isArray(daySchedule.slots)) ? daySchedule.slots.filter(s => typeof s === 'string') : [];
+                                                            };
+                                                            if (getSlots(selectedDoctor, todayDayOfWeek).length === 0) {
                                                                 setSelectedDoctor(null);
                                                             }
                                                         }
@@ -1046,9 +1068,18 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                 ? (new Date(selectedDate + 'T12:00:00').getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6)
                                                 : (new Date().getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6);
                                             
-                                            const slotsForDay = Array.isArray(selectedDoctor.availability) && typeof selectedDoctor.availability[0] === 'string'
-                                                ? (selectedDoctor.availability as unknown as string[])
-                                                : (selectedDoctor.availability?.find(e => e.day === selectedDayOfWeek)?.slots ?? []);
+                                            const getSlots = (doc: Doctor, day: number): string[] => {
+                                                if (!doc || !doc.availability || !Array.isArray(doc.availability)) return [];
+                                                if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
+                                                    if (!doc.availability[0].trim().startsWith('{')) {
+                                                        return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
+                                                    }
+                                                }
+                                                const daySchedule = doc.availability.find(e => typeof e === 'object' && e !== null && e.day === day);
+                                                return (daySchedule && Array.isArray(daySchedule.slots)) ? daySchedule.slots.filter(s => typeof s === 'string') : [];
+                                            };
+
+                                            const slotsForDay = getSlots(selectedDoctor, selectedDayOfWeek);
 
                                             if (slotsForDay.length === 0) {
                                                 return (

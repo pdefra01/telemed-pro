@@ -10,23 +10,33 @@ export class DoctorRepository {
    * and validates the new DaySchedule[] shape.
    */
   private normalizeAvailability(raw: unknown): DaySchedule[] {
-    if (!Array.isArray(raw) || raw.length === 0) return [];
+    if (!raw) return [];
     
-    const parsedArray = raw.map(item => {
-      if (typeof item === 'string' && item.trim().startsWith('{')) {
-        try { return JSON.parse(item); } catch { return item; }
-      }
-      return item;
-    });
+    let data = raw;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch { return []; }
+    }
 
-    if (typeof parsedArray[0] === 'string') return [];
-    return (parsedArray as DaySchedule[]).filter(
-      (entry) =>
-        typeof entry === 'object' &&
-        entry !== null &&
-        typeof entry.day === 'number' &&
-        Array.isArray(entry.slots)
-    );
+    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      data = [data];
+    }
+
+    if (!Array.isArray(data)) return [];
+
+    const result: DaySchedule[] = [];
+    for (const item of data) {
+      let entry = item;
+      if (typeof entry === 'string') {
+        try { entry = JSON.parse(entry); } catch { continue; }
+      }
+      if (typeof entry === 'object' && entry !== null && typeof entry.day === 'number' && Array.isArray(entry.slots)) {
+        result.push({
+          day: Number(entry.day) as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+          slots: entry.slots.map(s => String(s)).filter(s => s && s.includes(':'))
+        });
+      }
+    }
+    return result;
   }
 
   /**
