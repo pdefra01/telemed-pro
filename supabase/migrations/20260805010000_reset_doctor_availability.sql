@@ -6,7 +6,7 @@ update profiles
 set availability = '[]'::jsonb
 where role = 'doctor'
   and availability is not null
-  -- Only reset if the first element is a plain string (old format)
-  and jsonb_typeof(availability) = 'array'
-  and jsonb_array_length(availability) > 0
-  and jsonb_typeof(availability -> 0) = 'string';
+  and jsonb_typeof(to_jsonb(availability)) = 'array'
+  and jsonb_array_length(to_jsonb(availability)) > 0
+  and jsonb_typeof(to_jsonb(availability) -> 0) = 'string';
+
