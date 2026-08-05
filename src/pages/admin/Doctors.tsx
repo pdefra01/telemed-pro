@@ -9,7 +9,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import { doctorRepository } from '../../repositories/DoctorRepository';
 import { supabase } from '../../services/supabase';
-import { Doctor } from '../../types';
+import { Doctor, DaySchedule } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 
 // Glass Card for Table Container
@@ -45,7 +45,7 @@ const Doctors: React.FC = () => {
     consultationFee: 0,
     contractStartDate: '',
     contractEndDate: '',
-    availability: [] as string[]
+    availability: [] as DaySchedule[]
   });
 
   useEffect(() => {
@@ -97,7 +97,7 @@ const Doctors: React.FC = () => {
       consultationFee: 0,
       contractStartDate: '',
       contractEndDate: '',
-      availability: []
+      availability: [] as DaySchedule[]
     });
     setShowModal(true);
   };
@@ -140,7 +140,7 @@ const Doctors: React.FC = () => {
       consultationFee: doctor.consultationFee || 0,
       contractStartDate: doctor.contractStartDate || '',
       contractEndDate: doctor.contractEndDate || '',
-      availability: doctor.availability || []
+      availability: doctor.availability || [] as DaySchedule[]
     });
     setShowModal(true);
   };
@@ -545,85 +545,98 @@ const Doctors: React.FC = () => {
               )}
 
               {/* TAB 4: DISPONIBILIDAD / AGENDA */}
-              {activeTab === 'agenda' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
-                  <div className="bg-white/5 border border-white/10 p-5 rounded-3xl">
-                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest leading-relaxed">
-                      Definí los horarios de atención telefónica o video consulta disponibles para este profesional. Los pacientes verán y podrán agendar turnos únicamente en los bloques seleccionados.
-                    </p>
-                  </div>
+              {activeTab === 'agenda' && (() => {
+                const DAYS: { label: string; day: 0 | 1 | 2 | 3 | 4 | 5 | 6 }[] = [
+                  { label: 'Lunes',     day: 1 },
+                  { label: 'Martes',    day: 2 },
+                  { label: 'Miércoles', day: 3 },
+                  { label: 'Jueves',    day: 4 },
+                  { label: 'Viernes',   day: 5 },
+                  { label: 'Sábado',    day: 6 },
+                ];
+                const TIME_SLOTS = Array.from({ length: 13 }, (_, i) => {
+                  const hour = 8 + i;
+                  return `${hour.toString().padStart(2, '0')}:00`;
+                }); // 08:00 – 20:00
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Grilla de Horarios (08:00 - 00:00 hs)</label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const allSlots = Array.from({ length: 17 }, (_, i) => {
-                              const hour = 8 + i;
-                              return hour === 24 ? '00:00' : `${hour.toString().padStart(2, '0')}:00`;
-                            });
-                            setFormData({ ...formData, availability: allSlots });
-                          }}
-                          className="px-2.5 py-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 transition-all uppercase tracking-wider"
-                        >
-                          Marcar Todos
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const originalSlots = Array.from({ length: 17 }, (_, i) => {
-                              const hour = 8 + i;
-                              return hour === 24 ? '00:00' : `${hour.toString().padStart(2, '0')}:00`;
-                            });
-                            setFormData({ ...formData, availability: originalSlots });
-                          }}
-                          className="px-2.5 py-1 text-[9px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-md hover:bg-blue-500/20 transition-all uppercase tracking-wider"
-                        >
-                          Originales
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, availability: [] })}
-                          className="px-2.5 py-1 text-[9px] font-bold text-slate-400 bg-white/5 border border-white/10 rounded-md hover:bg-white/10 transition-all uppercase tracking-wider"
-                        >
-                          Limpiar
-                        </button>
-                      </div>
+                const getSlotsForDay = (day: number) =>
+                  formData.availability.find(e => e.day === day)?.slots ?? [];
+
+                const updateDay = (day: 0 | 1 | 2 | 3 | 4 | 5 | 6, slots: string[]) => {
+                  const updated = formData.availability.filter(e => e.day !== day);
+                  if (slots.length > 0) updated.push({ day, slots: [...slots].sort() });
+                  setFormData({ ...formData, availability: updated });
+                };
+
+                const toggleSlot = (day: 0 | 1 | 2 | 3 | 4 | 5 | 6, slot: string) => {
+                  const current = getSlotsForDay(day);
+                  const next = current.includes(slot)
+                    ? current.filter(s => s !== slot)
+                    : [...current, slot];
+                  updateDay(day, next);
+                };
+
+                return (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="bg-white/5 border border-white/10 p-5 rounded-3xl">
+                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest leading-relaxed">
+                        Definí los horarios de atención por día. Los pacientes verán únicamente los bloques habilitados para el día que seleccionen.
+                      </p>
                     </div>
 
-                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 bg-slate-950/30 p-4 rounded-3xl border border-white/5">
-                      {Array.from({ length: 17 }, (_, i) => {
-                        const hour = 8 + i;
-                        const slot = hour === 24 ? '00:00' : `${hour.toString().padStart(2, '0')}:00`;
-                        const isSelected = formData.availability.includes(slot);
+                    <div className="space-y-4">
+                      {DAYS.map(({ label, day }) => {
+                        const selected = getSlotsForDay(day);
+                        const allSelected = selected.length === TIME_SLOTS.length;
                         return (
-                          <button
-                            key={slot}
-                            type="button"
-                            onClick={() => {
-                              const current = [...formData.availability];
-                              if (current.includes(slot)) {
-                                setFormData({ ...formData, availability: current.filter(s => s !== slot) });
-                              } else {
-                                setFormData({ ...formData, availability: [...current, slot].sort() });
-                              }
-                            }}
-                            className={`py-3 text-xs font-bold rounded-xl border transition-all ${
-                              isSelected 
-                                ? 'bg-emerald-500 text-[#020617] border-emerald-500 shadow-lg shadow-emerald-500/20' 
-                                : 'bg-white/5 border-white/5 text-slate-400 hover:border-emerald-500/30'
-                            }`}
-                          >
-                            {slot}
-                          </button>
+                          <div key={day} className="bg-slate-950/30 border border-white/5 rounded-2xl p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-white uppercase tracking-widest">{label}</span>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateDay(day, allSelected ? [] : TIME_SLOTS)}
+                                  className="px-2.5 py-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 transition-all uppercase tracking-wider"
+                                >
+                                  {allSelected ? 'Limpiar' : 'Todo el día'}
+                                </button>
+                                {!allSelected && selected.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateDay(day, [])}
+                                    className="px-2.5 py-1 text-[9px] font-bold text-slate-400 bg-white/5 border border-white/10 rounded-md hover:bg-white/10 transition-all uppercase tracking-wider"
+                                  >
+                                    Limpiar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                              {TIME_SLOTS.map(slot => {
+                                const isSelected = selected.includes(slot);
+                                return (
+                                  <button
+                                    key={slot}
+                                    type="button"
+                                    onClick={() => toggleSlot(day, slot)}
+                                    className={`py-2.5 text-xs font-bold rounded-xl border transition-all ${
+                                      isSelected
+                                        ? 'bg-emerald-500 text-[#020617] border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                        : 'bg-white/5 border-white/5 text-slate-400 hover:border-emerald-500/30'
+                                    }`}
+                                  >
+                                    {slot}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="flex justify-between items-center space-x-4 pt-6 border-t border-white/10 mt-6">
                 <button 

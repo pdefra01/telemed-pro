@@ -13,7 +13,7 @@ export const MOCK_DOCTORS: Doctor[] = [
     reviewCount: 215,
     isVerified: true,
     avatarUrl: 'https://picsum.photos/seed/doctor1/200/200',
-    availability: ['09:00', '10:00', '14:00', '15:30'],
+    availability: [{ day: 1, slots: ['09:00', '10:00', '14:00', '15:00'] }],
     metrics: {
       showRate: 98,
       avgConsultationTime: '22 min',
@@ -34,7 +34,7 @@ export const MOCK_DOCTORS: Doctor[] = [
     reviewCount: 340,
     isVerified: true,
     avatarUrl: 'https://picsum.photos/seed/doctor2/200/200',
-    availability: ['08:00', '08:30', '11:00'],
+    availability: [{ day: 1, slots: ['08:00', '11:00'] }, { day: 3, slots: ['08:00', '11:00'] }, { day: 5, slots: ['08:00', '11:00'] }],
     metrics: {
       showRate: 95,
       avgConsultationTime: '15 min',
@@ -55,7 +55,7 @@ export const MOCK_DOCTORS: Doctor[] = [
     reviewCount: 50,
     isVerified: true,
     avatarUrl: 'https://picsum.photos/seed/doctor3/200/200',
-    availability: ['13:00', '14:00'],
+    availability: [{ day: 2, slots: ['13:00', '14:00'] }, { day: 4, slots: ['13:00', '14:00'] }],
     metrics: {
       showRate: 85,
       avgConsultationTime: '10 min',

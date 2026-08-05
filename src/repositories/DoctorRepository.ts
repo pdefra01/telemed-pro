@@ -1,9 +1,28 @@
 import { supabase } from '../services/supabase';
-import { Doctor } from '../types';
+import { Doctor, DaySchedule } from '../types';
 import { generateUUID } from '../utils/uuid';
 import { authRepository } from './AuthRepository';
 
 export class DoctorRepository {
+  /**
+   * Normalizes the availability field coming from Supabase JSONB.
+   * Handles the legacy flat string[] format by returning an empty schedule,
+   * and validates the new DaySchedule[] shape.
+   */
+  private normalizeAvailability(raw: unknown): DaySchedule[] {
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+    // Legacy format: first element is a string (e.g. '09:00')
+    if (typeof raw[0] === 'string') return [];
+    // New format: array of { day, slots }
+    return (raw as DaySchedule[]).filter(
+      (entry) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof entry.day === 'number' &&
+        Array.isArray(entry.slots)
+    );
+  }
+
   /**
    * Obtiene todos los médicos activos
    */
@@ -203,7 +222,7 @@ export class DoctorRepository {
       rating: row.rating || 5.0,
       reviewCount: row.review_count || 0,
       isVerified: row.is_verified || false,
-      availability: row.availability || [],
+      availability: this.normalizeAvailability(row.availability),
       licenseNumber: row.license_number,
       provincialLicense: row.provincial_license,
       cuit: row.cuit,

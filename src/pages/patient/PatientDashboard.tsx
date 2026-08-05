@@ -892,13 +892,44 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Profesional Disponible</label>
                                 <div className="space-y-3">
-                                    {isLoadingDoctors ? (
-                                        <div className="flex flex-col items-center justify-center py-10 bg-white/5 rounded-2xl border border-dashed border-white/10">
-                                            <div className="w-8 h-8 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-3"></div>
-                                            <span className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-[0.3em]">Sincronizando Profesionales...</span>
-                                        </div>
-                                    ) : availableDoctors.length > 0 ? (
-                                        availableDoctors.map(doc => (
+                                    {(() => {
+                                        const selectedDayOfWeek = (selectedDate && !isNaN(new Date(selectedDate + 'T12:00:00').getTime()))
+                                            ? (new Date(selectedDate + 'T12:00:00').getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6)
+                                            : (new Date().getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6);
+
+                                        const getAvailableSlotsForDoctor = (doc: Doctor, day: number): string[] => {
+                                            if (!doc || !doc.availability || !Array.isArray(doc.availability) || doc.availability.length === 0) {
+                                                return [];
+                                            }
+                                            if (typeof doc.availability[0] === 'string') {
+                                                return doc.availability as unknown as string[];
+                                            }
+                                            const daySchedule = doc.availability.find(e => e.day === day);
+                                            return daySchedule?.slots ?? [];
+                                        };
+
+                                        const filteredDoctors = availableDoctors.filter(
+                                            doc => getAvailableSlotsForDoctor(doc, selectedDayOfWeek).length > 0
+                                        );
+
+                                        if (isLoadingDoctors) {
+                                            return (
+                                                <div className="flex flex-col items-center justify-center py-10 bg-white/5 rounded-2xl border border-dashed border-white/10">
+                                                    <div className="w-8 h-8 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-3"></div>
+                                                    <span className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-[0.3em]">Sincronizando Profesionales...</span>
+                                                </div>
+                                            );
+                                        }
+
+                                        if (filteredDoctors.length === 0) {
+                                            return (
+                                                <div className="text-center py-10 bg-white/5 rounded-2xl border border-dashed border-white/10">
+                                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">No se encontraron profesionales disponibles para este día</p>
+                                                </div>
+                                            );
+                                        }
+
+                                        return filteredDoctors.map(doc => (
                                             <div 
                                                 key={doc.id} 
                                                 onClick={() => setSelectedDoctor(doc)}
@@ -930,12 +961,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     <div className="w-8 h-8 rounded-full border border-white/10 group-hover/doc:border-emerald-500/30 transition-colors"></div>
                                                 )}
                                             </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center py-10 bg-white/5 rounded-2xl border border-dashed border-white/10">
-                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">No se encontraron profesionales disponibles</p>
-                                        </div>
-                                    )}
+                                        ));
+                                    })()}
                                 </div>
 
                             </div>
@@ -967,9 +994,22 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     min={new Date().toISOString().split('T')[0]}
                                                     value={selectedDate}
                                                     onChange={(e) => {
-                                                        setSelectedDate(e.target.value);
+                                                        const newDateVal = e.target.value;
+                                                        setSelectedDate(newDateVal);
                                                         setSelectedSlot(null);
                                                         setShowPastSlotWarning(false);
+
+                                                        const dayOfWeek = (newDateVal && !isNaN(new Date(newDateVal + 'T12:00:00').getTime()))
+                                                            ? new Date(newDateVal + 'T12:00:00').getDay()
+                                                            : -1;
+                                                        if (selectedDoctor) {
+                                                            const slots = Array.isArray(selectedDoctor.availability) && typeof selectedDoctor.availability[0] === 'string'
+                                                                ? (selectedDoctor.availability as unknown as string[])
+                                                                : (selectedDoctor.availability?.find(s => s.day === dayOfWeek)?.slots ?? []);
+                                                            if (slots.length === 0) {
+                                                                setSelectedDoctor(null);
+                                                            }
+                                                        }
                                                     }}
                                                     className="flex-1 bg-slate-900 border border-white/10 rounded-xl p-3 text-white text-xs outline-none focus:border-emerald-500 transition-colors font-mono"
                                                 />
@@ -977,9 +1017,20 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     type="button"
                                                     onClick={() => {
                                                         setShowDatePicker(false);
-                                                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                                                        const todayStr = new Date().toISOString().split('T')[0];
+                                                        setSelectedDate(todayStr);
                                                         setSelectedSlot(null);
                                                         setShowPastSlotWarning(false);
+
+                                                        const todayDayOfWeek = new Date().getDay();
+                                                        if (selectedDoctor) {
+                                                            const slots = Array.isArray(selectedDoctor.availability) && typeof selectedDoctor.availability[0] === 'string'
+                                                                ? (selectedDoctor.availability as unknown as string[])
+                                                                : (selectedDoctor.availability?.find(s => s.day === todayDayOfWeek)?.slots ?? []);
+                                                            if (slots.length === 0) {
+                                                                setSelectedDoctor(null);
+                                                            }
+                                                        }
                                                     }}
                                                     className="px-4 text-xs font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wider border border-white/10 rounded-xl"
                                                 >
@@ -990,42 +1041,60 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     )}
 
                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                                        {selectedDoctor.availability?.map(slot => {
-                                            const isSelected = selectedSlot === slot;
-                                            return (
-                                                <button
-                                                    key={slot}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        // Check if selectedDate is today
-                                                        const isToday = selectedDate === new Date().toISOString().split('T')[0];
-                                                        if (isToday) {
-                                                            const now = new Date();
-                                                            const [hours, minutes] = slot.split(':');
-                                                            const slotTime = new Date();
-                                                            slotTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                                        {(() => {
+                                            const selectedDayOfWeek = (selectedDate && !isNaN(new Date(selectedDate + 'T12:00:00').getTime()))
+                                                ? (new Date(selectedDate + 'T12:00:00').getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6)
+                                                : (new Date().getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6);
+                                            
+                                            const slotsForDay = Array.isArray(selectedDoctor.availability) && typeof selectedDoctor.availability[0] === 'string'
+                                                ? (selectedDoctor.availability as unknown as string[])
+                                                : (selectedDoctor.availability?.find(e => e.day === selectedDayOfWeek)?.slots ?? []);
 
-                                                            if (slotTime < now) {
-                                                                setPendingSlot(slot);
-                                                                setShowPastSlotWarning(true);
-                                                                setSelectedSlot(null);
-                                                                return;
+                                            if (slotsForDay.length === 0) {
+                                                return (
+                                                    <div className="col-span-full py-8 text-center bg-white/5 rounded-xl border border-dashed border-white/10">
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em]">Sin horarios disponibles para este día</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return slotsForDay.map(slot => {
+                                                const isSelected = selectedSlot === slot;
+                                                return (
+                                                    <button
+                                                        key={slot}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            // Check if selectedDate is today
+                                                            const isToday = selectedDate === new Date().toISOString().split('T')[0];
+                                                            if (isToday) {
+                                                                const now = new Date();
+                                                                const [hours, minutes] = slot.split(':');
+                                                                const slotTime = new Date();
+                                                                slotTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+                                                                if (slotTime < now) {
+                                                                    setPendingSlot(slot);
+                                                                    setShowPastSlotWarning(true);
+                                                                    setSelectedSlot(null);
+                                                                    return;
+                                                                }
                                                             }
-                                                        }
-                                                        setSelectedSlot(slot);
-                                                        setShowPastSlotWarning(false);
-                                                        setPendingSlot(null);
-                                                    }}
-                                                    className={`py-3 text-xs font-bold rounded-xl border transition-all ${
-                                                        isSelected 
-                                                            ? 'bg-emerald-500 text-[#020617] border-emerald-500 shadow-lg shadow-emerald-500/20' 
-                                                            : 'bg-slate-800 border-white/5 text-slate-400 hover:border-emerald-500/30'
-                                                    }`}
-                                                >
-                                                    {slot}
-                                                </button>
-                                            );
-                                        })}
+                                                            setSelectedSlot(slot);
+                                                            setShowPastSlotWarning(false);
+                                                            setPendingSlot(null);
+                                                        }}
+                                                        className={`py-3 text-xs font-bold rounded-xl border transition-all ${
+                                                            isSelected
+                                                                ? 'bg-emerald-500 text-[#020617] border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                                                : 'bg-slate-800 border-white/5 text-slate-400 hover:border-emerald-500/30'
+                                                        }`}
+                                                    >
+                                                        {slot}
+                                                    </button>
+                                                );
+                                            });
+                                        })()}
                                     </div>
 
                                     {showPastSlotWarning && (

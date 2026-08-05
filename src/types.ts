@@ -54,13 +54,22 @@ export interface DoctorMetrics {
   qualityAlert: boolean; // PRD 3.13.4 (< 4 stars)
 }
 
+/**
+ * Availability schedule entry: a day of the week with its associated time slots.
+ * day follows JS Date.getDay() convention: 0 = Sunday … 6 = Saturday.
+ */
+export interface DaySchedule {
+  day: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  slots: string[]; // e.g. ['09:00', '10:00']
+}
+
 export interface Doctor extends User {
   role: 'doctor';
   specialty: string;
   rating: number; // Deprecated in favor of metrics.starRating but kept for compatibility
   reviewCount: number;
   isVerified: boolean;
-  availability: string[];
+  availability: DaySchedule[];
   licenseNumber?: string;
   provincialLicense?: string;
   cuit?: string;
