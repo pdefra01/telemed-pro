@@ -1,12 +1,9 @@
--- Reset doctor availability to empty array.
--- The old format stored flat time strings (e.g. '["09:00","10:00"]').
--- The new format uses DaySchedule objects ({ day, slots }).
--- Admins must reconfigure each doctor's schedule via the UI.
-update profiles
-set availability = '[]'::jsonb
-where role = 'doctor'
-  and availability is not null
-  and jsonb_typeof(to_jsonb(availability)) = 'array'
-  and jsonb_array_length(to_jsonb(availability)) > 0
-  and jsonb_typeof(to_jsonb(availability) -> 0) = 'string';
+-- Alter availability column in profiles to JSONB type.
+-- Previously it was TEXT[], which prevented storing structured JSON objects natively.
 
+alter table profiles 
+  alter column availability type jsonb 
+  using '[]'::jsonb;
+
+alter table profiles 
+  alter column availability set default '[]'::jsonb;

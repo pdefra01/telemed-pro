@@ -11,10 +11,16 @@ export class DoctorRepository {
    */
   private normalizeAvailability(raw: unknown): DaySchedule[] {
     if (!Array.isArray(raw) || raw.length === 0) return [];
-    // Legacy format: first element is a string (e.g. '09:00')
-    if (typeof raw[0] === 'string') return [];
-    // New format: array of { day, slots }
-    return (raw as DaySchedule[]).filter(
+    
+    const parsedArray = raw.map(item => {
+      if (typeof item === 'string' && item.trim().startsWith('{')) {
+        try { return JSON.parse(item); } catch { return item; }
+      }
+      return item;
+    });
+
+    if (typeof parsedArray[0] === 'string') return [];
+    return (parsedArray as DaySchedule[]).filter(
       (entry) =>
         typeof entry === 'object' &&
         entry !== null &&
