@@ -276,15 +276,15 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             .on('postgres_changes', { 
                 event: '*', 
                 schema: 'public', 
-                table: 'appointments',
-                filter: `doctor_id=eq.${user.id}`
-            }, () => {
-                console.log('Cambio detectado en appointments, refrescando cola...');
+                table: 'appointments'
+            }, (payload) => {
+                console.log('[DoctorDashboard] Realtime change detected in appointments:', payload);
                 fetchAppointments();
             })
-            .subscribe((status) => {
-                console.log(`[DoctorDashboard] Realtime channel status: ${status}`);
+            .subscribe((status, err) => {
+                console.log(`[DoctorDashboard] Realtime channel status: ${status}`, err || '');
             });
+
 
         return () => {
             clearInterval(pollingInterval);
