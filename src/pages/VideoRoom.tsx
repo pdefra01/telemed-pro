@@ -236,10 +236,14 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                     {!isDoctor && (
                       <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px] font-medium leading-none">
                         <span className="text-slate-300 font-semibold">{appointment?.doctorSpecialty || 'Clínica Médica'}</span>
-                        <span className="text-slate-600">•</span>
-                        <span className="text-emerald-400 font-bold tracking-wider">
-                          MP N° {appointment?.doctorLicense || '184920'}
-                        </span>
+                        {appointment?.doctorLicense && (
+                          <>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-emerald-400 font-bold tracking-wider">
+                              MP N° {appointment.doctorLicense}
+                            </span>
+                          </>
+                        )}
                       </div>
                     )}
                     {isDoctor && (
@@ -255,6 +259,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                         )}
                       </div>
                     )}
+
 
                   </div>
                   <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
