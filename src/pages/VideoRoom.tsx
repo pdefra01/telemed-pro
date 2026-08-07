@@ -643,15 +643,25 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
           <div className="flex flex-col h-full">
             <div className="p-12 border-b border-white/5 bg-gradient-to-b from-emerald-500/10 to-transparent text-center">
               <div className="w-24 h-24 bg-slate-800 rounded-[2.5rem] mx-auto mb-8 flex items-center justify-center text-emerald-500 text-4xl font-bold border border-white/10 shadow-2xl relative">
-                DR
+                {appointment?.doctorName ? appointment.doctorName.charAt(0).toUpperCase() : 'DR'}
                 <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-xl flex items-center justify-center text-white border-4 border-slate-950 shadow-xl">
                   <Shield size={16} />
                 </div>
               </div>
               <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.4em] mb-3">Atención Profesional</p>
-              <h3 className="text-2xl font-bold text-white tracking-tight">Dr. Profesional</h3>
-              <p className="text-xs text-slate-500 font-bold mt-2 uppercase tracking-[0.2em]">Cardiología Avanzada</p>
+              <h3 className="text-2xl font-bold text-white tracking-tight">
+                {appointment?.doctorName ? `Dr. ${appointment.doctorName}` : 'Profesional Médico'}
+              </h3>
+              <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-[0.2em]">
+                {appointment?.doctorSpecialty || 'Medicina General'}
+              </p>
+              {appointment?.doctorLicense && (
+                <span className="inline-block mt-3 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold text-[10px] rounded-full uppercase tracking-wider">
+                  MP N° {appointment.doctorLicense}
+                </span>
+              )}
             </div>
+
 
             <div className="flex-1 p-10 space-y-12 overflow-y-auto">
               {/* Privacy Checklist */}
