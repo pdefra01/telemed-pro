@@ -273,10 +273,11 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         // tienen el dashboard abierto simultáneamente.
         const channel = supabase
             .channel(`doctor-dashboard-${user.id}`)
-            .on('postgres_changes', { 
-                event: '*', 
-                schema: 'public', 
-                table: 'appointments'
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'appointments',
+                filter: `doctor_id=eq.${user.id}`
             }, (payload) => {
                 console.log('[DoctorDashboard] Realtime change detected in appointments:', payload);
                 fetchAppointments();
