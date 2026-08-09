@@ -188,4 +188,25 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
 
     await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
   });
+
+  it('step 6 success screen never claims the DNI is the login password, and points to email-delivered credentials instead', async () => {
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-101' });
+    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: false }) } as Response);
+
+    const { container } = renderForm();
+    await advanceToSignatureStep();
+
+    fireEvent.click(screen.getByLabelText(/Autorizo el tratamiento de mis datos personales/i));
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    fireEvent.mouseDown(canvas);
+    fireEvent.mouseUp(canvas);
+
+    fireEvent.click(screen.getByRole('button', { name: /Enviar Solicitud/i }));
+
+    await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
+
+    expect(screen.queryByText(/contraseña temporal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/DNI.*como usuario y contraseña/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/enlace para crear tu contraseña/i)).toBeInTheDocument();
+  });
 });

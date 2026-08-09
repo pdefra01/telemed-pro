@@ -5,7 +5,10 @@ import { supabase } from '../../services/supabase';
 vi.mock('../../services/supabase', () => {
   return {
     supabase: {
-      from: vi.fn()
+      from: vi.fn(),
+      auth: {
+        getSession: vi.fn()
+      }
     }
   };
 });
@@ -182,5 +185,57 @@ describe('AdhesionRepository', () => {
     const request = buildRequest();
 
     await expect(repository.submitApplication(request)).rejects.toThrow('insert failed');
+  });
+
+  describe('approveApplication (D7 — sends the session Bearer token)', () => {
+    it('sends the current session access_token as an Authorization Bearer header', async () => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
+        data: { session: { access_token: 'admin-jwt-123' } }
+      } as any);
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'ok' })
+      } as Response);
+
+      await repository.approveApplication('adhesion-1');
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/approve-adhesion', expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Authorization': 'Bearer admin-jwt-123'
+        }),
+        body: JSON.stringify({ adhesionId: 'adhesion-1' })
+      }));
+    });
+
+    it('sends an empty Bearer token (never omits the header) when there is no active session', async () => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
+        data: { session: null }
+      } as any);
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'ok' })
+      } as Response);
+
+      await repository.approveApplication('adhesion-2');
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/approve-adhesion', expect.objectContaining({
+        headers: expect.objectContaining({ 'Authorization': 'Bearer ' })
+      }));
+    });
+
+    it('throws the server error message when the request is rejected (e.g. 401/403)', async () => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
+        data: { session: { access_token: 'x' } }
+      } as any);
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Acceso denegado. Se requieren permisos de administrador.' })
+      } as Response);
+
+      await expect(repository.approveApplication('adhesion-3')).rejects.toThrow(
+        'Acceso denegado. Se requieren permisos de administrador.'
+      );
+    });
   });
 });

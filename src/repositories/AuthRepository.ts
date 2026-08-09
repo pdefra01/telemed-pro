@@ -52,7 +52,12 @@ export class AuthRepository {
 
     if (signInError) {
       if (signInError.message.includes('Invalid login credentials')) {
-        throw new Error('Credenciales incorrectas. Verificá tu documento y contraseña.');
+        // code lets Auth.tsx's D6 legacy-DNI fallback distinguish "wrong
+        // credentials" from the inactive-account error below (which must
+        // never trigger a retry) without matching on message text.
+        const invalidCredentialsError: Error & { code?: string } = new Error('Credenciales incorrectas. Verificá tu documento y contraseña.');
+        invalidCredentialsError.code = 'invalid_credentials';
+        throw invalidCredentialsError;
       }
       throw signInError;
     }

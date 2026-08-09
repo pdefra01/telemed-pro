@@ -1434,7 +1434,7 @@ export const AdhesionForm: React.FC = () => {
               <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
                 <li>Nuestro equipo administrativo revisará los datos cargados.</li>
                 <li>Una vez aprobada tu afiliación, te llegará un correo de confirmación.</li>
-                <li>Podrás descargar la App de <strong>MEDINEX</strong> y loguearte directamente usando tu DNI (<span className="text-white font-bold">{titular.dni}</span>) como usuario y contraseña temporal.</li>
+                <li>Te enviaremos un correo con un enlace para crear tu contraseña y acceder a la App de <strong>MEDINEX</strong>.</li>
               </ol>
             </div>
 

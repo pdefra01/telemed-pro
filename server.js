@@ -13,6 +13,7 @@ import {
   runDeferredReconciliation,
   DEBITO_AUTOMATICO_DISCOUNT,
 } from './server/mercadopago.js';
+import { buildPatientAuthUser, sendActivationEmail } from './server/affiliateActivation.js';
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -160,6 +161,12 @@ const MERCADOPAGO_API_BASE = 'https://api.mercadopago.com';
 const mercadoPagoEnabled = Boolean(MERCADOPAGO_ACCESS_TOKEN && MERCADOPAGO_WEBHOOK_SECRET);
 if (!mercadoPagoEnabled) {
   console.warn('⚠️ WARNING: Missing MERCADOPAGO_ACCESS_TOKEN/MERCADOPAGO_WEBHOOK_SECRET — Mercado Pago endpoints are disabled.');
+}
+
+// sdd/affiliate-credential-provisioning D1: PUBLIC_APP_URL graduates from
+// "MP-only" to also being required for the affiliate activation email link.
+if (!PUBLIC_APP_URL) {
+  console.warn('⚠️ WARNING: Missing PUBLIC_APP_URL — activation emails will not include a working link.');
 }
 
 /**
@@ -1279,7 +1286,7 @@ app.post('/api/adhesion/check-duplicates', async (req, res) => {
  * inicializa su perfil, crea su grupo familiar (si tiene) e integrantes,
  * y marca la solicitud como 'approved'.
  */
-app.post('/api/approve-adhesion', async (req, res) => {
+app.post('/api/approve-adhesion', requireAuth, requireAdmin, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(503).json({ error: 'Servicio de administración no configurado.' });
   }
@@ -1311,23 +1318,16 @@ app.post('/api/approve-adhesion', async (req, res) => {
       return res.status(400).json({ error: 'No se puede aprobar una solicitud que no tiene el correo electrónico verificado.' });
     }
 
-    // 2. Crear usuario paciente en Supabase Auth
-    const targetEmail = request.titular_email?.trim() || `${request.titular_dni.trim()}@medinex-paciente.com`;
-    const password = request.titular_dni.trim(); // DNI como contraseña temporal
-    
+    // 2. Crear usuario paciente en Supabase Auth. No password is set here —
+    // the account is activated via a best-effort recovery-link email sent
+    // below (step 5b), never a DNI-derived password (spec "No Plaintext-DNI
+    // Password On Approval").
+    const authUserPayload = buildPatientAuthUser(request);
+    const targetEmail = authUserPayload.email;
     const titularFullName = `${request.titular_first_name || ''} ${request.titular_last_name || ''}`.trim() || request.titular_name;
 
     console.log(`[approve-adhesion] Creando usuario auth para: ${targetEmail}`);
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: targetEmail,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        role: 'patient',
-        full_name: titularFullName,
-        dni: request.titular_dni.trim()
-      }
-    });
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser(authUserPayload);
 
     if (authError) {
       console.error('[approve-adhesion] Auth creation failed:', authError.message);
@@ -1527,8 +1527,32 @@ app.post('/api/approve-adhesion', async (req, res) => {
       }
     }
 
+    // 5b(email). Best-effort activation email — own try/catch, NEVER throws
+    // (mirrors notifyPaymentSettled) and never blocks the approval response.
+    // Placed after the Mercado Pago block (design D3): both steps are
+    // independent best-effort operations, and this keeps the payment-adjacent
+    // block above byte-identical.
+    let activationEmailSent = false;
+    try {
+      const emailResult = await sendActivationEmail(
+        { supabaseAdmin, createMailTransporter, fromAddress: FROM_ADDRESS, publicAppUrl: PUBLIC_APP_URL },
+        { email: targetEmail, fullName: titularFullName }
+      );
+      activationEmailSent = !!emailResult?.sent;
+    } catch (err) {
+      console.error('[approve-adhesion] Activation email failed (non-blocking):', err?.message || String(err));
+    }
+
     console.log(`[approve-adhesion] Solicitud aprobada con éxito para titular: ${targetEmail}`);
-    res.status(200).json({ message: 'Solicitud aprobada exitosamente y paciente registrado.', userId });
+    res.status(200).json({
+      message: 'Solicitud aprobada exitosamente y paciente registrado.',
+      userId,
+      // Judgment Day finding: without this, a failed activation email left
+      // the affiliate with a passwordless account and no visible signal to
+      // any admin. Surfacing it here lets the admin UI warn immediately,
+      // instead of the affiliate silently having no way to ever log in.
+      activationEmailSent,
+    });
   } catch (err) {
     console.error('[approve-adhesion] Unexpected error:', err);
     res.status(500).json({ error: 'Error interno del servidor.' });

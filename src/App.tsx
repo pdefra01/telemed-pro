@@ -31,6 +31,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
 import { AdhesionForm } from './pages/AdhesionForm';
+import SetPassword from './pages/SetPassword';
 import { LeadSurvey } from './pages/LeadSurvey';
 import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
@@ -247,11 +248,15 @@ const App: React.FC = () => {
     if (window.location.pathname === '/encuesta' || window.location.pathname.endsWith('/encuesta')) {
       window.location.replace(window.location.origin + '/#/encuesta');
     }
+    if (window.location.pathname === '/activar' || window.location.pathname.endsWith('/activar')) {
+      window.location.replace(window.location.origin + '/#/activar' + window.location.search);
+    }
   }, []);
 
   const isAdhesionPath = window.location.hash.includes('/adhesion') || window.location.pathname.includes('/adhesion');
   const isEncuestaPath = window.location.hash.includes('/encuesta') || window.location.pathname.includes('/encuesta');
-  const isPublicPath = isAdhesionPath || isEncuestaPath;
+  const isActivarPath = window.location.hash.includes('/activar') || window.location.pathname.includes('/activar');
+  const isPublicPath = isAdhesionPath || isEncuestaPath || isActivarPath;
 
   const MainContent = (
     <Routes>
@@ -268,6 +273,11 @@ const App: React.FC = () => {
       <Route
         path="/encuesta"
         element={<LeadSurvey />}
+      />
+
+      <Route
+        path="/activar"
+        element={<SetPassword />}
       />
 
       <Route

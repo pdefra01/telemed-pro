@@ -135,6 +135,45 @@ describe('AuthRepository', () => {
       .toThrow('Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.');
   });
 
+  describe('login() error code (D6 — lets Auth.tsx distinguish invalid credentials from inactive account)', () => {
+    it('attaches code = "invalid_credentials" when Supabase rejects the credentials', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: null },
+        error: { message: 'Invalid login credentials' }
+      } as any);
+
+      await expect(authRepository.login('30123456@medinex-paciente.com', 'wrong', 'patient'))
+        .rejects
+        .toMatchObject({ code: 'invalid_credentials' });
+    });
+
+    it('does NOT attach code = "invalid_credentials" to the inactive-account error', async () => {
+      const mockAuthUser = { user: { id: 'inactive-user-id', email: 'pending@medinex.com' } };
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: mockAuthUser,
+        error: null
+      } as any);
+      mockFromByTable({
+        id: 'inactive-user-id',
+        full_name: 'Paciente Pendiente',
+        role: 'patient',
+        is_active: false,
+        plan_status: 'pending',
+        agreement_id: null,
+      });
+
+      let caught: any;
+      try {
+        await authRepository.login('pending@medinex.com', 'password123', 'patient');
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught.code).not.toBe('invalid_credentials');
+    });
+  });
+
   describe('login() derived paymentStatus (cuenta-corriente-billing)', () => {
     const activeAuthUser = { user: { id: 'aff-1', email: 'aff@medinex.com' } };
     const baseProfile = {

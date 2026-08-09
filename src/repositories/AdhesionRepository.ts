@@ -169,13 +169,23 @@ export class AdhesionRepository {
   }
 
   /**
-   * Aprueba una solicitud llamando al endpoint del backend
+   * Aprueba una solicitud llamando al endpoint del backend. El endpoint
+   * ahora requiere sesión de admin (D7) — se envía el access_token de la
+   * sesión actual, mirroring `AuthRepository.resetPasswordFromAdmin`.
+   *
+   * @returns `activationEmailSent` — false means the affiliate's account was
+   * created but the activation email failed to send (Judgment Day finding:
+   * without surfacing this, the affiliate would be left with a passwordless
+   * account and no visible signal to any admin). Callers should warn the
+   * admin so they know to use the manual reset-password tool instead.
    */
-  async approveApplication(id: string): Promise<void> {
+  async approveApplication(id: string): Promise<{ activationEmailSent: boolean }> {
+    const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/api/approve-adhesion', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
       },
       body: JSON.stringify({ adhesionId: id }),
     });
@@ -184,6 +194,9 @@ export class AdhesionRepository {
       const errData = await response.json().catch(() => ({}));
       throw new Error(errData.error || 'Error al aprobar la afiliación en el servidor.');
     }
+
+    const result = await response.json().catch(() => ({}));
+    return { activationEmailSent: result?.activationEmailSent !== false };
   }
 
   /**

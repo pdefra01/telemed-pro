@@ -266,8 +266,15 @@ const Affiliates: React.FC = () => {
   const handleApproveRequest = async (id: string) => {
     setIsSubmitting(true);
     try {
-      await adhesionRepository.approveApplication(id);
-      toast("Solicitud aprobada y paciente registrado con éxito!", "success");
+      const { activationEmailSent } = await adhesionRepository.approveApplication(id);
+      if (activationEmailSent) {
+        toast("Solicitud aprobada y paciente registrado con éxito!", "success");
+      } else {
+        // Judgment Day finding: the account was created but has no password
+        // and the affiliate has no other way to set one — warn the admin
+        // immediately so they know to use "Restablecer Contraseña" manually.
+        toast("Afiliado registrado, pero el correo de activación no se pudo enviar. Restablecé su contraseña manualmente.", "error");
+      }
       setSelectedRequest(null);
       loadRequests();
       loadAffiliates();

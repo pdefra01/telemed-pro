@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button';
 import { dniSchema, phoneSchema } from '../utils/validation';
 import { z } from 'zod';
 import { authRepository } from '../repositories/AuthRepository';
+import { isEmailLike, toLegacyPatientEmail } from '../utils/patientIdentifier';
 import logoMedinex from '../logo_medinex.jpeg';
 
 interface AuthProps {
@@ -51,61 +52,82 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      // 1. Validaciones de UI
-      const isEmailReal = role !== 'patient' || inputValue.includes('@');
-
-      if (role === 'patient') {
-        if (!isEmailReal) {
-          if (inputValue.length > 8) {
-            phoneSchema.parse(inputValue);
-          } else {
-            dniSchema.parse(inputValue);
-          }
-        } else {
-          // Si usa correo real para registrarse, el DNI es obligatorio
-          if (isRegistering) {
-            dniSchema.parse(patientDni);
-          }
+      if (role === 'patient' && !isRegistering) {
+        // D6: bounded patient-login sequence — resolve exactly ONE auth
+        // email (real email as typed, or the legacy DNI/phone mapping) and
+        // attempt login exactly once, no retry.
+        if (password.length < 6) {
+          throw new Error("La contraseña debe tener al menos 6 caracteres");
         }
-      }
-      if (password.length < 6) {
-        throw new Error("La contraseña debe tener al menos 6 caracteres");
-      }
-      if (isRegistering && !fullName.trim()) {
-        throw new Error("Por favor, ingresá tu nombre completo");
-      }
 
-      // 2. Magia de la Opción C: Transformar DNI/Tel en Email Falso
-      let authEmail = inputValue;
-      let targetDni = undefined;
+        const emailAsTyped = isEmailLike(inputValue);
+        const authEmail = emailAsTyped ? inputValue : toLegacyPatientEmail(inputValue);
 
-      if (role === 'patient') {
-        if (!isEmailReal) {
-          if (inputValue.length > 8) { // Mapeo de celular
-            const cleanPhone = inputValue.replace(/\D/g, ''); // Quita espacios/guiones
-            authEmail = `${cleanPhone}@medinex-paciente.com`;
-            targetDni = cleanPhone;
-          } else { // Mapeo de DNI
-            authEmail = `${inputValue}@medinex-paciente.com`;
-            targetDni = inputValue;
+        try {
+          const userResult = await authRepository.login(authEmail, password, role);
+          onLogin(userResult);
+        } catch (err: any) {
+          if (!emailAsTyped && err.code === 'invalid_credentials') {
+            throw new Error('No encontramos una cuenta con ese documento. Si tu afiliación fue aprobada, iniciá sesión con tu correo electrónico.');
           }
-        } else {
-          // Usa correo real
-          authEmail = inputValue;
-          targetDni = isRegistering ? patientDni : undefined;
+          throw err;
         }
-      }
-
-      // 3. Llamar a la Capa de Repositorio (Clean Architecture)
-      let userResult: User;
-      if (isRegistering) {
-        userResult = await authRepository.registerPatient(authEmail, password, fullName, role, targetDni);
       } else {
-        userResult = await authRepository.login(authEmail, password, role);
+        // 1. Validaciones de UI
+        const isEmailReal = role !== 'patient' || inputValue.includes('@');
+
+        if (role === 'patient') {
+          if (!isEmailReal) {
+            if (inputValue.length > 8) {
+              phoneSchema.parse(inputValue);
+            } else {
+              dniSchema.parse(inputValue);
+            }
+          } else {
+            // Si usa correo real para registrarse, el DNI es obligatorio
+            if (isRegistering) {
+              dniSchema.parse(patientDni);
+            }
+          }
+        }
+        if (password.length < 6) {
+          throw new Error("La contraseña debe tener al menos 6 caracteres");
+        }
+        if (isRegistering && !fullName.trim()) {
+          throw new Error("Por favor, ingresá tu nombre completo");
+        }
+
+        // 2. Magia de la Opción C: Transformar DNI/Tel en Email Falso
+        let authEmail = inputValue;
+        let targetDni = undefined;
+
+        if (role === 'patient') {
+          if (!isEmailReal) {
+            if (inputValue.length > 8) { // Mapeo de celular
+              const cleanPhone = inputValue.replace(/\D/g, ''); // Quita espacios/guiones
+              authEmail = `${cleanPhone}@medinex-paciente.com`;
+              targetDni = cleanPhone;
+            } else { // Mapeo de DNI
+              authEmail = `${inputValue}@medinex-paciente.com`;
+              targetDni = inputValue;
+            }
+          } else {
+            // Usa correo real
+            authEmail = inputValue;
+            targetDni = isRegistering ? patientDni : undefined;
+          }
+        }
+
+        // 3. Llamar a la Capa de Repositorio (Clean Architecture)
+        let userResult: User;
+        if (isRegistering) {
+          userResult = await authRepository.registerPatient(authEmail, password, fullName, role, targetDni);
+        } else {
+          userResult = await authRepository.login(authEmail, password, role);
+        }
+
+        onLogin(userResult);
       }
-
-      onLogin(userResult);
-
     } catch (err: any) {
       if (err instanceof z.ZodError) {
         setError(err.issues[0].message);
@@ -263,14 +285,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               {/* Dynamic Input Field */}
               <div className="mb-4">
                 <Input
+                  id="auth-identifier"
                   label={role === 'patient'
-                    ? 'Celular N°'
+                    ? (isRegistering ? 'Celular N°' : 'Correo Electrónico')
                     : 'Correo Electrónico'
                   }
                   type={role === 'patient' ? 'text' : 'text'}
                   placeholder={
                     role === 'patient'
-                      ? 'Ej: 3876123899'
+                      ? (isRegistering ? 'Ej: 3876123899' : 'nombre@ejemplo.com')
                       : 'nombre@ejemplo.com'
                   }
                   value={inputValue}
@@ -278,7 +301,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     setInputValue(e.target.value);
                     setError('');
                   }}
-                  error={error && !error.includes('contraseña') ? error : undefined}
+                  error={error && !error.includes('contraseña') && !(role === 'patient' && !isRegistering) ? error : undefined}
                   icon={
                     role === 'patient'
                       ? (inputValue.includes('@') ? <Mail size={18} /> : <CreditCard size={18} />)
@@ -312,6 +335,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
               <div className="mb-6">
                 <Input
+                  id="auth-password"
                   label="Contraseña"
                   type="password"
                   placeholder="••••••••"
