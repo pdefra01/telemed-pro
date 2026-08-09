@@ -1,3 +1,4 @@
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 
 export interface Notification {
@@ -12,6 +13,18 @@ export interface Notification {
 }
 
 export class NotificationRepository {
+  // Un solo canal realtime por userId, compartido entre todos los suscriptores
+  // (NotificationBell, NotificationListener, dashboards) para evitar abrir
+  // múltiples conexiones redundantes a la misma tabla/filtro.
+  private notificationChannels = new Map<
+    string,
+    {
+      channel: RealtimeChannel;
+      listeners: Set<(payload: Notification) => void>;
+      pendingTeardown: object | null;
+    }
+  >();
+
   /**
    * Obtiene las notificaciones del usuario actual
    */
@@ -56,31 +69,71 @@ export class NotificationRepository {
    * Suscripción en tiempo real a nuevas notificaciones
    */
   subscribeToNotifications(userId: string, onNotification: (payload: Notification) => void) {
-    return supabase
-      .channel(`user-notifications-${userId}-${Math.random().toString(36).substring(2, 9)}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`
-        },
-        (payload) => {
-          const row = payload.new as any;
-          onNotification({
-            id: row.id,
-            userId: row.user_id,
-            title: row.title,
-            message: row.message,
-            type: row.type as any,
-            isRead: row.is_read,
-            link: row.link,
-            createdAt: row.created_at
-          });
+    let entry = this.notificationChannels.get(userId);
+
+    if (!entry) {
+      const listeners = new Set<(payload: Notification) => void>();
+      const channel = supabase
+        .channel(`user-notifications-${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${userId}`
+          },
+          (payload) => {
+            const row = payload.new as any;
+            const notification: Notification = {
+              id: row.id,
+              userId: row.user_id,
+              title: row.title,
+              message: row.message,
+              type: row.type as any,
+              isRead: row.is_read,
+              link: row.link,
+              createdAt: row.created_at
+            };
+            listeners.forEach(listener => listener(notification));
+          }
+        )
+        .subscribe();
+
+      entry = { channel, listeners, pendingTeardown: null };
+      this.notificationChannels.set(userId, entry);
+    } else {
+      // A re-subscribe for this userId cancels any teardown scheduled by a
+      // previous unsubscribe() so the still-open channel keeps being reused
+      // instead of racing supabase-js's async removeChannel() teardown.
+      entry.pendingTeardown = null;
+    }
+
+    entry.listeners.add(onNotification);
+
+    return {
+      unsubscribe: () => {
+        const current = this.notificationChannels.get(userId);
+        if (!current) return;
+
+        current.listeners.delete(onNotification);
+        if (current.listeners.size === 0) {
+          const token = {};
+          current.pendingTeardown = token;
+          setTimeout(() => {
+            const latest = this.notificationChannels.get(userId);
+            if (
+              latest === current &&
+              latest.pendingTeardown === token &&
+              latest.listeners.size === 0
+            ) {
+              supabase.removeChannel(latest.channel);
+              this.notificationChannels.delete(userId);
+            }
+          }, 0);
         }
-      )
-      .subscribe();
+      }
+    };
   }
 }
 

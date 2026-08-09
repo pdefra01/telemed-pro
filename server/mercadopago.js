@@ -295,6 +295,34 @@ async function writeMercadopagoAuditEvent(supabaseAdmin, row) {
 }
 
 /**
+ * Best-effort realtime notification for a settled payment. Mirrors the
+ * `notifications` insert pattern used by the finalize-consultation edge
+ * function: never throws, a failure here must not roll back or block the
+ * settlement itself — the money has already been posted by the time this
+ * runs.
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {{ userId: string, amount: number }} params
+ */
+async function notifyPaymentSettled(supabaseAdmin, { userId, amount }) {
+  try {
+    const { error } = await supabaseAdmin.from('notifications').insert({
+      user_id: userId,
+      title: 'Pago acreditado',
+      message: `Registramos tu pago de $${amount.toLocaleString()}. Tu cuenta corriente ya está actualizada.`,
+      type: 'success',
+      link: '/payments',
+    });
+
+    if (error) {
+      console.error('[mercadopago] Error enviando notificación de pago:', error.message);
+    }
+  } catch (err) {
+    console.error('[mercadopago] Error enviando notificación de pago:', err?.message || String(err));
+  }
+}
+
+/**
  * Correlates a re-fetched, APPROVED payment to the invoice it should settle
  * (D-C "Invoice correlation"). Never trusts the parsed reference string for
  * WHO to bill — only for WHICH invoice to look up; the actual billed entity
@@ -506,6 +534,13 @@ export async function handlePaymentSettlement(ctx, { paymentId, preapprovalId = 
   }
 
   const outcome = rpcResult.posted ? (rpcResult.deferred_reason || 'posted') : 'duplicate';
+
+  if (rpcResult.posted) {
+    await notifyPaymentSettled(supabaseAdmin, {
+      userId: invoice.entity_id,
+      amount: payment.transaction_amount,
+    });
+  }
 
   const { error: auditWriteError } = await writeMercadopagoAuditEvent(supabaseAdmin, {
     event_type: 'payment',

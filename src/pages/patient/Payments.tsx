@@ -6,6 +6,7 @@ import { Patient, Invoice } from '../../types';
 import { supabase } from '../../services/supabase';
 import { accountMovementRepository, AccountMovement } from '../../repositories/AccountMovementRepository';
 import { invoiceRepository } from '../../repositories/InvoiceRepository';
+import { notificationRepository } from '../../repositories/NotificationRepository';
 import { PdfService } from '../../services/PdfService';
 
 interface PaymentsProps {
@@ -84,8 +85,20 @@ const Payments: React.FC<PaymentsProps> = ({ user }) => {
                 if (!cancelled) setIsLoading(false);
             });
 
+        // Refresco en vivo: el webhook de Mercado Pago dispara una notificación
+        // "Pago acreditado" (server/mercadopago.js) cuando el pago se postea.
+        // No tocamos isLoading/hasLoadError acá: es una actualización silenciosa
+        // de datos ya cargados, no una carga inicial.
+        const subscription = notificationRepository.subscribeToNotifications(user.id, (notif) => {
+            if (notif.type === 'success' && notif.link === '/payments') {
+                toast(notif.message, 'success');
+                Promise.all([fetchBalance(), fetchMovements(), fetchInvoices()]).catch(() => {});
+            }
+        });
+
         return () => {
             cancelled = true;
+            subscription.unsubscribe();
         };
     }, [user.id]);
 

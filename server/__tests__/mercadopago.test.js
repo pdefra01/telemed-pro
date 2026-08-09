@@ -36,6 +36,7 @@ function createSupabaseStub({ tables = {}, rpcResult = { data: null, error: null
       order: () => builder,
       limit: () => builder,
       maybeSingle: async () => (handlers.maybeSingle ? handlers.maybeSingle() : { data: null, error: null }),
+      insert: async () => ({ data: null, error: null }),
     };
     return builder;
   };
@@ -637,6 +638,7 @@ describe('handlePaymentSettlement', () => {
           order: () => builder,
           limit: () => builder,
           maybeSingle: async () => (h.maybeSingle ? h.maybeSingle() : { data: null, error: null }),
+          insert: async () => ({ data: null, error: null }),
         };
         return builder;
       },
@@ -992,6 +994,7 @@ function createReconciliationStub({ tables = {}, rpcHandler } = {}) {
           return { data: targets, error: null };
         },
       }),
+      insert: async (row) => { rows.push(row); return { data: row, error: null }; },
       then: (resolve) => resolve({ data: materialize(), error: null }),
     };
     return builder;

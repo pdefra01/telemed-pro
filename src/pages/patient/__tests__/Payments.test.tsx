@@ -19,6 +19,12 @@ vi.mock('../../../repositories/InvoiceRepository', () => ({
   },
 }));
 
+vi.mock('../../../repositories/NotificationRepository', () => ({
+  notificationRepository: {
+    subscribeToNotifications: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
+  },
+}));
+
 vi.mock('../../../services/supabase', () => ({
   supabase: {
     auth: {
