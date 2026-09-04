@@ -15,6 +15,7 @@ import { familyMemberRepository } from '../../repositories/FamilyMemberRepositor
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { NotificationListener } from '../../components/dashboard/NotificationListener';
 import { notificationRepository } from '../../repositories/NotificationRepository';
+import { getBranding } from '../../config/branding';
 
 interface Props {
     user: Patient;
@@ -621,7 +622,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-[10px] text-blue-200 uppercase tracking-[0.4em] font-bold opacity-60">ID Digital</p>
-                                    <h3 className="text-2xl font-bold mt-2 tracking-tighter text-blue-300">MEDINEX</h3>
+                                    <h3 className="text-2xl font-bold mt-2 tracking-tighter text-blue-300">{getBranding().shortName.toUpperCase()}</h3>
                                 </div>
                                 <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
                                     <Shield size={24} className="text-blue-200" />
@@ -902,7 +903,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             
                                             // Handle legacy string[] array
                                             if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
-                                                if (!doc.availability[0].trim().startsWith('{')) {
+                                                if (typeof doc.availability[0] === 'string' && !(doc.availability[0] as string).trim().startsWith('{')) {
                                                     return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
                                                 }
                                             }
@@ -1014,7 +1015,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                             const getSlots = (doc: Doctor, day: number): string[] => {
                                                                 if (!doc || !doc.availability || !Array.isArray(doc.availability)) return [];
                                                                 if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
-                                                                    if (!doc.availability[0].trim().startsWith('{')) {
+                                                                    if (typeof doc.availability[0] === 'string' && !(doc.availability[0] as string).trim().startsWith('{')) {
                                                                         return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
                                                                     }
                                                                 }
@@ -1042,7 +1043,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                             const getSlots = (doc: Doctor, day: number): string[] => {
                                                                 if (!doc || !doc.availability || !Array.isArray(doc.availability)) return [];
                                                                 if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
-                                                                    if (!doc.availability[0].trim().startsWith('{')) {
+                                                                    if (typeof doc.availability[0] === 'string' && !(doc.availability[0] as string).trim().startsWith('{')) {
                                                                         return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
                                                                     }
                                                                 }
@@ -1071,7 +1072,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             const getSlots = (doc: Doctor, day: number): string[] => {
                                                 if (!doc || !doc.availability || !Array.isArray(doc.availability)) return [];
                                                 if (doc.availability.length > 0 && typeof doc.availability[0] === 'string') {
-                                                    if (!doc.availability[0].trim().startsWith('{')) {
+                                                    if (typeof doc.availability[0] === 'string' && !(doc.availability[0] as string).trim().startsWith('{')) {
                                                         return (doc.availability as unknown as string[]).filter(s => typeof s === 'string');
                                                     }
                                                 }

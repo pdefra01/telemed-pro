@@ -110,11 +110,11 @@ describe('Patient Profile Screen', () => {
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(affiliateRepository.updateAffiliate).toHaveBeenCalledWith(MOCK_PATIENT.id, {
+      expect(affiliateRepository.updateAffiliate).toHaveBeenCalledWith(MOCK_PATIENT.id, expect.objectContaining({
         name: 'Juan Actualizado',
         phone: '+54 9 11 9999-8888',
         address: 'Av. Siempre Viva 742',
-      });
+      }));
     });
 
     await waitFor(() => {

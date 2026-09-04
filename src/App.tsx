@@ -35,6 +35,7 @@ import SetPassword from './pages/SetPassword';
 import { LeadSurvey } from './pages/LeadSurvey';
 import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
+import { getBranding } from './config/branding';
 
 import { ToastProvider, useToast } from './context/ToastContext';
 
@@ -143,6 +144,16 @@ const SessionTimeoutHandler: React.FC<{ user: User | null; onLogout: () => void 
 };
 
 const App: React.FC = () => {
+  useEffect(() => {
+    const branding = getBranding();
+    document.title = `${branding.shortName} – ${branding.tagline}`;
+    
+    let favicon = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
+    if (favicon) {
+      favicon.href = branding.favicon;
+    }
+  }, []);
+
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = sessionStorage.getItem('medinex_user') || localStorage.getItem('medinex_user');

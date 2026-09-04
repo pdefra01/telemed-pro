@@ -14,6 +14,8 @@ import { affiliateRepository } from '../../repositories/AffiliateRepository';
 import { familyMemberRepository } from '../../repositories/FamilyMemberRepository';
 import { ContactValidationModal } from '../../components/ui/ContactValidationModal';
 
+import { getBranding } from '../../config/branding';
+
 interface ProfileProps {
   user: Patient;
   onLogin: (updatedUser: Patient) => void;
@@ -25,6 +27,7 @@ const RELATION_OPTIONS = ['cónyuge', 'hijo/a', 'padre/madre', 'hermano/a', 'otr
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
+  const branding = getBranding();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -103,13 +106,15 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
     }
     setIsSavingProfile(true);
     try {
-      const updatedUser = await affiliateRepository.updateAffiliate(user.id, {
+      const updatePayload: Record<string, any> = {
         name,
         phone,
         address,
-        bloodType: bloodType || undefined,
-        birthDate: birthDate || undefined,
-      });
+      };
+      if (bloodType) updatePayload.bloodType = bloodType;
+      if (birthDate) updatePayload.birthDate = birthDate;
+
+      const updatedUser = await affiliateRepository.updateAffiliate(user.id, updatePayload);
       onLogin(updatedUser);
       localStorage.setItem('medinex_user', JSON.stringify(updatedUser));
       toast('Perfil actualizado con éxito', 'success');
@@ -195,6 +200,47 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
           </div>
         </div>
 
+        {/* ══ DIGITAL CREDENTIAL CARD ══════════════════════════════════════════ */}
+        <div className={`relative overflow-hidden rounded-[2.5rem] p-6 sm:p-8 bg-gradient-to-r ${branding.cardBg} border border-white/20 shadow-2xl text-white`}>
+          <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="flex justify-between items-start mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-white rounded-2xl p-1.5 flex items-center justify-center shadow-md">
+                <img src={branding.logo} alt={branding.name} className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-lg leading-tight">{branding.name}</h3>
+                <p className="text-[10px] uppercase tracking-widest text-slate-300 font-semibold">{branding.tagline}</p>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-mono font-bold uppercase tracking-wider">
+              Afiliado Activo
+            </span>
+          </div>
+
+          <div className="space-y-4 my-6">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Titular</p>
+              <p className="text-xl font-bold tracking-tight text-white">{user.name}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">DNI</p>
+                <p className="text-sm font-mono font-semibold text-slate-200">{user.dni || 'Sin registrar'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Plan</p>
+                <p className="text-sm font-semibold text-emerald-400">{user.planName || 'Plan Total'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-white/10 flex justify-between items-center text-[10px] font-mono text-slate-400">
+            <span>VALIDACIÓN DIGITAL TELEMED-PRO</span>
+            <span>CRED-{user.id.slice(0, 8).toUpperCase()}</span>
+          </div>
+        </div>
+
         {/* ══ SECTION 1: Datos del Titular ══════════════════════════════════════ */}
         <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 md:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           {/* Avatar + name */}
@@ -268,7 +314,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <Input
                   id="phone"
-                  label="Teléfono"
+                  label="Número de Teléfono"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="Ej: +54 9 11 1234-5678"

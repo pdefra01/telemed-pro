@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Camera, Mic, Wifi, Activity, CheckCircle2, Lock } from 'lucide-react';
+import { getBranding } from '../../config/branding';
 
 interface WaitingExperienceProps {
   patientName: string;
@@ -8,6 +9,7 @@ interface WaitingExperienceProps {
 }
 
 export const WaitingExperience: React.FC<WaitingExperienceProps> = ({ patientName, onReady, onCancel }) => {
+  const branding = getBranding();
   const [steps, setSteps] = useState([
     { id: 'perms', label: 'Verificando Permisos Biométricos', status: 'loading', icon: Shield },
     { id: 'media', label: 'Sincronizando Cámara y Micrófono', status: 'pending', icon: Camera },
@@ -44,13 +46,16 @@ export const WaitingExperience: React.FC<WaitingExperienceProps> = ({ patientNam
 
       <div className="relative z-10 w-full max-w-lg">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full mb-6">
+        <div className="text-center mb-12 flex flex-col items-center">
+          <div className="w-24 h-24 bg-white rounded-3xl p-3 shadow-2xl mb-6 flex items-center justify-center border border-white/20">
+            <img src={branding.logo} alt={branding.name} className="w-full h-full object-contain" />
+          </div>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full mb-4">
             <Shield size={14} className="text-emerald-500" />
-            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.2em]">Protocolo de Seguridad Activo</span>
+            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.2em]">Consultorio Virtual Cifrado</span>
           </div>
           <h2 className="text-3xl font-bold text-white tracking-tight mb-2">Hola, {patientName}</h2>
-          <p className="text-slate-400 text-sm font-medium">Estamos preparando su sala de consulta privada.</p>
+          <p className="text-slate-400 text-sm font-medium">Estamos preparando su sala de atención en {branding.shortName}.</p>
         </div>
 
         {/* Steps Container */}
@@ -94,7 +99,7 @@ export const WaitingExperience: React.FC<WaitingExperienceProps> = ({ patientNam
           <div className="flex items-center gap-6 opacity-40">
              <Activity size={16} className="text-slate-400" />
              <div className="w-px h-4 bg-white/20"></div>
-             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">MEDINEX Zen v1.0</span>
+             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">{branding.shortName} Telemedicina</span>
           </div>
           {onCancel && (
             <button 

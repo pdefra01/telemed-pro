@@ -19,7 +19,7 @@ import {
   ClipboardList
 } from 'lucide-react';
 import { User, Role } from '../types';
-import logoMedinex from '../logo_medinex.jpeg';
+import { getBranding } from '../config/branding';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -28,6 +28,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
+  const branding = getBranding();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -93,8 +94,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       {/* Mobile Header */}
       <div className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-50 flex-shrink-0 border-b border-gray-100">
         <div className="flex items-center space-x-2 font-bold text-teal-600 text-xl">
-          <img src={logoMedinex} alt="Medinex Logo" className="w-10 h-10 object-contain rounded-md shadow-sm flex-shrink-0" />
-          <span>MEDINEX</span>
+          <img src={branding.logo} alt={`${branding.name} Logo`} className="w-10 h-10 object-contain rounded-md shadow-sm flex-shrink-0" />
+          <span className="text-[#003366] font-black">{branding.shortName}</span>
         </div>
         <button
           type="button"
@@ -113,12 +114,23 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       >
         <div className="flex-1 overflow-y-auto custom-scrollbar pb-4">
           <div className="p-8 flex flex-col items-center space-y-4 hidden md:flex border-b border-gray-100 mb-6 text-center">
-            <div className="w-32 h-32 bg-white rounded-[1.75rem] shadow-lg ring-1 ring-[#0dbda9]/15 border border-gray-100 flex items-center justify-center p-4 hover:scale-105 transition-transform duration-500 select-none">
-              <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
+            <div className="w-32 h-32 bg-white rounded-[1.75rem] shadow-lg ring-1 ring-[#003366]/15 border border-gray-100 flex items-center justify-center p-3 hover:scale-105 transition-transform duration-500 select-none">
+              <img src={branding.logo} alt={`${branding.name} Logo`} className="w-full h-full object-contain" />
             </div>
-            <span className="text-2xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-              MED<span className="text-[#0dbda9]">IN</span>EX
-            </span>
+            {branding.id === 'cosegurototal' ? (
+              <div>
+                <span className="text-xl font-black tracking-tight text-[#003366]">
+                  COSEGURO <span className="text-[#d90429]">TOTAL</span>
+                </span>
+                <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-0.5">
+                  {branding.tagline}
+                </p>
+              </div>
+            ) : (
+              <span className="text-2xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                MED<span className="text-[#0dbda9]">IN</span>EX
+              </span>
+            )}
           </div>
 
           <div className="px-6 mb-6">

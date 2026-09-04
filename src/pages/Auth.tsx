@@ -8,13 +8,14 @@ import { dniSchema, phoneSchema } from '../utils/validation';
 import { z } from 'zod';
 import { authRepository } from '../repositories/AuthRepository';
 import { isEmailLike, toLegacyPatientEmail } from '../utils/patientIdentifier';
-import logoMedinex from '../logo_medinex.jpeg';
+import { getBranding } from '../config/branding';
 
 interface AuthProps {
   onLogin: (user: User) => void;
 }
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
+  const branding = getBranding();
   const [isRegistering, setIsRegistering] = useState(false);
   const [method, setMethod] = useState<'phone' | 'dni' | 'email' | 'google'>('dni');
   const [role, setRole] = useState<Role>('patient');
@@ -158,7 +159,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-500 to-cyan-700 flex items-center justify-center p-4">
+    <div className={`min-h-screen ${branding.id === 'cosegurototal' ? 'bg-gradient-to-br from-[#003366] via-[#002244] to-[#0a1128]' : 'bg-gradient-to-br from-teal-500 to-cyan-700'} flex items-center justify-center p-4`}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex overflow-hidden min-h-[650px]">
 
         {/* Left Side: Branding & Info */}
@@ -175,14 +176,25 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <div className="relative z-10 text-center flex flex-col items-center">
             <div className="flex flex-col items-center space-y-4 mb-8">
               <div className="w-48 h-48 bg-white rounded-[2.5rem] shadow-xl border border-gray-100 flex items-center justify-center p-4 hover:scale-105 transition-transform duration-500 select-none">
-                <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
+                <img src={branding.logo} alt={`${branding.name} Logo`} className="w-full h-full object-contain" />
               </div>
-              <h1 className="text-4xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-                MED<span className="text-[#0dbda9]">IN</span>EX
-              </h1>
+              {branding.id === 'cosegurototal' ? (
+                <div className="text-center">
+                  <h1 className="text-3xl font-black tracking-tight text-[#003366]">
+                    COSEGURO <span className="text-[#d90429]">TOTAL</span>
+                  </h1>
+                  <p className="text-xs uppercase tracking-widest text-gray-500 font-semibold mt-1">
+                    {branding.tagline}
+                  </p>
+                </div>
+              ) : (
+                <h1 className="text-4xl font-extrabold tracking-[0.05em] text-[#002f54]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                  MED<span className="text-[#0dbda9]">IN</span>EX
+                </h1>
+              )}
             </div>
             <h2 className="text-2xl font-bold text-gray-800 mb-4 leading-tight">
-              {role === 'patient' && "Tu salud, en tus manos."}
+              {role === 'patient' && (branding.id === 'cosegurototal' ? branding.subTagline : "Tu salud, en tus manos.")}
               {role === 'doctor' && "Optimiza tu práctica médica."}
               {role === 'admin' && "Gestión eficiente y segura."}
               {role === 'advisor' && "Hacé crecer tu cartera de afiliados."}
@@ -209,11 +221,17 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           {/* Logo on Mobile */}
           <div className="md:hidden flex flex-col items-center mb-6">
             <div className="w-20 h-20 bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center p-2">
-              <img src={logoMedinex} alt="Medinex Logo" className="w-full h-full object-contain" />
+              <img src={branding.logo} alt={`${branding.name} Logo`} className="w-full h-full object-contain" />
             </div>
-            <span className="text-3xl font-extrabold tracking-[0.05em] text-[#002f54] mt-2" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-              MED<span className="text-[#0dbda9]">IN</span>EX
-            </span>
+            {branding.id === 'cosegurototal' ? (
+              <span className="text-2xl font-black tracking-tight text-[#003366] mt-2">
+                COSEGURO <span className="text-[#d90429]">TOTAL</span>
+              </span>
+            ) : (
+              <span className="text-3xl font-extrabold tracking-[0.05em] text-[#002f54] mt-2" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                MED<span className="text-[#0dbda9]">IN</span>EX
+              </span>
+            )}
           </div>
 
           {/* Role Tabs */}
@@ -359,7 +377,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 type="submit"
                 variant="primary"
                 icon={<ArrowRight size={20} />}
-                className="w-full"
+                className={`w-full ${branding.id === 'cosegurototal' ? 'bg-[#003366] hover:bg-[#002244] focus:ring-[#003366] shadow-[#003366]/20' : ''}`}
                 disabled={isLoading}
               >
                 {isLoading ? 'Cargando...' : (isRegistering ? 'Registrarse' : 'Ingresar')}

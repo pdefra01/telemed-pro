@@ -15,6 +15,7 @@ import { User } from '../types';
 import { appointmentRepository } from '../repositories/AppointmentRepository';
 import { medicalRecordRepository } from '../repositories/MedicalRecordRepository';
 import { useToast } from '../context/ToastContext';
+import { getBranding } from '../config/branding';
 import { 
   Save, 
   CheckCircle, 
@@ -60,6 +61,7 @@ interface RxItem {
 }
 
 interface VideoRoomContentProps {
+  user: User;
   isDoctor: boolean;
   appointment: any;
   appointmentId?: string;
@@ -87,6 +89,7 @@ interface VideoRoomContentProps {
 }
 
 const VideoRoomContent: React.FC<VideoRoomContentProps> = ({ 
+  user,
   isDoctor, 
   appointment, 
   appointmentId, 
@@ -130,16 +133,17 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
   const remoteVideoTrack = tracks.find(t => !t.participant.isLocal && t.source === Track.Source.Camera);
   const remoteScreenShareTrack = tracks.find(t => !t.participant.isLocal && t.source === Track.Source.ScreenShare);
   
-  if (!appointment) {
-    console.error("CRITICAL: appointment is null in VideoRoomContent");
-    return <div className="p-10 text-white">Error: Cita no encontrada</div>;
-  }
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => setElapsed(e => e + 1), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  if (!appointment) {
+    console.error("CRITICAL: appointment is null in VideoRoomContent");
+    return <div className="p-10 text-white">Error: Cita no encontrada</div>;
+  }
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60).toString().padStart(2, '0');
@@ -249,11 +253,11 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                     {isDoctor && (
                       <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px] font-medium leading-none">
                         <span className="text-slate-300 font-semibold">Paciente Registrado</span>
-                        {(user as any)?.licenseNumber && (
+                        {appointment?.patientDni && (
                           <>
                             <span className="text-slate-600">•</span>
                             <span className="text-emerald-400 font-bold tracking-wider">
-                              MP N° {(user as any).licenseNumber}
+                              DNI {appointment.patientDni}
                             </span>
                           </>
                         )}
@@ -731,7 +735,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                  <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
                </div>
                <p className="text-[10px] text-slate-700 font-bold uppercase tracking-[0.5em]">
-                 MEDINEX ZEN
+                 {getBranding().shortName.toUpperCase()} TELEMEDICINA
                </p>
             </div>
           </div>
@@ -1008,12 +1012,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
     }
   }, [appointmentId, notes, navigate, toast]);
 
+  const handleHandshakeReady = useCallback(() => {
+    setIsHandshakeComplete(true);
+  }, []);
+
+  const handleHandshakeCancel = useCallback(() => {
+    navigate(user.role === 'doctor' ? '/doctor' : '/patient');
+  }, [navigate, user.role]);
+
   if (!isHandshakeComplete && !isDoctor) {
     return (
       <WaitingExperience 
         patientName={user.name || 'Paciente'} 
-        onReady={() => setIsHandshakeComplete(true)} 
-        onCancel={() => navigate(user.role === 'doctor' ? '/doctor' : '/patient')}
+        onReady={handleHandshakeReady} 
+        onCancel={handleHandshakeCancel}
       />
     );
   }
@@ -1083,6 +1095,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
           >
             <RoomAudioRenderer />
             <VideoRoomContent 
+              user={user}
               isDoctor={isDoctor} 
               appointment={appointment} 
               appointmentId={appointmentId} 

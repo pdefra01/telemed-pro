@@ -236,7 +236,7 @@ describe('Patient Payments Screen (de-mocked)', () => {
     vi.mocked(accountMovementRepository.getMovements).mockResolvedValue([
       makeMovement({ id: 'mov-payment', type: 'payment', amount: 50000, invoiceId: 'inv-1' }),
     ]);
-    vi.mocked(invoiceRepository.getByEntity).mockResolvedValue([makeInvoice({ status: 'paid', pdfUrl: undefined })]);
+    vi.mocked(invoiceRepository.getByEntity).mockResolvedValue([]);
 
     render(<Payments user={MOCK_PATIENT} />);
 
