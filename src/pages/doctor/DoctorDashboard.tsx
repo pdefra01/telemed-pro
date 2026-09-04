@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Doctor, Appointment, MedicalRecord, Prescription, MedicalDocument, DoctorWorkShift } from '../../types';
 import { Video, Calendar, Clock, Star, AlertCircle, FileText, CheckCircle, TrendingUp, Users, Activity, AlertTriangle, X, Search, Clipboard, Shield, ChevronRight, Zap, ArrowRight, MousePointer2, LogIn, LogOut as LogOutIcon, MapPin } from 'lucide-react';
@@ -43,6 +43,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [activeArrivalAlert, setActiveArrivalAlert] = useState<{ patientName: string; appointmentId: string } | null>(null);
     const [searchDni, setSearchDni] = useState('');
     const [isSearchingDni, setIsSearchingDni] = useState(false);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
 
     // Vademécum & Stock Farmacia state
     const [showPharmacyModal, setShowPharmacyModal] = useState(false);
@@ -189,65 +190,84 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         }
     }, [location]);
 
-    useEffect(() => {
-        const fetchAppointments = async () => {
-            try {
-                // Usar el nuevo Command Center View para la cola activa, y traer KPIs al mismo tiempo
-                const [queueData, allAppts, kpis] = await Promise.all([
-                    dashboardRepository.getDoctorQueue(user.id),
-                    appointmentRepository.getDoctorAppointments(user.id),
-                    dashboardRepository.getDoctorKPIs(user.id, kpiTimeframe)
-                ]);
+    const fetchAppointments = useCallback(async () => {
+        try {
+            // Usar el nuevo Command Center View para la cola activa, y traer KPIs al mismo tiempo
+            const [queueData, allAppts, kpis] = await Promise.all([
+                dashboardRepository.getDoctorQueue(user.id),
+                appointmentRepository.getDoctorAppointments(user.id),
+                dashboardRepository.getDoctorKPIs(user.id, kpiTimeframe)
+            ]);
 
-                setDynamicKPIs(kpis);
+            setDynamicKPIs(kpis);
 
-                // Mapear la cola desde la vista
-                const mappedQueue = queueData.map(row => ({
-                    id: row.appointment_id,
-                    patientId: row.patient_id,
-                    patientName: row.patient_name,
-                    patientAvatar: row.patient_avatar,
-                    patientPlan: row.patient_plan,
-                    doctorId: row.doctor_id,
-                    doctorName: "", 
-                    date: new Date(row.scheduled_at).toISOString().split('T')[0],
-                    time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    status: row.status,
-                    type: 'video',
-                    consultationMetadata: row.consultation_metadata || {},
-                }));
+            // Mapear la cola desde la vista
+            const mappedQueue = queueData.map(row => ({
+                id: row.appointment_id,
+                patientId: row.patient_id,
+                patientName: row.patient_name,
+                patientAvatar: row.patient_avatar,
+                patientPlan: row.patient_plan,
+                doctorId: row.doctor_id,
+                doctorName: "", 
+                date: new Date(row.scheduled_at).toISOString().split('T')[0],
+                time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                status: row.status,
+                type: 'video',
+                consultationMetadata: row.consultation_metadata || {},
+            }));
 
-                // Lógica de alerta movida fuera del updater (debe ser pura en React)
-                if (!isInitialLoadRef.current) {
-                    const newlyConfirmed = mappedQueue.find(newAppt => {
-                        if (newAppt.status !== 'confirmed') return false;
+            // Lógica de alerta movida fuera del updater (debe ser pura en React)
+            if (!isInitialLoadRef.current) {
+                const newlyConfirmed = mappedQueue.find(newAppt => {
+                    if (newAppt.status !== 'confirmed') return false;
 
-                        const wasAlreadyConfirmed = prevQueueRef.current.some(oldAppt =>
-                            oldAppt.id === newAppt.id && oldAppt.status === 'confirmed'
-                        );
-                        return !wasAlreadyConfirmed;
+                    const wasAlreadyConfirmed = prevQueueRef.current.some(oldAppt =>
+                        oldAppt.id === newAppt.id && oldAppt.status === 'confirmed'
+                    );
+                    return !wasAlreadyConfirmed;
+                });
+
+                if (newlyConfirmed) {
+                    playArrivalSound();
+                    setActiveArrivalAlert({
+                        patientName: newlyConfirmed.patientName,
+                        appointmentId: newlyConfirmed.id
                     });
-
-                    if (newlyConfirmed) {
-                        playArrivalSound();
-                        setActiveArrivalAlert({
-                            patientName: newlyConfirmed.patientName,
-                            appointmentId: newlyConfirmed.id
-                        });
-                    }
-                } else {
-                    isInitialLoadRef.current = false;
                 }
-                
-                prevQueueRef.current = mappedQueue;
-                setQueueAppointments(mappedQueue);
-                setHistoryAppointments(allAppts.filter(a => a.status === 'completed'));
-            } catch (error) {
-                console.error("Error cargando turnos:", error);
-            } finally {
-                setIsLoading(false);
+            } else {
+                isInitialLoadRef.current = false;
             }
-        };
+            
+            prevQueueRef.current = mappedQueue;
+            setQueueAppointments(mappedQueue);
+            setHistoryAppointments(allAppts.filter(a => a.status === 'completed'));
+        } catch (error) {
+            console.error("Error cargando turnos:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user.id, kpiTimeframe]);
+
+    const handleCancelAppointment = async (appointmentId: string) => {
+        if (!window.confirm('¿Estás seguro de que querés dar de baja este turno?')) return;
+        setCancellingId(appointmentId);
+        try {
+            await appointmentRepository.cancelAppointment(appointmentId);
+            setQueueAppointments(prev => prev.filter(apt => apt.id !== appointmentId));
+            setToast({ message: 'Turno dado de baja con éxito', type: 'success' });
+            setTimeout(() => setToast(null), 4000);
+            await fetchAppointments();
+        } catch (error: any) {
+            console.error("Error cancelando turno:", error);
+            setToast({ message: error.message || 'Error al cancelar el turno', type: 'error' });
+            setTimeout(() => setToast(null), 5000);
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
+    useEffect(() => {
         fetchAppointments();
 
         // Polling fallback cada 30s: garantiza que la cola se sincronice aunque
@@ -719,6 +739,21 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                     <Activity size={14} className="animate-pulse" /> En Espera
                                                 </div>
                                             )}
+
+                                            <button 
+                                                type="button"
+                                                disabled={cancellingId === apt.id}
+                                                onClick={() => handleCancelAppointment(apt.id)}
+                                                className="h-12 sm:h-14 px-4 sm:px-6 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] transition-all disabled:opacity-50 active:scale-95 group/cancel cursor-pointer"
+                                                title="Dar de baja / Cancelar turno"
+                                            >
+                                                {cancellingId === apt.id ? (
+                                                    <div className="w-3.5 h-3.5 border-2 border-red-400/20 border-t-red-400 rounded-full animate-spin"></div>
+                                                ) : (
+                                                    <X size={14} className="group-hover/cancel:scale-110 transition-transform" />
+                                                )}
+                                                <span>{cancellingId === apt.id ? 'Cancelando...' : 'Cancelar'}</span>
+                                            </button>
                                         </div>
                                     </div>
                                 ))
