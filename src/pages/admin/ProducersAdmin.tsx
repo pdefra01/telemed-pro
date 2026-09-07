@@ -4,14 +4,22 @@ import { producerRepository } from '../../repositories/ProducerRepository';
 import { supabase } from '../../services/supabase';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 import {
-  Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp, Key, Pencil
+  Building2, Plus, Users, Award, DollarSign, CheckCircle, Search, Mail, Phone, TrendingUp, Key, Pencil, Ban, RotateCcw
 } from 'lucide-react';
+
+// Debounce window for server-side advisor search (design 3.5).
+const SEARCH_DEBOUNCE_MS = 300;
 
 export const ProducersAdmin: React.FC = () => {
   const [producers, setProducers] = useState<Producer[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  // Server-side search results (design 3.5/D4) — null means "no active search,
+  // show `producers` as loaded". Distinct from an empty array (no matches).
+  const [searchResults, setSearchResults] = useState<Producer[] | null>(null);
+  const [searchError, setSearchError] = useState<string>('');
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
   // Form states
   const [firstName, setFirstName] = useState('');
@@ -41,6 +49,31 @@ export const ProducersAdmin: React.FC = () => {
   useEffect(() => {
     loadProducers();
   }, []);
+
+  // Server-authoritative search (design 3.5/D4): a term of length < 2 shows
+  // `producers` as loaded (Esc.15, no client filter); length >= 2 debounces
+  // 300ms then calls `searchAdvisors`, whose results (including inactive
+  // advisors, Esc.18) replace the rendered list until the term is cleared.
+  useEffect(() => {
+    const trimmed = searchTerm.trim();
+    if (trimmed.length < 2) {
+      setSearchResults(null);
+      setSearchError('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await producerRepository.searchAdvisors(trimmed);
+        setSearchResults(results);
+        setSearchError('');
+      } catch (err: any) {
+        setSearchError(err.message || 'Error al buscar asesores.');
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const loadProducers = async () => {
     setLoading(true);
@@ -142,13 +175,39 @@ export const ProducersAdmin: React.FC = () => {
     }
   };
 
-  const filteredProducers = producers.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.producerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const displayedProducers = searchResults ?? producers;
 
   const totalAffiliatesAllProducers = producers.reduce((sum, p) => sum + (p.totalAffiliatesReferred || 0), 0);
+
+  /** Activa/desactiva un asesor con confirmación previa (propuesta 4.2). */
+  const handleToggleAdvisorStatus = async (p: Producer) => {
+    const willActivate = p.status !== 'active';
+    const confirmMsg = willActivate
+      ? `¿Reactivar a ${p.name}? Podrá volver a iniciar sesión y su link de referido volverá a aceptar altas.`
+      : `¿Desactivar a ${p.name}? No podrá iniciar sesión y su link de referido dejará de aceptar altas nuevas.`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setStatusUpdatingId(p.id);
+    try {
+      await producerRepository.setAdvisorStatus(p.id, willActivate);
+      setToastMsg(willActivate ? `Asesor ${p.name} reactivado.` : `Asesor ${p.name} desactivado.`);
+      await loadProducers();
+      if (searchTerm.trim().length >= 2) {
+        try {
+          const results = await producerRepository.searchAdvisors(searchTerm.trim());
+          setSearchResults(results);
+        } catch {
+          // Keep the previous search results on a refresh failure — the
+          // underlying list (loadProducers) already reflects the new state.
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al actualizar el estado del asesor.');
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-500">
@@ -204,15 +263,19 @@ export const ProducersAdmin: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
           <input
             type="text"
-            placeholder="Buscar por nombre, código o email de asesor..."
+            placeholder="Buscar por nombre, apellido, DNI, código o email"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full bg-slate-900/60 border border-white/10 rounded-2xl pl-12 pr-4 py-3 text-white text-xs focus:outline-none focus:border-teal-500/50"
           />
         </div>
 
+        {searchError && (
+          <p className="text-red-400 text-xs font-bold">{searchError}</p>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducers.map(p => (
+          {displayedProducers.map(p => (
             <div key={p.id} className="bg-slate-900/40 border border-white/5 hover:border-teal-500/30 rounded-3xl p-6 space-y-4 transition-all duration-300 backdrop-blur-xl relative group">
               <div className="flex justify-between items-start">
                 <div>
@@ -223,8 +286,14 @@ export const ProducersAdmin: React.FC = () => {
                   <p className="text-xs text-slate-400">{p.email}</p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-[10px] font-bold uppercase border border-emerald-500/20">
-                    {p.status}
+                  <span
+                    className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
+                      p.status === 'active'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-red-500/10 text-red-400 border-red-500/20'
+                    }`}
+                  >
+                    {p.status === 'active' ? 'Activo' : 'Inactivo'}
                   </span>
                   {p.hasAccount && (
                     <>
@@ -244,6 +313,18 @@ export const ProducersAdmin: React.FC = () => {
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={() => handleToggleAdvisorStatus(p)}
+                    disabled={statusUpdatingId === p.id}
+                    className={`p-1.5 rounded-xl transition-colors border border-white/5 disabled:opacity-50 ${
+                      p.status === 'active'
+                        ? 'bg-white/5 hover:bg-red-500/20 text-red-400'
+                        : 'bg-white/5 hover:bg-emerald-500/20 text-emerald-400'
+                    }`}
+                    title={p.status === 'active' ? 'Desactivar Asesor' : 'Reactivar Asesor'}
+                  >
+                    {p.status === 'active' ? <Ban size={14} /> : <RotateCcw size={14} />}
+                  </button>
                 </div>
               </div>
 
