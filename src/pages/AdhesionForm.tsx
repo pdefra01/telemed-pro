@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { adhesionRepository, AdhesionRequest } from '../repositories/AdhesionRepository';
+import { producerRepository } from '../repositories/ProducerRepository';
 import { planRepository } from '../repositories/PlanRepository';
 import { systemSettingsRepository } from '../repositories/SystemSettingsRepository';
 import { Plan } from '../types';
@@ -62,7 +63,36 @@ export const AdhesionForm: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [promoterCode, setPromoterCode] = useState(searchParams.get('promoter') || '');
-  const isPromoterLocked = !!searchParams.get('promoter');
+  const [isPromoterLocked, setIsPromoterLocked] = useState(!!searchParams.get('promoter'));
+  const [promoterInvalidNotice, setPromoterInvalidNotice] = useState(false);
+
+  // sdd/advisor-auto-provisioning, design 3.6, Esc.9: a referral link
+  // (?promoter=CODE) for an advisor deactivated after being shared must stop
+  // accepting new sign-ups at LANDING time, not only at final submit
+  // (AdhesionRepository.ts already rejects it then — this only surfaces the
+  // problem earlier so the field re-opens for manual entry).
+  useEffect(() => {
+    const codeParam = searchParams.get('promoter');
+    if (!codeParam) return;
+
+    let isMounted = true;
+    (async () => {
+      try {
+        const producer = await producerRepository.getProducerByCode(codeParam);
+        if (!isMounted) return;
+        if (!producer || producer.status !== 'active') {
+          setPromoterCode('');
+          setIsPromoterLocked(false);
+          setPromoterInvalidNotice(true);
+        }
+      } catch (err) {
+        console.error('Error validando código de promotor:', err);
+      }
+    })();
+
+    return () => { isMounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -833,6 +863,11 @@ export const AdhesionForm: React.FC = () => {
                   onChange={(e) => !isPromoterLocked && setPromoterCode(e.target.value.toUpperCase())}
                   disabled={isPromoterLocked}
                 />
+                {promoterInvalidNotice && (
+                  <p className="text-amber-400 text-xs mt-2">
+                    El código de promotor no es válido o ya no está activo. Podés dejarlo en blanco o ingresar uno nuevo.
+                  </p>
+                )}
               </div>
             </div>
 
