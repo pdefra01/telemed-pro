@@ -173,6 +173,39 @@ describe('AdhesionRepository', () => {
     expect(insertMock).not.toHaveBeenCalled();
   });
 
+  // Corte 1 (design 3.7/3.6) — sdd/advisor-auto-provisioning: this branch
+  // already existed before this change; this test only blinds/documents it,
+  // with no production code touched.
+  it('rejects submission with an inactive or non-existent promoter_id, never inserting the request', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true }),
+    } as Response);
+
+    const producerChain = {
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    };
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(supabase.from).mockImplementation((table: string) =>
+      (table === 'producers' ? producerChain : { insert: insertMock }) as any
+    );
+
+    const request = buildRequest({ promoter_id: 'PROMO_INACTIVE' });
+
+    await expect(repository.submitApplication(request)).rejects.toThrow(
+      'El código de promotor ingresado no es válido o no está activo.'
+    );
+
+    expect(supabase.from).toHaveBeenCalledWith('producers');
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
   it('throws when the insert itself fails, instead of silently returning an undefined id', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: true,

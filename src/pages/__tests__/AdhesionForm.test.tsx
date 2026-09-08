@@ -4,11 +4,19 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AdhesionForm } from '../AdhesionForm';
 import { adhesionRepository } from '../../repositories/AdhesionRepository';
+import { producerRepository } from '../../repositories/ProducerRepository';
 
 // Mock AdhesionRepository and PlanRepository
 vi.mock('../../repositories/AdhesionRepository', () => ({
   adhesionRepository: {
     submitApplication: vi.fn()
+  }
+}));
+
+// Mock ProducerRepository (Esc.9 — landing-time promoter code validation)
+vi.mock('../../repositories/ProducerRepository', () => ({
+  producerRepository: {
+    getProducerByCode: vi.fn()
   }
 }));
 
@@ -27,6 +35,13 @@ vi.mock('../../context/ToastContext', () => ({
 }));
 
 const renderForm = () => render(<AdhesionForm />, { wrapper: MemoryRouter });
+
+const renderFormWithPromoter = (code: string) =>
+  render(
+    <MemoryRouter initialEntries={[`/adhesion?promoter=${code}`]}>
+      <AdhesionForm />
+    </MemoryRouter>
+  );
 
 const fillTitularStep1 = (options?: { skipCuil?: boolean; cuilValue?: string }) => {
   fireEvent.change(screen.getByPlaceholderText('Juan'), { target: { value: 'Juan' } });
@@ -208,5 +223,74 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
     expect(screen.queryByText(/contraseña temporal/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/DNI.*como usuario y contraseña/i)).not.toBeInTheDocument();
     expect(screen.getByText(/enlace para crear tu contraseña/i)).toBeInTheDocument();
+  });
+});
+
+// sdd/advisor-auto-provisioning, design 3.6, Esc.9 — the referral link stops
+// accepting new sign-ups for an advisor deactivated after the link was
+// shared, instead of only failing at the final submit step (Step 4).
+describe('AdhesionForm - promoter code validation on mount (Esc.9)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('clears and unlocks promoterCode, showing an inline notice, when the code is inactive', async () => {
+    vi.mocked(producerRepository.getProducerByCode).mockResolvedValueOnce({
+      id: 'adv-1',
+      name: 'Pedro Gómez',
+      producerCode: 'PROMO_INACTIVE',
+      email: 'pedro@medinex.com',
+      commissionRate: 10,
+      status: 'inactive',
+    } as any);
+
+    renderFormWithPromoter('PROMO_INACTIVE');
+
+    await waitFor(() => {
+      expect(producerRepository.getProducerByCode).toHaveBeenCalledWith('PROMO_INACTIVE');
+    });
+
+    const promoterInput = await screen.findByPlaceholderText(/PROMO_JUAN_123/i);
+    await waitFor(() => expect(promoterInput).not.toBeDisabled());
+    expect(promoterInput).toHaveValue('');
+    expect(screen.getByText(/El código de promotor no es válido o ya no está activo/i)).toBeInTheDocument();
+  });
+
+  it('clears and unlocks promoterCode when the code does not exist', async () => {
+    vi.mocked(producerRepository.getProducerByCode).mockResolvedValueOnce(null);
+
+    renderFormWithPromoter('DOES_NOT_EXIST');
+
+    const promoterInput = await screen.findByPlaceholderText(/PROMO_JUAN_123/i);
+    await waitFor(() => expect(promoterInput).not.toBeDisabled());
+    expect(promoterInput).toHaveValue('');
+  });
+
+  it('keeps the promoter code locked and shows no warning when the code is active', async () => {
+    vi.mocked(producerRepository.getProducerByCode).mockResolvedValueOnce({
+      id: 'adv-1',
+      name: 'Pedro Gómez',
+      producerCode: 'PROMO_ACTIVE',
+      email: 'pedro@medinex.com',
+      commissionRate: 10,
+      status: 'active',
+    } as any);
+
+    renderFormWithPromoter('PROMO_ACTIVE');
+
+    await waitFor(() => {
+      expect(producerRepository.getProducerByCode).toHaveBeenCalledWith('PROMO_ACTIVE');
+    });
+
+    const promoterInput = await screen.findByPlaceholderText(/PROMO_JUAN_123/i);
+    expect(promoterInput).toBeDisabled();
+    expect(promoterInput).toHaveValue('PROMO_ACTIVE');
+    expect(screen.queryByText(/El código de promotor no es válido o ya no está activo/i)).not.toBeInTheDocument();
+  });
+
+  it('does not call getProducerByCode when there is no ?promoter= param', () => {
+    renderForm();
+
+    expect(producerRepository.getProducerByCode).not.toHaveBeenCalled();
   });
 });
