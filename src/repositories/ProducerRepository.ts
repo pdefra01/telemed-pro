@@ -164,6 +164,82 @@ export class ProducerRepository {
   }
 
   /**
+   * Activa/desactiva un asesor comercial de forma atómica
+   * (sdd/advisor-auto-provisioning, design 3.3). Mirrors
+   * `AuthRepository.resetPasswordFromAdmin` — the fetch/Bearer plumbing
+   * lives in the repository, never in the UI component.
+   */
+  async setAdvisorStatus(id: string, active: boolean): Promise<{
+    success: boolean;
+    id: string;
+    status: 'active' | 'inactive';
+    isActive: boolean;
+    hasAccount: boolean;
+  }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`/api/advisors/${id}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ active }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Error al actualizar el estado del asesor.');
+    }
+
+    return result;
+  }
+
+  /**
+   * Búsqueda ampliada de asesores por nombre, apellido, DNI, código o email
+   * (sdd/advisor-auto-provisioning, design 3.4). Server-authoritative (D4):
+   * an empty term omits `q` entirely so the endpoint returns the full list
+   * (Esc.15) instead of the repository fabricating its own empty-query rule.
+   */
+  async searchAdvisors(q: string, opts?: { status?: 'all' | 'active' | 'inactive' }): Promise<Producer[]> {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const parts: string[] = [];
+    const trimmedQ = q?.trim();
+    if (trimmedQ) parts.push(`q=${encodeURIComponent(trimmedQ)}`);
+    if (opts?.status) parts.push(`status=${encodeURIComponent(opts.status)}`);
+
+    const query = parts.join('&');
+    const url = query ? `/api/advisors/search?${query}` : '/api/advisors/search';
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Error al buscar asesores.');
+    }
+
+    return (result.results || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      producerCode: row.producerCode,
+      email: row.email,
+      phone: row.phone,
+      dni: row.dni,
+      hasAccount: row.hasAccount,
+      commissionRate: Number(row.commissionRate),
+      status: row.status,
+      totalAffiliatesReferred: row.totalAffiliatesReferred || 0,
+    }));
+  }
+
+  /**
    * Crea un nuevo productor en el sistema (Admin)
    */
   async createProducer(producerData: Omit<Producer, 'id' | 'totalAffiliatesReferred'>): Promise<Producer> {

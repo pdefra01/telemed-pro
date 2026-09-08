@@ -14,6 +14,7 @@ import {
   DEBITO_AUTOMATICO_DISCOUNT,
 } from './server/mercadopago.js';
 import { buildPatientAuthUser, sendActivationEmail } from './server/affiliateActivation.js';
+import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1651,6 +1652,21 @@ app.post('/api/advisor/increment-share', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Acceso denegado. Se requiere rol de asesor comercial.' });
     }
 
+    // Commission-freeze "Corte 2" (sdd/advisor-auto-provisioning, design 3.7,
+    // Esc.10): a deactivated advisor's session is not closed on the spot, but
+    // must stop generating new activity/metrics from here on.
+    const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
+      .from('profiles')
+      .select('is_active')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    if (callerProfileError) throw callerProfileError;
+
+    if (!isAdvisorAccountActive(callerProfile)) {
+      return res.status(403).json({ error: 'Cuenta de asesor desactivada.' });
+    }
+
     // Atomic increment via direct RPC call — PostgreSQL handles the increment server-side
     const { data: newCount, error: rpcErr } = await supabaseAdmin
       .rpc('increment_links_shared', { row_id: req.user.id });
@@ -1856,6 +1872,35 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
     res.status(201).json({ success: true, id: newUserId });
   } catch (err) {
     console.error('[create-advisor] Error inesperado:', err);
+    res.status(500).json({ error: 'Error interno en el servidor.' });
+  }
+});
+
+/**
+ * PATCH /api/advisors/:id/status
+ * Activa/desactiva un asesor comercial de forma atómica (sdd/advisor-auto-provisioning,
+ * design 3.3). Business logic lives in server/advisors.js — this route only
+ * wires the admin-only gate.
+ */
+app.patch('/api/advisors/:id/status', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await setAdvisorStatusHandler(req, res, { supabaseAdmin });
+  } catch (err) {
+    console.error('[advisors/status] Error inesperado:', err);
+    res.status(500).json({ error: 'Error interno en el servidor.' });
+  }
+});
+
+/**
+ * GET /api/advisors/search
+ * Búsqueda ampliada de asesores por nombre, apellido, DNI, código o email,
+ * incluyendo inactivos (sdd/advisor-auto-provisioning, design 3.4).
+ */
+app.get('/api/advisors/search', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await searchAdvisorsHandler(req, res, { supabaseAdmin });
+  } catch (err) {
+    console.error('[advisors/search] Error inesperado:', err);
     res.status(500).json({ error: 'Error interno en el servidor.' });
   }
 });
