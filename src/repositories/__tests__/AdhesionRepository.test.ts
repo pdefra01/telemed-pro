@@ -206,6 +206,73 @@ describe('AdhesionRepository', () => {
     expect(insertMock).not.toHaveBeenCalled();
   });
 
+  // Judgment Day finding K3: when the promoter_id validation query itself
+  // errors (not "not found" — a network/DB error), the insert must never
+  // persist the unvalidated code, and the caller's `data` object must stay
+  // untouched (in case it's reused/shared by the caller).
+  it('clears promoter_id from the insert (without mutating the caller object) when validation itself errors', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true }),
+    } as Response);
+
+    const producerChain = {
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: 'network error' } }),
+          }),
+        }),
+      }),
+    };
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(supabase.from).mockImplementation((table: string) =>
+      (table === 'producers' ? producerChain : { insert: insertMock }) as any
+    );
+
+    const request = buildRequest({ promoter_id: 'PROMO_UNVERIFIABLE' });
+    await repository.submitApplication(request);
+
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ promoter_id: null }));
+    // The caller's own object must not have been mutated as a side effect
+    expect(request.promoter_id).toBe('PROMO_UNVERIFIABLE');
+  });
+
+  // Judgment Day finding K6: server-side DNI format guard mirroring
+  // AdhesionForm.tsx's client-side `/^\d{7,8}$/` check, so a direct API call
+  // bypassing the UI can't persist a malformed titular_dni.
+  it('rejects a titular_dni that does not match 7-8 numeric digits and does not insert', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true }),
+    } as Response);
+
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+    const request = buildRequest({ titular_dni: '123ABC45' });
+
+    await expect(repository.submitApplication(request)).rejects.toThrow(
+      /DNI debe contener entre 7 y 8 dígitos/
+    );
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts a titular_dni with surrounding whitespace, trimming it before the format check and insert', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true }),
+    } as Response);
+
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+    const request = buildRequest({ titular_dni: '  30123456  ' });
+    await repository.submitApplication(request);
+
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ titular_dni: '30123456' }));
+  });
+
   it('throws when the insert itself fails, instead of silently returning an undefined id', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: true,

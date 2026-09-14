@@ -78,21 +78,33 @@ export class AdhesionRepository {
       );
     }
 
-    // Validate promoter_id against active producers to prevent orphan records (B-3)
-    if (data.promoter_id && data.promoter_id.trim() !== '') {
+    // Validate promoter_id against active producers to prevent orphan records (B-3).
+    // Uses a local variable (never mutates the caller's `data`) so that when
+    // validation itself errors out, the insert below never persists an
+    // unvalidated code — it clears attribution instead of silently keeping it.
+    let validatedPromoterId = data.promoter_id && data.promoter_id.trim() !== '' ? data.promoter_id.trim() : null;
+    if (validatedPromoterId) {
       const { data: producer, error: producerErr } = await supabase
         .from('producers')
         .select('id')
-        .eq('producer_code', data.promoter_id.trim())
+        .eq('producer_code', validatedPromoterId)
         .eq('status', 'active')
         .maybeSingle();
 
       if (producerErr) {
         console.warn('Could not validate promoter_id:', producerErr.message);
         // Non-blocking: proceed without promoter attribution if validation fails
+        validatedPromoterId = null;
       } else if (!producer) {
         throw new Error('El código de promotor ingresado no es válido o no está activo.');
       }
+    }
+
+    // DNI format guard (B-6), mirroring AdhesionForm.tsx's client-side check
+    // so a direct API call bypassing the UI can't persist a malformed DNI.
+    const titularDni = (data.titular_dni || '').trim();
+    if (!/^\d{7,8}$/.test(titularDni)) {
+      throw new Error('El DNI debe contener entre 7 y 8 dígitos numéricos sin espacios ni puntos.');
     }
 
     // The anon client has no SELECT policy on adhesion_requests (only
@@ -111,7 +123,7 @@ export class AdhesionRepository {
         titular_name: data.titular_name,
         titular_first_name: data.titular_first_name || null,
         titular_last_name: data.titular_last_name || null,
-        titular_dni: data.titular_dni,
+        titular_dni: titularDni,
         titular_cuil: data.titular_cuil || null,
         titular_birth_date: data.titular_birth_date,
         titular_address: data.titular_address,
@@ -137,7 +149,7 @@ export class AdhesionRepository {
         consent_promotions: data.consent_promotions,
         signature_base64: data.signature_base64,
         status: 'pending',
-        promoter_id: data.promoter_id || null,
+        promoter_id: validatedPromoterId,
         email_verified: data.email_verified || false,
         preferred_billing_day: data.preferred_billing_day || 10
       });

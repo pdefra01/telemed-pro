@@ -1672,26 +1672,11 @@ app.post('/api/advisor/increment-share', requireAuth, async (req, res) => {
       .rpc('increment_links_shared', { row_id: req.user.id });
 
     if (rpcErr) {
-      // Fallback: verify row exists, then do a safe read-then-write
-      const { data: existing, error: checkErr } = await supabaseAdmin
-        .from('producers')
-        .select('links_shared_count')
-        .eq('id', req.user.id)
-        .maybeSingle();
-
-      if (checkErr || !existing) {
-        return res.status(404).json({ error: 'Ficha comercial de asesor no encontrada.' });
-      }
-
-      const { error: fallbackErr, data: fallbackData } = await supabaseAdmin
-        .from('producers')
-        .update({ links_shared_count: (existing.links_shared_count || 0) + 1 })
-        .eq('id', req.user.id)
-        .select('links_shared_count')
-        .single();
-
-      if (fallbackErr) throw fallbackErr;
-      return res.status(200).json({ success: true, linksSharedCount: fallbackData.links_shared_count });
+      // No read-then-write fallback here on purpose: it would reintroduce
+      // the exact lost-update race the increment_links_shared RPC exists to
+      // eliminate. Failing loudly beats silently reintroducing the bug.
+      console.error('[advisor/increment-share] RPC error:', rpcErr);
+      return res.status(500).json({ error: 'Error al registrar compartición de enlace.' });
     }
 
     if (newCount === null || newCount === undefined) {
@@ -1763,41 +1748,35 @@ app.post('/api/announcements/:id/read', requireAuth, async (req, res) => {
 });
 
 // Alta y provisión automatizada de asesores comerciales (OCC Admin Only)
-app.post('/api/create-advisor', requireAuth, async (req, res) => {
+app.post('/api/create-advisor', requireAuth, requireAdmin, async (req, res) => {
   try {
     if (!supabaseAdmin) {
       return res.status(503).json({ error: 'Servicio de autenticación no disponible temporalmente.' });
     }
 
-    // 1. Validar rol de administrador del emisor
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', req.user.id)
-      .single();
-
-    const role = profile?.role || req.user.user_metadata?.role;
-    if (role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
-    }
-
     const { email, password, firstName, lastName, promoterCode, dni, phone, address } = req.body;
 
-    // 2. Validaciones de campos requeridos
-    if (!email || !password || !firstName || !lastName || !promoterCode || !dni || !phone || !address) {
+    // 2. Validaciones de campos requeridos — se testea el valor trimmeado
+    // para que un valor solo con espacios no pase el check y termine
+    // escribiéndose como cadena vacía (password se testea crudo, no tiene
+    // semántica de trim)
+    if (!email?.trim() || !password || !firstName?.trim() || !lastName?.trim() || !promoterCode?.trim() || !dni?.trim() || !phone?.trim() || !address?.trim()) {
       return res.status(400).json({ error: 'Faltan campos obligatorios para dar de alta al asesor.' });
     }
 
     const cleanCode = promoterCode.trim().toUpperCase();
 
-    // 3. Validar duplicidad de código de promotor
-    const { data: existingProfile } = await supabaseAdmin
-      .from('profiles')
+    // 3. Validar duplicidad de código de promotor (la constraint UNIQUE real
+    // vive en producers.producer_code — profiles.promoter_code no la cubre,
+    // p.ej. un producer placeholder sin profile vinculado como 'LANDING'
+    // sería invisible a ese chequeo)
+    const { data: existingProducer } = await supabaseAdmin
+      .from('producers')
       .select('id')
-      .eq('promoter_code', cleanCode)
+      .eq('producer_code', cleanCode)
       .maybeSingle();
 
-    if (existingProfile) {
+    if (existingProducer) {
       return res.status(400).json({ error: `El código de promotor '${cleanCode}' ya se encuentra asignado.` });
     }
 
@@ -1824,7 +1803,7 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
         promoter_code: cleanCode,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        dni: dni.trim(),
+        dni: normalize(dni),
         phone: phone.trim(),
         address: address.trim(),
         is_active: true
@@ -1833,7 +1812,10 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
 
     if (updateProfileError) {
       // Revertir creación de auth ante fallos
-      await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      if (rollbackAuthError) {
+        console.error('CRITICAL: rollback failed, orphaned auth user/profile may remain:', rollbackAuthError);
+      }
       return res.status(500).json({ error: 'Error al actualizar el perfil de base de datos del asesor.' });
     }
 
@@ -1852,20 +1834,31 @@ app.post('/api/create-advisor', requireAuth, async (req, res) => {
       });
 
     if (insertProducerError) {
-      // Revertir perfil y auth para consistencia total
-      await supabaseAdmin
+      // Revertir perfil y auth para consistencia total. is_active: false
+      // porque el rol se revierte a 'patient' y, por handle_new_user(), un
+      // paciente recién creado es inactivo por defecto (requiere
+      // aprobación) — dejar is_active en `true` (el valor que puso el update
+      // de aprovisionamiento) dejaría el perfil revertido a medias.
+      const { error: rollbackProfileError } = await supabaseAdmin
         .from('profiles')
-        .update({ 
-          role: 'patient', 
+        .update({
+          role: 'patient',
           promoter_code: null,
           first_name: null,
           last_name: null,
           dni: null,
           phone: null,
-          address: null
+          address: null,
+          is_active: false
         })
         .eq('id', newUserId);
-      await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      if (rollbackProfileError) {
+        console.error('CRITICAL: rollback failed, orphaned auth user/profile may remain:', rollbackProfileError);
+      }
+      const { error: rollbackAuthError } = await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      if (rollbackAuthError) {
+        console.error('CRITICAL: rollback failed, orphaned auth user/profile may remain:', rollbackAuthError);
+      }
       return res.status(500).json({ error: 'Error al registrar la ficha comercial del productor.' });
     }
 

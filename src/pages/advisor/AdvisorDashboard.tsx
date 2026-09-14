@@ -430,6 +430,11 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
               </div>
             ) : (
               <div className="overflow-x-auto">
+                {stats.totalSales > stats.sales.length && (
+                  <p className="text-[11px] text-slate-400 mb-3">
+                    Mostrando las {stats.sales.length} solicitudes más recientes de {stats.totalSales} totales.
+                  </p>
+                )}
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">

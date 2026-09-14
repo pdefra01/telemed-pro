@@ -3,9 +3,9 @@
 ## 1. Escenarios de Negocio (Given/When/Then)
 
 ### 🔑 Escenario 1: Alta Exitosa de Asesor Comercial por un Administrador
-* **Given** que un administrador autenticado en el OCC ingresa al panel de "Asesores Comerciales",
-* **When** completa el formulario con el email `pedro.asesor@medinex.com`, contraseña `clave123`, código de promotor `PROMO_PEDRO` y hace click en "Guardar",
-* **Then** el sistema debe crear la cuenta en Supabase Auth, registrar su perfil con rol `advisor` y promoter_code `PROMO_PEDRO` en `profiles`, e insertar la fila en `producers` con éxito.
+* **Given** que un administrador autenticado en el OCC ingresa al modal "Alta de Asesor Comercial",
+* **When** completa el formulario con los datos personales (nombre, apellido, email, contraseña, código de promotor, DNI, celular, domicilio) y hace click en "Guardar",
+* **Then** el sistema debe crear la cuenta en Supabase Auth, registrar su perfil con rol `advisor`, nombre, apellido, DNI, teléfono, domicilio en `profiles`, e insertar la fila en `producers` con éxito.
 
 ### 🛡️ Escenario 2: Intento de Creación de Asesor por un No-Administrador
 * **Given** que un usuario sin rol de administrador (por ejemplo, un médico o un paciente) intenta realizar una petición HTTP a `/api/create-advisor`,
@@ -16,6 +16,16 @@
 * **Given** que ya existe en la base de datos un asesor comercial con el código de promotor `PROMO_PEDRO`,
 * **When** un administrador intenta dar de alta un nuevo asesor con el mismo código `PROMO_PEDRO`,
 * **Then** el backend debe capturar el error de clave única de Postgres y retornar una respuesta HTTP 400 (Bad Request) con un mensaje explicativo.
+
+### 🛡️ Escenario 4: Asignación por Defecto de Comisión en el Backend
+* **Given** que se ejecuta el proceso de alta del Asesor Comercial,
+* **When** se invoca el backend sin proporcionar una tasa de comisión desde la interfaz de usuario,
+* **Then** el endpoint debe registrar automáticamente la ficha comercial en la tabla `producers` con un valor por defecto de `10.00` (10%).
+
+### 📊 Escenario 5: Incremento y Obtención de Métricas de Compartición de Enlace
+* **Given** que un asesor comercial se encuentra autenticado en su dashboard,
+* **When** hace click en "Copiar Enlace" o "Compartir por WhatsApp",
+* **Then** el frontend debe invocar `POST /api/advisor/increment-share` y actualizar la métrica local incrementando en 1 el contador visual de "Links Compartidos".
 
 ---
 

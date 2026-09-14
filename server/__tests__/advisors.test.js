@@ -190,3 +190,88 @@ describe('POST /api/advisor/increment-share is_active guard wiring (server.js so
     expect(guardIndex).toBeLessThan(rpcIndex);
   });
 });
+
+// Judgment Day Round 2 — source-text assertions against server.js for the
+// route-level findings that need a running Express + live Supabase instance
+// to exercise end-to-end (not available in this sandbox). These pin the
+// exact wiring/shape of the fix so a regression breaks a fast unit test
+// instead of only being caught by a live integration run.
+describe('server.js source — Judgment Day Round 2 fixes', () => {
+  const serverSource = readFileSync(resolve(__dirname, '..', '..', 'server.js'), 'utf-8');
+
+  const createAdvisorRouteMatch = serverSource.match(
+    /app\.post\(\s*['"]\/api\/create-advisor['"][\s\S]*?(?=\napp\.)/
+  );
+  const createAdvisorRoute = createAdvisorRouteMatch ? createAdvisorRouteMatch[0] : '';
+
+  const incrementShareRouteMatch = serverSource.match(
+    /app\.post\(\s*['"]\/api\/advisor\/increment-share['"][\s\S]*?(?=\napp\.)/
+  );
+  const incrementShareRoute = incrementShareRouteMatch ? incrementShareRouteMatch[0] : '';
+
+  // K4: no read-then-write fallback reintroducing the lost-update race.
+  it('increment-share does not fall back to a non-atomic producers.update on RPC error', () => {
+    expect(incrementShareRoute).not.toMatch(/\.from\(\s*['"]producers['"]\s*\)/);
+    expect(incrementShareRoute).toMatch(/if \(rpcErr\) \{[\s\S]*?res\.status\(500\)/);
+  });
+
+  // K2: promoter-code duplicate check queries producers.producer_code, the
+  // table that actually carries the UNIQUE constraint (not profiles).
+  it('create-advisor validates promoter code uniqueness against producers.producer_code', () => {
+    expect(createAdvisorRouteMatch).not.toBeNull();
+    expect(createAdvisorRoute).toMatch(
+      /\.from\(\s*['"]producers['"]\s*\)[\s\S]*?\.eq\(\s*['"]producer_code['"],\s*cleanCode\s*\)/
+    );
+    expect(createAdvisorRoute).not.toMatch(
+      /\.from\(\s*['"]profiles['"]\s*\)[\s\S]*?\.eq\(\s*['"]promoter_code['"],\s*cleanCode\s*\)/
+    );
+  });
+
+  // K5: required-field check tests trimmed values (password stays a raw
+  // presence check).
+  it('create-advisor required-field validation checks trimmed values', () => {
+    expect(createAdvisorRoute).toMatch(
+      /!email\?\.trim\(\)[\s\S]*?!password[\s\S]*?!firstName\?\.trim\(\)[\s\S]*?!lastName\?\.trim\(\)[\s\S]*?!promoterCode\?\.trim\(\)[\s\S]*?!dni\?\.trim\(\)[\s\S]*?!phone\?\.trim\(\)[\s\S]*?!address\?\.trim\(\)/
+    );
+  });
+
+  // K7: stored DNI goes through the shared normalize() helper, matching
+  // downstream prefix-search canonicalization in server/advisors.js.
+  it('create-advisor normalizes the DNI before persisting it', () => {
+    expect(createAdvisorRoute).toMatch(/dni:\s*normalize\(dni\)/);
+  });
+
+  // K8: reuses the shared requireAdmin middleware instead of a hand-rolled
+  // inline role check.
+  it('create-advisor is registered behind requireAuth, requireAdmin', () => {
+    expect(serverSource).toMatch(
+      /app\.post\(\s*['"]\/api\/create-advisor['"],\s*requireAuth,\s*requireAdmin,/
+    );
+    expect(createAdvisorRoute).not.toMatch(/Acceso denegado\. Se requieren permisos de administrador\./);
+  });
+
+  // K9: the insertProducerError rollback fully mirrors the forward
+  // profiles.update field set, including is_active.
+  it('create-advisor insertProducerError rollback resets is_active on the profile', () => {
+    const rollbackMatch = createAdvisorRoute.match(/if \(insertProducerError\) \{[\s\S]*?\n {4}\}/);
+    expect(rollbackMatch).not.toBeNull();
+    expect(rollbackMatch[0]).toMatch(/is_active:\s*false/);
+  });
+
+  // K11: both rollback branches check the {error} Supabase returns instead
+  // of silently swallowing a failed rollback.
+  it('create-advisor rollback branches check and log rollback errors', () => {
+    const updateProfileErrorBlock = createAdvisorRoute.match(/if \(updateProfileError\) \{[\s\S]*?\n {4}\}/);
+    const insertProducerErrorBlock = createAdvisorRoute.match(/if \(insertProducerError\) \{[\s\S]*?\n {4}\}/);
+    expect(updateProfileErrorBlock).not.toBeNull();
+    expect(insertProducerErrorBlock).not.toBeNull();
+
+    expect(updateProfileErrorBlock[0]).toMatch(/error:\s*rollbackAuthError/);
+    expect(updateProfileErrorBlock[0]).toMatch(/if \(rollbackAuthError\)/);
+
+    expect(insertProducerErrorBlock[0]).toMatch(/error:\s*rollbackProfileError/);
+    expect(insertProducerErrorBlock[0]).toMatch(/if \(rollbackProfileError\)/);
+    expect(insertProducerErrorBlock[0]).toMatch(/error:\s*rollbackAuthError/);
+    expect(insertProducerErrorBlock[0]).toMatch(/if \(rollbackAuthError\)/);
+  });
+});
