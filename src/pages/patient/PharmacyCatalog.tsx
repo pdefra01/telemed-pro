@@ -29,6 +29,7 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
   const [selectedPrescriptionId, setSelectedPrescriptionId] = useState<string | undefined>();
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [orderSuccessId, setOrderSuccessId] = useState<string | null>(null);
+  const [unmatchedMedications, setUnmatchedMedications] = useState<string[]>([]);
 
   useEffect(() => {
     loadData();
@@ -73,25 +74,30 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
   };
 
   const handleDispensePrescription = (rx: Prescription) => {
-    // Dispansación en 1-Click desde receta: buscar medicamentos recetados e incoporarlos
+    // Dispansación en 1-Click desde receta: buscar medicamentos recetados e incorporarlos.
+    // Solo se agregan productos reales del catálogo (con id de pharmacy_products válido).
+    // Si un medicamento recetado no matchea ningún producto real, NO se fabrica un
+    // ítem sintético — se informa al paciente que ese medicamento no está disponible.
     const newCartItems: { product: PharmacyProduct; quantity: number }[] = [];
+    const notFound: string[] = [];
+
     rx.medications.forEach(med => {
-      const matchedProd = products.find(p => p.name.toLowerCase().includes(med.name.toLowerCase()) || med.name.toLowerCase().includes(p.name.toLowerCase())) || {
-        id: `rx-prod-${Math.random()}`,
-        name: med.name,
-        activeIngredient: med.name,
-        presentation: 'Recetado por profesional',
-        laboratory: 'Farmacia Certificada',
-        price: 2500,
-        requiresPrescription: true,
-        category: 'recetados'
-      };
-      newCartItems.push({ product: matchedProd, quantity: med.quantity || 1 });
+      const matchedProd = products.find(p => p.name.toLowerCase().includes(med.name.toLowerCase()) || med.name.toLowerCase().includes(p.name.toLowerCase()));
+      if (matchedProd) {
+        newCartItems.push({ product: matchedProd, quantity: med.quantity || 1 });
+      } else {
+        notFound.push(med.name);
+      }
     });
 
     setCart(newCartItems);
+    setUnmatchedMedications(notFound);
     setSelectedPrescriptionId(rx.id);
     setIsCheckoutOpen(true);
+
+    if (notFound.length > 0) {
+      alert(`Los siguientes medicamentos recetados no están disponibles en el catálogo y no fueron agregados al carrito: ${notFound.join(', ')}. Por favor contactá a la farmacia.`);
+    }
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -106,13 +112,13 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
         patientId,
         prescriptionId: selectedPrescriptionId,
         deliveryAddress: patientAddress,
-        subtotal,
-        coverageDiscount: discount,
-        total,
-        items: cart.map(i => ({ productId: i.product.id, quantity: i.quantity, unitPrice: i.product.price }))
+        // Cobertura Plan Médicos (40%) es una regla de negocio fija aplicada
+        // server-side; no se envía ni se acepta desde el cliente.
+        items: cart.map(i => ({ productId: i.product.id, quantity: i.quantity }))
       });
       setOrderSuccessId(order.id);
       setCart([]);
+      setUnmatchedMedications([]);
       setIsCheckoutOpen(false);
     } catch (err) {
       alert("Error al procesar la orden de compra.");
@@ -299,6 +305,15 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
                 <X size={20} />
               </button>
             </div>
+
+            {unmatchedMedications.length > 0 && (
+              <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 text-xs text-amber-300">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  Los siguientes medicamentos recetados no están disponibles en el catálogo y no fueron agregados: {unmatchedMedications.join(', ')}. Contactá a la farmacia para más información.
+                </span>
+              </div>
+            )}
 
             {cart.length === 0 ? (
               <div className="text-center py-8 text-slate-400">El carrito está vacío.</div>

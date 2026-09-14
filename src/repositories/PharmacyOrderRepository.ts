@@ -9,101 +9,40 @@ export class PharmacyOrderRepository {
     patientId: string;
     prescriptionId?: string;
     deliveryAddress: string;
-    subtotal: number;
-    coverageDiscount: number;
-    total: number;
-    items: { productId: string; quantity: number; unitPrice: number }[];
+    items: { productId: string; quantity: number }[];
   }): Promise<PharmacyOrder> {
-    // 1. Insertar cabecera de la orden
-    const { data: orderRow, error: orderError } = await supabase
-      .from('pharmacy_orders')
-      .insert({
-        patient_id: orderData.patientId,
-        prescription_id: orderData.prescriptionId || null,
-        status: 'paid', // En este MVP asumimos checkout exitoso simulado
-        subtotal: orderData.subtotal,
-        coverage_discount: orderData.coverageDiscount,
-        total: orderData.total,
-        delivery_address: orderData.deliveryAddress.trim()
-      })
-      .select()
-      .single();
-
-    if (orderError) {
-      console.error("Error creando orden de farmacia:", orderError);
-      throw orderError;
-    }
-
-    // 2. Insertar ítems de la orden
-    const itemsToInsert = orderData.items.map(item => ({
-      order_id: orderRow.id,
-      product_id: item.productId,
-      quantity: item.quantity,
-      unit_price: item.unitPrice
-    }));
-
-    const { error: itemsError } = await supabase
-      .from('pharmacy_order_items')
-      .insert(itemsToInsert);
-
-    if (itemsError) {
-      console.error("Error insertando ítems de orden de farmacia:", itemsError);
-      throw itemsError;
-    }
-
-    // 3. Descontar stock del inventario (FIFO por fecha de vencimiento)
-    for (const item of orderData.items) {
-      const { data: batches } = await supabase
-        .from('pharmacy_inventory')
-        .select('*')
-        .eq('product_id', item.productId)
-        .gt('stock_quantity', 0)
-        .order('expiration_date', { ascending: true });
-
-      if (batches && batches.length > 0) {
-        let remainingNeeded = item.quantity;
-        for (const batch of batches) {
-          if (remainingNeeded <= 0) break;
-          const deduct = Math.min(batch.stock_quantity, remainingNeeded);
-          const newStock = batch.stock_quantity - deduct;
-          await supabase
-            .from('pharmacy_inventory')
-            .update({ stock_quantity: newStock })
-            .eq('id', batch.id);
-          remainingNeeded -= deduct;
-        }
-      }
-    }
-
-    // 4. Si la compra proviene de una receta electrónica, marcarla como dispensada
-    if (orderData.prescriptionId) {
-      await supabase
-        .from('prescriptions')
-        .update({ status: 'dispensed' })
-        .eq('id', orderData.prescriptionId);
-    }
-
-    // 5. Crear automáticamente el registro de cadetería asignado
-    await supabase.from('pharmacy_deliveries').insert({
-      order_id: orderRow.id,
-      courier_name: 'Marcos Benítez (Cadete MEDINEX)',
-      courier_phone: '+54 387 512 3456',
-      tracking_status: 'assigned',
-      current_lat: -24.7859,
-      current_lng: -65.4117
+    // Orden creada atómicamente vía RPC SECURITY DEFINER: recomputa subtotal/total
+    // desde el catálogo real, descuenta stock con bloqueo de fila, y crea
+    // orden + ítems + delivery en una sola transacción. Si algo falla (stock
+    // insuficiente, producto inexistente, etc.) toda la transacción se revierte
+    // — nunca queda una orden 'paid' huérfana ni parcial. La tasa de descuento es
+    // una regla de negocio fija del servidor (no se envía ni se acepta desde el
+    // cliente, para que no pueda ser manipulada).
+    const { data: orderId, error: rpcError } = await supabase.rpc('create_pharmacy_order', {
+      p_patient_id: orderData.patientId,
+      p_items: orderData.items.map(item => ({
+        product_id: item.productId,
+        quantity: item.quantity
+      })),
+      p_prescription_id: orderData.prescriptionId || null,
+      p_delivery_address: orderData.deliveryAddress.trim()
     });
 
-    return {
-      id: orderRow.id,
-      patientId: orderRow.patient_id,
-      prescriptionId: orderRow.prescription_id,
-      status: orderRow.status,
-      subtotal: Number(orderRow.subtotal),
-      coverageDiscount: Number(orderRow.coverage_discount),
-      total: Number(orderRow.total),
-      deliveryAddress: orderRow.delivery_address,
-      createdAt: orderRow.created_at,
-    };
+    if (rpcError) {
+      console.error("Error creando orden de farmacia (RPC atómica):", rpcError);
+      throw rpcError;
+    }
+
+    if (!orderId) {
+      throw new Error('No se pudo crear la orden de farmacia: la RPC no devolvió un id de orden.');
+    }
+
+    const order = await this.getOrderById(orderId as string);
+    if (!order) {
+      throw new Error('La orden se creó pero no pudo recuperarse.');
+    }
+
+    return order;
   }
 
   /**
