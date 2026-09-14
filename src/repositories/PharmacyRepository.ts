@@ -35,6 +35,7 @@ export class PharmacyRepository {
       presentation: row.presentation,
       laboratory: row.laboratory,
       price: Number(row.price),
+      purchasePrice: row.purchase_price !== null && row.purchase_price !== undefined ? Number(row.purchase_price) : undefined,
       requiresPrescription: row.requires_prescription,
       category: row.category,
       imageUrl: row.image_url,
@@ -63,6 +64,7 @@ export class PharmacyRepository {
       presentation: data.presentation,
       laboratory: data.laboratory,
       price: Number(data.price),
+      purchasePrice: data.purchase_price !== null && data.purchase_price !== undefined ? Number(data.purchase_price) : undefined,
       requiresPrescription: data.requires_prescription,
       category: data.category,
       imageUrl: data.image_url,
@@ -178,6 +180,7 @@ export class PharmacyRepository {
         presentation: productData.presentation.trim(),
         laboratory: productData.laboratory.trim(),
         price: productData.price,
+        purchase_price: productData.purchasePrice ?? null,
         requires_prescription: productData.requiresPrescription,
         category: productData.category,
         image_url: productData.imageUrl,
@@ -196,6 +199,7 @@ export class PharmacyRepository {
       presentation: data.presentation,
       laboratory: data.laboratory,
       price: Number(data.price),
+      purchasePrice: data.purchase_price !== null && data.purchase_price !== undefined ? Number(data.purchase_price) : undefined,
       requiresPrescription: data.requires_prescription,
       category: data.category,
       imageUrl: data.image_url,
@@ -214,6 +218,7 @@ export class PharmacyRepository {
     if (productData.presentation) payload.presentation = productData.presentation.trim();
     if (productData.laboratory) payload.laboratory = productData.laboratory.trim();
     if (productData.price !== undefined) payload.price = productData.price;
+    if (productData.purchasePrice !== undefined) payload.purchase_price = productData.purchasePrice;
     if (productData.requiresPrescription !== undefined) payload.requires_prescription = productData.requiresPrescription;
     if (productData.category) payload.category = productData.category;
     if (productData.minStockThreshold !== undefined) payload.min_stock_threshold = productData.minStockThreshold;

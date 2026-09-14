@@ -327,6 +327,7 @@ export interface PharmacyProduct {
   presentation: string;
   laboratory: string;
   price: number;
+  purchasePrice?: number;
   requiresPrescription: boolean;
   category: string;
   imageUrl?: string;

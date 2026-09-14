@@ -30,6 +30,7 @@ export const PharmacyInventoryAdmin: React.FC = () => {
   const [prodPresentation, setProdPresentation] = useState('');
   const [prodLaboratory, setProdLaboratory] = useState('');
   const [prodPrice, setProdPrice] = useState<number>(1500);
+  const [prodPurchasePrice, setProdPurchasePrice] = useState<number | undefined>(undefined);
   const [prodCategory, setProdCategory] = useState('farmacia');
   const [prodRequiresPrescription, setProdRequiresPrescription] = useState(false);
   const [prodMinStock, setProdMinStock] = useState<number>(20);
@@ -139,6 +140,7 @@ export const PharmacyInventoryAdmin: React.FC = () => {
           presentation: prodPresentation,
           laboratory: prodLaboratory,
           price: prodPrice,
+          purchasePrice: prodPurchasePrice,
           category: prodCategory,
           requiresPrescription: prodRequiresPrescription,
           minStockThreshold: prodMinStock,
@@ -152,6 +154,7 @@ export const PharmacyInventoryAdmin: React.FC = () => {
           presentation: prodPresentation,
           laboratory: prodLaboratory,
           price: prodPrice,
+          purchasePrice: prodPurchasePrice,
           category: prodCategory,
           requiresPrescription: prodRequiresPrescription,
           minStockThreshold: prodMinStock,
@@ -176,6 +179,7 @@ export const PharmacyInventoryAdmin: React.FC = () => {
     setProdPresentation('');
     setProdLaboratory('');
     setProdPrice(1500);
+    setProdPurchasePrice(undefined);
     setProdCategory('farmacia');
     setProdRequiresPrescription(false);
     setProdMinStock(20);
@@ -189,6 +193,7 @@ export const PharmacyInventoryAdmin: React.FC = () => {
     setProdPresentation(p.presentation);
     setProdLaboratory(p.laboratory);
     setProdPrice(p.price);
+    setProdPurchasePrice(p.purchasePrice);
     setProdCategory(p.category);
     setProdRequiresPrescription(p.requiresPrescription);
     setProdMinStock(p.minStockThreshold || 20);
@@ -837,10 +842,14 @@ export const PharmacyInventoryAdmin: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Precio Venta ($):</label>
                   <input type="number" required value={prodPrice} onChange={e => setProdPrice(Number(e.target.value))} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Precio Compra ($):</label>
+                  <input type="number" value={prodPurchasePrice ?? ''} onChange={e => setProdPurchasePrice(e.target.value === '' ? undefined : Number(e.target.value))} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white" placeholder="Opcional" />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Stock Mínimo:</label>
