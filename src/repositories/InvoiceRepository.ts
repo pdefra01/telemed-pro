@@ -75,6 +75,21 @@ export class InvoiceRepository {
     return (data || []).map(mapRowToInvoice);
   }
 
+  /**
+   * Obtiene las facturas cobradas (`status = 'paid'`) de un periodo ('YYYY-MM'),
+   * usado por `FinancialService` para consolidar el ingreso real del P&L.
+   */
+  async getPaidByPeriod(period: string): Promise<Invoice[]> {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('period', period)
+      .eq('status', 'paid');
+
+    if (error) throw error;
+    return (data || []).map(mapRowToInvoice);
+  }
+
   async updateStatus(id: string, status: Invoice['status']): Promise<Invoice> {
     const { data, error } = await supabase
       .from('invoices')

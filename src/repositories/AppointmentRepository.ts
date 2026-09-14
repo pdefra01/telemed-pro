@@ -101,6 +101,34 @@ export class AppointmentRepository {
   }
 
   /**
+   * Obtiene el honorario (consultation_fee) del médico de cada turno completado
+   * dentro de un periodo ('YYYY-MM'), usado por `FinancialService` para calcular
+   * el egreso variable por honorarios médicos del P&L. Devuelve `null` cuando el
+   * médico no tiene honorario configurado; el fallback de negocio se resuelve
+   * en la capa de servicio, no acá.
+   */
+  async getCompletedConsultationFeesByPeriod(period: string): Promise<(number | null)[]> {
+    const [year, month] = period.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    const startDate = `${period}-01T00:00:00.000Z`;
+    const endDate = `${period}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*, doctor:profiles!doctor_id(consultation_fee)')
+      .eq('status', 'completed')
+      .gte('scheduled_at', startDate)
+      .lte('scheduled_at', endDate);
+
+    if (error) throw error;
+    return (data || []).map((row: any) =>
+      row.doctor?.consultation_fee !== undefined && row.doctor?.consultation_fee !== null
+        ? Number(row.doctor.consultation_fee)
+        : null
+    );
+  }
+
+  /**
    * Crea un nuevo turno en la base de datos
    */
   async createAppointment(data: {

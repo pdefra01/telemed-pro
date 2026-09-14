@@ -87,6 +87,20 @@ describe('InvoiceRepository', () => {
       expect(result.totalAmount).toBe(1210);
     });
 
+    it('getPaidByPeriod() filters by period and status=paid, mapping rows to Invoice', async () => {
+      const eq2 = vi.fn().mockResolvedValue({ data: [rawRow], error: null });
+      const eq1 = vi.fn().mockReturnValue({ eq: eq2 });
+      const select = vi.fn().mockReturnValue({ eq: eq1 });
+      vi.mocked(supabase.from).mockReturnValue({ select } as any);
+
+      const [result] = await invoiceRepository.getPaidByPeriod('2026-08');
+
+      expect(eq1).toHaveBeenCalledWith('period', '2026-08');
+      expect(eq2).toHaveBeenCalledWith('status', 'paid');
+      expect(result.totalAmount).toBe(1210);
+      expect(result.entityType).toBe('affiliate');
+    });
+
     it('createBulk() writes snake_case columns, not the camelCase Invoice shape, to Supabase', async () => {
       const select = vi.fn().mockResolvedValue({ data: [rawRow], error: null });
       const insert = vi.fn().mockReturnValue({ select });

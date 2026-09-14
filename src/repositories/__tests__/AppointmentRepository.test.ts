@@ -143,6 +143,49 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
       expect(supabaseMock.eq).toHaveBeenCalledWith('id', 'app1');
     });
   });
+  describe('getCompletedConsultationFeesByPeriod', () => {
+    it('filters completed appointments within the period date range and returns each doctor consultation fee', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.gte.mockReturnValue(supabaseMock);
+      supabaseMock.lte = vi.fn().mockResolvedValue({
+        data: [
+          { id: 'appt1', doctor: { consultation_fee: 2000 } },
+          { id: 'appt2', doctor: null },
+        ],
+        error: null,
+      });
+
+      const fees = await appointmentRepository.getCompletedConsultationFeesByPeriod('2026-07');
+
+      expect(supabaseMock.from).toHaveBeenCalledWith('appointments');
+      expect(supabaseMock.eq).toHaveBeenCalledWith('status', 'completed');
+      expect(supabaseMock.gte).toHaveBeenCalledWith('scheduled_at', '2026-07-01T00:00:00.000Z');
+      expect(supabaseMock.lte).toHaveBeenCalledWith('scheduled_at', '2026-07-31T23:59:59.999Z');
+      expect(fees).toEqual([2000, null]);
+    });
+
+    it('returns 0 (not null) for a doctor with an explicit $0 consultation fee configured', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.gte.mockReturnValue(supabaseMock);
+      supabaseMock.lte = vi.fn().mockResolvedValue({
+        data: [
+          { id: 'appt1', doctor: { consultation_fee: 0 } },
+        ],
+        error: null,
+      });
+
+      const fees = await appointmentRepository.getCompletedConsultationFeesByPeriod('2026-07');
+
+      expect(fees).toEqual([0]);
+    });
+  });
+
   // Escenario 5: Creación de un nuevo turno (Scheduler)
   describe('createAppointment', () => {
     it('should insert a new appointment into Supabase', async () => {
