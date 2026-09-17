@@ -1,5 +1,5 @@
 import { supabase } from '../services/supabase';
-import { PharmacyProduct, PharmacyInventory } from '../types';
+import { PharmacyProduct, PharmacyInventory, StockAdjustmentReason, PharmacyStockAdjustment, AdjustBatchStockPayload } from '../types';
 
 export class PharmacyRepository {
   /**
@@ -347,6 +347,79 @@ export class PharmacyRepository {
         suggestedReorderQty
       };
     });
+  }
+
+  /**
+   * Ejecuta un ajuste auditado de stock para un lote de farmacia invocando la RPC atómica.
+   */
+  async adjustStock(payload: AdjustBatchStockPayload): Promise<PharmacyStockAdjustment> {
+    const { data, error } = await supabase.rpc('adjust_pharmacy_batch_stock', {
+      p_inventory_id: payload.inventoryId,
+      p_new_quantity: payload.newQuantity,
+      p_reason: payload.reason,
+      p_notes: payload.notes || null,
+      p_user_id: payload.userId || null,
+    });
+
+    if (error) {
+      console.error('Error al realizar ajuste de stock en farmacia:', error);
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      inventoryId: data.inventory_id,
+      productId: data.product_id,
+      batchNumber: data.batch_number,
+      userId: data.user_id,
+      reason: data.reason as StockAdjustmentReason,
+      previousQuantity: Number(data.previous_quantity),
+      newQuantity: Number(data.new_quantity),
+      quantityDelta: Number(data.quantity_delta),
+      notes: data.notes,
+      createdAt: data.created_at,
+    };
+  }
+
+  /**
+   * Obtiene el historial de ajustes de stock, opcionalmente filtrado por lote o producto.
+   */
+  async getStockAdjustments(filters?: {
+    inventoryId?: string;
+    productId?: string;
+  }): Promise<PharmacyStockAdjustment[]> {
+    let query = supabase
+      .from('pharmacy_stock_adjustments')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (filters?.inventoryId) {
+      query = query.eq('inventory_id', filters.inventoryId);
+    }
+    if (filters?.productId) {
+      query = query.eq('product_id', filters.productId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error obteniendo historial de ajustes:', error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      inventoryId: row.inventory_id,
+      productId: row.product_id,
+      batchNumber: row.batch_number,
+      userId: row.user_id,
+      reason: row.reason as StockAdjustmentReason,
+      previousQuantity: Number(row.previous_quantity),
+      newQuantity: Number(row.new_quantity),
+      quantityDelta: Number(row.quantity_delta),
+      notes: row.notes,
+      createdAt: row.created_at,
+    }));
   }
 }
 

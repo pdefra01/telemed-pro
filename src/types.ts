@@ -378,6 +378,36 @@ export interface PharmacyInventory {
   reservedQuantity: number;
 }
 
+export type StockAdjustmentReason =
+  | 'physical_count'
+  | 'breakage'
+  | 'loss'
+  | 'expired'
+  | 'correction'
+  | 'other';
+
+export interface PharmacyStockAdjustment {
+  id: string;
+  inventoryId: string;
+  productId: string;
+  batchNumber: string;
+  userId?: string | null;
+  reason: StockAdjustmentReason;
+  previousQuantity: number;
+  newQuantity: number;
+  quantityDelta: number;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface AdjustBatchStockPayload {
+  inventoryId: string;
+  newQuantity: number;
+  reason: StockAdjustmentReason;
+  notes?: string;
+  userId?: string;
+}
+
 export interface PharmacyOrderItem {
   id?: string;
   productId: string;

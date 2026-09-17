@@ -1,13 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { PharmacyProduct, PharmacyInventory, PharmacySupplier, PharmacySupplierOrder, SupplierAccountMovement } from '../../types';
+import { 
+  PharmacyProduct, 
+  PharmacyInventory, 
+  PharmacySupplier, 
+  PharmacySupplierOrder, 
+  SupplierAccountMovement,
+  StockAdjustmentReason,
+  PharmacyStockAdjustment
+} from '../../types';
 import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { supplierRepository } from '../../repositories/SupplierRepository';
 import { 
   Package, Plus, AlertTriangle, Calendar, Layers, Search, 
   CheckCircle, Truck, Building2, CreditCard, ShoppingCart, 
-  Edit3, ShieldAlert, ArrowDownLeft, ArrowUpRight, DollarSign, RefreshCw, BarChart3, Zap
+  Edit3, ShieldAlert, ArrowDownLeft, ArrowUpRight, DollarSign, RefreshCw, BarChart3, Zap,
+  Sliders, History, Clock
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+
+export const STOCK_ADJUSTMENT_REASONS: Array<{ value: StockAdjustmentReason; label: string; badgeColor: string }> = [
+  { value: 'physical_count', label: 'Conteo Físico', badgeColor: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+  { value: 'breakage', label: 'Rotura / Daño', badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  { value: 'loss', label: 'Pérdida / Extravío', badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30' },
+  { value: 'expired', label: 'Vencimiento', badgeColor: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+  { value: 'correction', label: 'Corrección Administrativa', badgeColor: 'bg-teal-500/10 text-teal-400 border-teal-500/30' },
+  { value: 'other', label: 'Otro', badgeColor: 'bg-slate-500/10 text-slate-400 border-slate-500/30' },
+];
 
 export const PharmacyInventoryAdmin: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'catalog' | 'batches' | 'orders' | 'suppliers' | 'analytics'>('catalog');
@@ -21,6 +39,17 @@ export const PharmacyInventoryAdmin: React.FC = () => {
   // Selected Product & Batches
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [inventory, setInventory] = useState<PharmacyInventory[]>([]);
+
+  // Stock Adjustment Modal State
+  const [adjustingBatch, setAdjustingBatch] = useState<PharmacyInventory | null>(null);
+  const [adjNewQuantity, setAdjNewQuantity] = useState<number>(0);
+  const [adjReason, setAdjReason] = useState<StockAdjustmentReason>('physical_count');
+  const [adjNotes, setAdjNotes] = useState<string>('');
+
+  // Adjustment History Modal State
+  const [historyBatch, setHistoryBatch] = useState<PharmacyInventory | null>(null);
+  const [adjustmentsList, setAdjustmentsList] = useState<PharmacyStockAdjustment[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
   // New Product Modal / Form
   const [showProductModal, setShowProductModal] = useState<boolean>(false);
@@ -199,6 +228,56 @@ export const PharmacyInventoryAdmin: React.FC = () => {
     setProdMinStock(p.minStockThreshold || 20);
     setProdReorderQty(p.reorderQuantity || 100);
     setShowProductModal(true);
+  };
+
+  const handleOpenAdjustModal = (inv: PharmacyInventory) => {
+    setAdjustingBatch(inv);
+    setAdjNewQuantity(inv.stockQuantity);
+    setAdjReason('physical_count');
+    setAdjNotes('');
+  };
+
+  const handleConfirmStockAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustingBatch) return;
+    if (adjNewQuantity < 0) {
+      alert('La cantidad de stock no puede ser negativa.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await pharmacyRepository.adjustStock({
+        inventoryId: adjustingBatch.id,
+        newQuantity: adjNewQuantity,
+        reason: adjReason,
+        notes: adjNotes.trim() || undefined,
+      });
+      setToastMsg('Ajuste de stock registrado y auditado correctamente.');
+      setAdjustingBatch(null);
+      if (selectedProductId) {
+        await handleSelectProduct(selectedProductId);
+      }
+      await loadAllData();
+    } catch (err: any) {
+      console.error('Error al realizar ajuste de stock:', err);
+      alert(err.message || 'Error al procesar el ajuste de stock.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenHistoryModal = async (inv: PharmacyInventory) => {
+    setHistoryBatch(inv);
+    setLoadingHistory(true);
+    try {
+      const history = await pharmacyRepository.getStockAdjustments({ inventoryId: inv.id });
+      setAdjustmentsList(history);
+    } catch (err) {
+      console.error('Error al cargar historial de ajustes:', err);
+      alert('Error al cargar historial de ajustes de stock.');
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   const handleAddBatch = async (e: React.FormEvent) => {
@@ -563,16 +642,38 @@ export const PharmacyInventoryAdmin: React.FC = () => {
                   ) : (
                     <div className="space-y-2">
                       {inventory.map(inv => (
-                        <div key={inv.id} className="flex items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-white/5 text-xs hover:border-white/10 transition-all">
+                        <div key={inv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-white/5 text-xs hover:border-white/10 transition-all gap-4">
                           <div className="flex items-center gap-3">
-                            <Calendar size={18} className="text-teal-400" />
+                            <Calendar size={18} className="text-teal-400 shrink-0" />
                             <div>
                               <span className="font-bold text-white block">Lote: {inv.batchNumber}</span>
                               <span className="text-slate-400 text-[10px]">Vence: {inv.expirationDate}</span>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className="font-extrabold text-teal-400 text-base font-mono block">{inv.stockQuantity} un.</span>
+                          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAdjustModal(inv)}
+                                className="px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                title="Ajustar Stock de este lote"
+                              >
+                                <Sliders size={13} />
+                                Ajustar Stock
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenHistoryModal(inv)}
+                                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                title="Ver historial de auditoría de este lote"
+                              >
+                                <History size={13} />
+                                Historial
+                              </button>
+                            </div>
+                            <div className="text-right min-w-[70px]">
+                              <span className="font-extrabold text-teal-400 text-base font-mono block">{inv.stockQuantity} un.</span>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -971,6 +1072,213 @@ export const PharmacyInventoryAdmin: React.FC = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AJUSTAR STOCK DE LOTE */}
+      {adjustingBatch && selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#0f172a] border border-white/10 rounded-3xl p-8 w-full max-w-lg shadow-2xl relative space-y-6">
+            <div className="border-b border-white/5 pb-4">
+              <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest block mb-1">
+                Auditoría de Inventario
+              </span>
+              <h3 className="text-xl font-bold text-white">Ajustar Stock de Lote</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                {selectedProduct.name} ({selectedProduct.activeIngredient}) • Lote: <span className="font-mono text-white font-bold">{adjustingBatch.batchNumber}</span>
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmStockAdjustment} className="space-y-4">
+              {/* Reference current stock & delta indicator */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-950/60 p-4 rounded-2xl border border-white/5">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Stock Actual</span>
+                  <span className="text-lg font-mono font-bold text-slate-300">{adjustingBatch.stockQuantity} un.</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Variación (Delta)</span>
+                  {(() => {
+                    const delta = adjNewQuantity - adjustingBatch.stockQuantity;
+                    if (delta > 0) {
+                      return (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30">
+                          +{delta} un. (Ingreso)
+                        </span>
+                      );
+                    }
+                    if (delta < 0) {
+                      return (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30">
+                          {delta} un. (Egreso)
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-mono font-bold text-slate-400 bg-slate-800 border border-white/5">
+                        0 un. (Sin cambio)
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                  Nueva Cantidad de Stock:
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={adjNewQuantity}
+                  onChange={e => setAdjNewQuantity(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-teal-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                  Motivo del Ajuste:
+                </label>
+                <select
+                  value={adjReason}
+                  onChange={e => setAdjReason(e.target.value as StockAdjustmentReason)}
+                  className="w-full p-3 bg-slate-900 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-teal-500/50"
+                >
+                  {STOCK_ADJUSTMENT_REASONS.map(r => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                  Observaciones / Justificación (Opcional):
+                </label>
+                <textarea
+                  rows={3}
+                  value={adjNotes}
+                  onChange={e => setAdjNotes(e.target.value)}
+                  placeholder="Detalle el motivo del ajuste, responsable o acta de recuento..."
+                  className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-teal-500/50 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAdjustingBatch(null)}
+                  className="px-6 py-3 bg-white/5 hover:bg-white/10 text-slate-400 rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || adjNewQuantity < 0}
+                  className="px-6 py-3 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-teal-500/20 active:scale-95 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Guardando Ajuste...' : 'Confirmar Ajuste'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTORIAL DE AUDITORÍA DE AJUSTES */}
+      {historyBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#0f172a] border border-white/10 rounded-3xl p-8 w-full max-w-3xl shadow-2xl relative space-y-6 max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center border-b border-white/5 pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest">
+                    Auditoría Inmutable
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-white">Historial de Ajustes de Stock</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Lote: <span className="font-mono text-white font-bold">{historyBatch.batchNumber}</span> • Vencimiento: <span className="text-slate-300">{historyBatch.expirationDate}</span>
+                </p>
+              </div>
+              <button onClick={() => setHistoryBatch(null)} className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+              {loadingHistory ? (
+                <div className="text-center py-12 text-slate-400 text-xs flex flex-col items-center gap-3">
+                  <RefreshCw size={24} className="animate-spin text-teal-400" />
+                  <span>Cargando registro de auditoría...</span>
+                </div>
+              ) : adjustmentsList.length === 0 ? (
+                <div className="text-center py-12 text-slate-500 text-xs italic bg-slate-950/40 rounded-2xl border border-white/5">
+                  No se registran ajustes de stock para este lote.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {adjustmentsList.map(adj => {
+                    const reasonConfig = STOCK_ADJUSTMENT_REASONS.find(r => r.value === adj.reason);
+                    return (
+                      <div key={adj.id} className="p-4 bg-slate-950/50 rounded-2xl border border-white/5 space-y-3 hover:border-white/10 transition-all text-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${reasonConfig?.badgeColor || 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                              {reasonConfig?.label || adj.reason}
+                            </span>
+                            <span className="text-slate-500 text-[11px] flex items-center gap-1">
+                              <Clock size={12} />
+                              {new Date(adj.createdAt).toLocaleString('es-AR')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-slate-400">
+                              {adj.previousQuantity} → {adj.newQuantity} un.
+                            </span>
+                            <span className={`font-mono font-bold px-2 py-0.5 rounded-lg text-xs ${
+                              adj.quantityDelta > 0 
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
+                                : adj.quantityDelta < 0 
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' 
+                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+                            }`}>
+                              {adj.quantityDelta > 0 ? `+${adj.quantityDelta}` : adj.quantityDelta}
+                            </span>
+                          </div>
+                        </div>
+
+                        {adj.notes && (
+                          <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 text-slate-300 text-xs">
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Observaciones:</span>
+                            {adj.notes}
+                          </div>
+                        )}
+
+                        {adj.userId && (
+                          <div className="text-[10px] text-slate-500">
+                            Registrado por usuario ID: <span className="font-mono text-slate-400">{adj.userId}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => setHistoryBatch(null)}
+                className="px-6 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
