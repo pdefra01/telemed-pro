@@ -62,10 +62,18 @@ SELECT is((SELECT count(*)::int FROM public.plans WHERE name = 'Plan Familiar Me
 -- ================================================================
 -- 5. Constraints: one offered plan per (kind, option); valid enum values
 -- ================================================================
-SELECT throws_ok(
+SELECT lives_ok(
   $$INSERT INTO public.plans (name, monthly_cost, plan_kind, payment_option, is_offered)
-    VALUES ('Duplicate offered Individual', 1, 'individual', 'standard', true)$$,
-  '23505', NULL, 'a second offered plan for the same kind+option is rejected');
+    VALUES ('Individual v2 offered', 16999, 'individual', 'standard', true)$$,
+  'offering a new version of the same kind+option is accepted');
+
+SELECT is(
+  (SELECT string_agg(name, ',') FROM public.plans WHERE plan_kind = 'individual' AND payment_option = 'standard' AND is_offered),
+  'Individual v2 offered', 'the new version replaces the previous offered plan');
+
+SELECT is((SELECT is_offered FROM public.plans WHERE name = 'Plan Individual'), false, 'the previous version is withdrawn, not deleted');
+
+SELECT is((SELECT count(*)::int FROM public.plans WHERE is_offered), 5, 'there are still exactly 5 offered plans');
 
 SELECT lives_ok(
   $$INSERT INTO public.plans (name, monthly_cost, plan_kind, payment_option, is_offered)
