@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from '../adhesionPayments.js';
+import { createAdhesionPreapproval, createAdhesionCheckoutPreference, postAdhesionCheckoutPayment } from '../adhesionPayments.js';
 
 const PLANS = [
   { id: 'p-ind', name: 'Individual', plan_kind: 'individual', payment_option: 'standard', paid_months: 1, is_offered: true, is_default: true, monthly_cost: 14999 },
@@ -215,5 +215,34 @@ describe('createAdhesionCheckoutPreference', () => {
   it('404 for an unknown adhesion request', async () => {
     const r = await createAdhesionCheckoutPreference(ctx(createDb(), vi.fn()), { adhesionRequestId: 'nope' });
     expect(r.status).toBe(404);
+  });
+});
+
+describe('postAdhesionCheckoutPayment', () => {
+  it('calls the ledger RPC with the adhesion id and maps a posted result', async () => {
+    const db = { rpc: vi.fn().mockResolvedValue({ data: { posted: true, reason: 'posted', invoice_id: 'inv-1' }, error: null }) };
+    const result = await postAdhesionCheckoutPayment(db, 'adh-1');
+    expect(db.rpc).toHaveBeenCalledWith('post_adhesion_checkout_payment', { p_adhesion_request_id: 'adh-1' });
+    expect(result).toEqual({ ok: true, posted: true, reason: 'posted', invoiceId: 'inv-1' });
+  });
+
+  it('maps a non-posted business answer (already_posted) without flagging an error', async () => {
+    const db = { rpc: vi.fn().mockResolvedValue({ data: { posted: false, reason: 'already_posted', invoice_id: null }, error: null }) };
+    expect(await postAdhesionCheckoutPayment(db, 'adh-1')).toEqual({ ok: true, posted: false, reason: 'already_posted', invoiceId: null });
+  });
+
+  it('returns ok:false with the message when the RPC reports an error', async () => {
+    const db = { rpc: vi.fn().mockResolvedValue({ data: null, error: { message: 'db down' } }) };
+    expect(await postAdhesionCheckoutPayment(db, 'adh-1')).toEqual({ ok: false, error: 'db down' });
+  });
+
+  it('never throws: a rejected RPC call becomes ok:false', async () => {
+    const db = { rpc: vi.fn().mockRejectedValue(new Error('network')) };
+    expect(await postAdhesionCheckoutPayment(db, 'adh-1')).toEqual({ ok: false, error: 'network' });
+  });
+
+  it('treats an empty RPC payload as an error', async () => {
+    const db = { rpc: vi.fn().mockResolvedValue({ data: null, error: null }) };
+    expect(await postAdhesionCheckoutPayment(db, 'adh-1')).toMatchObject({ ok: false });
   });
 });

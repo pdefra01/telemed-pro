@@ -30,6 +30,7 @@
 // for this change.
 
 import crypto from 'node:crypto';
+import { postAdhesionCheckoutPayment } from './adhesionPayments.js';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -431,7 +432,7 @@ async function handleAdhesionCheckoutPayment(ctx, payment, adhesionId) {
 
   const { data: adhesion, error: readError } = await supabaseAdmin
     .from('adhesion_requests')
-    .select('id, payment_status, mp_payment_id')
+    .select('id, status, approved_profile_id, payment_status, mp_payment_id')
     .eq('id', adhesionId)
     .maybeSingle();
 
@@ -454,6 +455,7 @@ async function handleAdhesionCheckoutPayment(ctx, payment, adhesionId) {
           mp_payment_id: String(payment.id),
           payment_status: 'approved',
           paid_at: resolveOccurredAt(payment, 'payment'),
+          mp_paid_amount: payment.transaction_amount ?? null,
         })
         .eq('id', adhesionId);
       if (updateError) {
@@ -462,8 +464,28 @@ async function handleAdhesionCheckoutPayment(ctx, payment, adhesionId) {
         });
       }
     }
-    return done({ outcome: 'adhesion_paid' }, {
-      outcome: 'adhesion_paid', resolution_state: 'final', amount: payment.transaction_amount ?? null,
+    const amount = payment.transaction_amount ?? null;
+    // Not approved yet: approve-adhesion posts the payment when it runs.
+    if (adhesion.status !== 'approved' || !adhesion.approved_profile_id) {
+      return done({ outcome: 'adhesion_paid' }, { outcome: 'adhesion_paid', resolution_state: 'final', amount });
+    }
+
+    const ledger = await postAdhesionCheckoutPayment(supabaseAdmin, adhesionId);
+    if (!ledger.ok) {
+      // Leave the audit row retryable: Pass A re-fetches and calls the RPC again.
+      return done({ outcome: 'ledger_post_failed', detail: ledger.error }, {
+        outcome: 'ledger_post_failed', resolution_state: 'pending', detail: ledger.error, amount,
+      });
+    }
+    if (!ledger.posted && ledger.reason !== 'already_posted') {
+      return done({ outcome: 'ledger_not_posted', ledger: ledger.reason }, {
+        outcome: 'ledger_not_posted', resolution_state: 'needs_admin', detail: `ledger:${ledger.reason}`, amount,
+      });
+    }
+    const ledgerState = ledger.posted ? 'posted' : 'already_posted';
+    return done({ outcome: 'adhesion_paid', ledger: ledgerState }, {
+      outcome: 'adhesion_paid', resolution_state: 'final', amount,
+      detail: ledger.invoiceId ? `ledger:${ledgerState} invoice:${ledger.invoiceId}` : `ledger:${ledgerState}`,
     });
   }
 
@@ -842,7 +864,7 @@ function subscriptionKindForEventType(eventType) {
  *
  * @returns {'resolved' | 'still_pending' | 'needs_admin'}
  */
-function classifyPaymentSettlementOutcome(result) {
+export function classifyPaymentSettlementOutcome(result) {
   if (result.outcome === 'fetch_failed') return 'still_pending';
 
   if (result.outcome === 'not_approved') {
@@ -854,7 +876,7 @@ function classifyPaymentSettlementOutcome(result) {
 
   // R25: a mismatched or stale reference, or an invoice that no longer
   // exists, is a human decision — never something a re-fetch resolves.
-  if (result.outcome === 'ref_mismatch' || result.outcome === 'invoice_not_found' || result.outcome === 'adhesion_not_found') return 'needs_admin';
+  if (result.outcome === 'ref_mismatch' || result.outcome === 'invoice_not_found' || result.outcome === 'adhesion_not_found' || result.outcome === 'ledger_not_posted') return 'needs_admin';
 
   // R1-R5: still blocked on a dependency (link, invoice, coverage window) or
   // a transient DB error reading them — worth another attempt.
@@ -862,6 +884,7 @@ function classifyPaymentSettlementOutcome(result) {
     result.outcome === 'subscription_not_linked'
     || result.outcome === 'no_open_invoice'
     || result.outcome === 'rpc_error'
+    || result.outcome === 'ledger_post_failed'
   ) {
     return 'still_pending';
   }

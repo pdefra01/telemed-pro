@@ -8,6 +8,7 @@ import {
   handleSubscriptionEvent,
   routeWebhookNotification,
   runDeferredReconciliation,
+  classifyPaymentSettlementOutcome,
 } from '../mercadopago.js';
 
 /**
@@ -758,6 +759,79 @@ describe('handlePaymentSettlement: adhesion checkout payments', () => {
     const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue({ id: 905, status: 'approved', transaction_amount: 5, external_reference: REF }) }, { paymentId: '905' });
     expect(result).toMatchObject({ outcome: 'rpc_error', posted: false });
     expect(auditCall(db)).toMatchObject({ p_outcome: 'rpc_error', p_resolution_state: 'pending' });
+  });
+
+  /** adhesionStub whose rpc also answers the ledger RPC. */
+  function ledgerStub(row, ledgerAnswer) {
+    const db = adhesionStub(row);
+    db.rpc = vi.fn((name) => Promise.resolve(
+      name === 'post_adhesion_checkout_payment' ? ledgerAnswer : { data: null, error: null },
+    ));
+    return db;
+  }
+  const APPROVED_ROW = { id: 'adh-1', status: 'approved', approved_profile_id: 'prof-1', payment_status: 'pending', mp_payment_id: null };
+  const approvedPayment = { id: 910, status: 'approved', transaction_amount: 49999.5, external_reference: REF, date_approved: '2026-09-20T10:00:00Z' };
+  const ledgerCall = (db) => db.rpc.mock.calls.find(([name]) => name === 'post_adhesion_checkout_payment');
+
+  it('stores mp_paid_amount = transaction_amount together with the approved payment', async () => {
+    const db = adhesionStub({ id: 'adh-1', status: 'pending', approved_profile_id: null, payment_status: 'pending', mp_payment_id: null });
+    await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });
+    expect(db.updates[0].payload).toMatchObject({ mp_payment_id: '910', payment_status: 'approved', mp_paid_amount: 49999.5 });
+  });
+
+  it('a request not yet approved keeps the final adhesion_paid outcome and does not call the ledger RPC', async () => {
+    const db = ledgerStub({ id: 'adh-1', status: 'pending', approved_profile_id: null, payment_status: 'pending', mp_payment_id: null }, { data: null, error: null });
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });
+    expect(result.outcome).toBe('adhesion_paid');
+    expect(ledgerCall(db)).toBeUndefined();
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'adhesion_paid', p_resolution_state: 'final' });
+  });
+
+  it('an already approved request posts to the ledger after recording the payment and audits the result', async () => {
+    const db = ledgerStub(APPROVED_ROW, { data: { posted: true, reason: 'posted', invoice_id: 'inv-9' }, error: null });
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });
+    expect(ledgerCall(db)[1]).toEqual({ p_adhesion_request_id: 'adh-1' });
+    expect(result).toMatchObject({ outcome: 'adhesion_paid', ledger: 'posted' });
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'adhesion_paid', p_resolution_state: 'final' });
+    expect(auditCall(db).p_detail).toContain('posted');
+    expect(auditCall(db).p_detail).toContain('inv-9');
+  });
+
+  it('already_posted is a normal final outcome', async () => {
+    const db = ledgerStub({ ...APPROVED_ROW, payment_status: 'approved', mp_payment_id: '910' }, { data: { posted: false, reason: 'already_posted', invoice_id: null }, error: null });
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });
+    expect(db.updates).toHaveLength(0);
+    expect(result).toMatchObject({ outcome: 'adhesion_paid', ledger: 'already_posted' });
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'adhesion_paid', p_resolution_state: 'final' });
+  });
+
+  it('a ledger RPC error does not throw and leaves the audit row pending as ledger_post_failed', async () => {
+    const db = ledgerStub(APPROVED_ROW, { data: null, error: { message: 'ledger down' } });
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });
+    expect(result).toMatchObject({ outcome: 'ledger_post_failed', posted: false });
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'ledger_post_failed', p_resolution_state: 'pending' });
+    expect(auditCall(db).p_detail).toContain('ledger down');
+  });
+
+  it('a thrown ledger RPC is contained the same way', async () => {
+    const db = adhesionStub(APPROVED_ROW);
+    db.rpc = vi.fn((name) => (name === 'post_adhesion_checkout_payment' ? Promise.reject(new Error('boom')) : Promise.resolve({ data: null, error: null })));
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });
+    expect(result.outcome).toBe('ledger_post_failed');
+    expect(auditCall(db)).toMatchObject({ p_resolution_state: 'pending' });
+  });
+
+  it('a business refusal from the ledger (e.g. no_plan) is escalated to an admin, not retried forever', async () => {
+    const db = ledgerStub(APPROVED_ROW, { data: { posted: false, reason: 'no_plan', invoice_id: null }, error: null });
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });
+    expect(result).toMatchObject({ outcome: 'ledger_not_posted', ledger: 'no_plan' });
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'ledger_not_posted', p_resolution_state: 'needs_admin' });
+  });
+
+  it('classifyPaymentSettlementOutcome: ledger_post_failed retries, ledger_not_posted needs an admin', () => {
+    expect(classifyPaymentSettlementOutcome({ outcome: 'ledger_post_failed' })).toBe('still_pending');
+    expect(classifyPaymentSettlementOutcome({ outcome: 'ledger_not_posted' })).toBe('needs_admin');
+    expect(classifyPaymentSettlementOutcome({ outcome: 'adhesion_paid' })).toBe('resolved');
   });
 
   it('routes the payment topic through the adhesion branch', async () => {

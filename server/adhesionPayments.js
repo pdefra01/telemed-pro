@@ -212,3 +212,26 @@ export async function createAdhesionCheckoutPreference(ctx, { adhesionRequestId 
     return fail(502, MP_ERROR);
   }
 }
+
+/**
+ * Posts the sign-up Checkout Pro payment of an approved adhesion request into
+ * the affiliate ledger (RPC `post_adhesion_checkout_payment`, service role,
+ * idempotent). Shared by the payment webhook and approve-adhesion so whichever
+ * happens second posts it. Never throws.
+ *
+ * @param {{ rpc: Function }} supabaseAdmin
+ * @param {string} adhesionRequestId
+ * @returns {Promise<{ ok: true, posted: boolean, reason: string, invoiceId: string | null } | { ok: false, error: string }>}
+ */
+export async function postAdhesionCheckoutPayment(supabaseAdmin, adhesionRequestId) {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('post_adhesion_checkout_payment', {
+      p_adhesion_request_id: adhesionRequestId,
+    });
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: 'empty_ledger_response' };
+    return { ok: true, posted: data.posted === true, reason: data.reason, invoiceId: data.invoice_id ?? null };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
