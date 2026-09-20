@@ -553,6 +553,7 @@ const Doctors: React.FC = () => {
                   { label: 'Jueves',    day: 4 },
                   { label: 'Viernes',   day: 5 },
                   { label: 'Sábado',    day: 6 },
+                  { label: 'Domingo',   day: 0 },
                 ];
                 const TIME_SLOTS = Array.from({ length: 13 }, (_, i) => {
                   const hour = 8 + i;
