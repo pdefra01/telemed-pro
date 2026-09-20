@@ -202,7 +202,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
       )}
 
       {/* 2. CENTER VIDEO & HUD */}
-      <div className="flex-1 relative flex flex-col min-w-0 bg-slate-950">
+      <div className="flex-1 relative flex flex-col min-w-0 min-h-0 overflow-hidden bg-slate-950">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(20,184,166,0.03),transparent_70%)]"></div>
         
         {/* Toggle Buttons (Floating) */}
@@ -284,6 +284,16 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
           </div>
 
           <div className="flex items-center gap-3 pointer-events-auto">
+            {isDoctor && (
+              <button
+                onClick={() => setIsVaultOpen(true)}
+                className="h-16 px-5 bg-emerald-500/10 hover:bg-emerald-500/20 backdrop-blur-3xl border border-emerald-500/20 rounded-3xl flex items-center gap-2.5 text-emerald-400 transition-all shadow-2xl"
+                title="Historia clínica y consultas anteriores"
+              >
+                <Database size={18} />
+                <span className="hidden xl:inline text-[10px] font-bold uppercase tracking-widest">Historia clínica</span>
+              </button>
+            )}
             <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-4 rounded-3xl flex items-center gap-8 shadow-2xl">
               <div className="flex flex-col items-center">
                 <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">CONEXIÓN</span>
@@ -309,8 +319,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
         </div>
 
         {/* Video Components (Custom Interactive Layout) */}
-        <div className="flex-1 relative z-0 flex items-center justify-center p-4">
-          <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border border-white/10 bg-slate-950 flex items-center justify-center shadow-3xl">
+        <div className="flex-1 min-h-0 relative z-0 flex items-center justify-center p-4">
+          <div className="relative w-full h-full min-h-0 rounded-[2.5rem] overflow-hidden border border-white/10 bg-slate-950 flex items-center justify-center shadow-3xl">
             
             {/* 1. REMOTE VIDEO TRACK (Médico o Paciente - Principal) */}
             {remoteScreenShareTrack ? (
@@ -756,7 +766,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
       {/* MEDICAL VAULT OVERLAY */}
       {isVaultOpen && (
         <div className="absolute inset-0 z-[100] bg-slate-950/80 backdrop-blur-2xl flex items-center justify-end p-8 animate-in fade-in duration-500">
-          <div className="w-[600px] h-full bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-500">
+          <div className="w-full max-w-[600px] h-full bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-500">
             <div className="p-10 border-b border-white/5 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-emerald-500/10 text-emerald-400 rounded-2xl flex items-center justify-center border border-emerald-500/20">
@@ -804,8 +814,11 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                             <span className="text-[10px] font-mono text-slate-400 uppercase">{record.id.substring(0, 8)}</span>
                           </div>
                         </div>
-                        <p className="text-sm text-slate-400 font-medium leading-relaxed italic mb-6">
-                          "{record.notes}"
+                        {record.diagnosis && (
+                          <p className="text-base font-bold text-white mb-2">{record.diagnosis}</p>
+                        )}
+                        <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap break-words mb-6">
+                          {record.notes}
                         </p>
                         <div className="flex items-center justify-between border-t border-white/5 pt-6">
                           <div className="flex items-center gap-3">
