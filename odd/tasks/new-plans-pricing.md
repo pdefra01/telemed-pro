@@ -39,7 +39,7 @@ Replace every existing plan with the new catalog, price each sign-up from a fixe
 - [x] T3 Server: MP amounts from plan price, fixed commissions, check-duplicates (phone + Individual rule), plan resolution
 - [x] T4 Adhesion form: choose plan, options per plan, no promo banner, family section only for Familiar (max 4)
 - [x] T5 Admin UI: plans page shows kind/option/offered, in-use plans read-only
-- [ ] T6 Data wipe (destructive, last, needs explicit OK)
+- [x] T6 Data wipe (destructive, last, needs explicit OK)
 - [ ] T7 Docs
 
 ## Progress / evidence
@@ -49,6 +49,9 @@ Replace every existing plan with the new catalog, price each sign-up from a fixe
 - Contract for T4: form sends plan_type 'individual'|'familiar', payment_method card_debit|prepaid_6|prepaid_12|<any standard method>.
 - T4 (delegated writer): RED then GREEN (PlanRepository 13/13, AdhesionForm 21/21). Full suite 528 pass / 5 pre-existing fails, verified by the orchestrator. Form now driven by offered plan rows; promo banner and client discount math removed. User confirmed: debit and QR auto debit are MP subscriptions (AUTO_DEBIT_METHODS stays as is; they charge the standard Familiar price, card_debit the cheaper one). Open: terms clause 4 wording generic; Familiar card shows "Desde $39.999".
 - T5 (delegated writer): RED (16/38 failing) then GREEN. Full suite 544 pass / 5 pre-existing fails, verified by the orchestrator. Plans list shows kind/option/offered/price/months/size/commission; in-use plans lock price and terms; "Crear nueva version" prefills a draft (not offered). Not tested: modal/Agreements rendering (pure helper tests only). Open: publishing a new version does not auto-withdraw the old one; commission locked with the price when in use.
+- T6 (2026-09-20, user OK on the list, via linked Supabase CLI session): backup of 9 tables + doomed auth users in D:/documentos/telemed-pro-backups/2026-09-20-pre-wipe (outside the repo, contains personal data). One atomic DO block deleted: 13 adhesion_requests, 9 account movements, 2 coverage windows, 6 pending MP subscriptions, 2 test patients (Juan Perez, Juan Paciente E2E) and their auth users. Verified after: only Pablo De Francesco and Alejandro Mayer remain as patients, 51 appointments intact, 22 staff/advisor profiles and 101 lead_survey_responses kept.
+- NOT applied to remote yet: migrations 20260920020000, 030000, 040000 (plans catalog, identity guards, auto-withdraw). Apply order matters: the wipe is done, so the unique indexes are safe.
+- Tooling note: `supabase db query --linked` truncates multi-line SQL on Windows; flatten to one line.
 
 ## Next step
-T6 (destructive, needs backup + explicit OK on the list) then T7 docs.
+Apply the 3 migrations to remote (needs explicit OK), then T7 docs.
