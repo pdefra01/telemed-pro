@@ -27,8 +27,8 @@ After a video consultation, the electronic prescription reaches the patient by W
 - [x] T1 `server/whatsapp.js`: AR phone normalization, message builder, WAHA client (injectable fetch) + tests
 - [x] T2 Migration `prescription_deliveries` (status log, RLS: doctor of the appointment reads; writes via service role)
 - [x] T3 `sendPrescriptionViaWhatsApp` service + `POST /api/prescriptions/:id/send-whatsapp` in `server.js` (auth: doctor of the appointment) + tests
-- [ ] T4 Frontend `PostConsultation.tsx`: auto-send after finalize, status + "Reenviar", remove `wa.me` button; drop the simulator and public link from `finalize-consultation`
-- [ ] T5 Docs: `COOLIFY_DEPLOYMENT.md` (WAHA container, env vars, QR linking, safeguards)
+- [x] T4 Frontend `PostConsultation.tsx`: auto-send after finalize, status + "Reenviar", remove `wa.me` button. (Dropping the simulator/public link from `finalize-consultation` was DEFERRED: it is only a console.log and would force a manual edge-function redeploy.)
+- [x] T5 Docs: `COOLIFY_DEPLOYMENT.md` (WAHA container, env vars, QR linking, safeguards)
 
 ## Acceptance
 - Doctor's number never appears anywhere; the patient sees only the company number.
@@ -39,6 +39,14 @@ After a video consultation, the electronic prescription reaches the patient by W
 - T1: RED (module missing) -> GREEN 24/24 with `npx vitest run server/__tests__/whatsapp.test.js`. Commit: feat(whatsapp) gateway client (see git log).
 - T2: migration `20260920010000_prescription_deliveries.sql` written; NOT applied to remote yet (needs user OK). No pgTAP run (local supabase stack not started); RLS verified by review only.
 - T3: RED (10 failing) -> GREEN 34/34; whole `server/` suite 162/162. Endpoint POST /api/prescriptions/:id/send-whatsapp (env: WHATSAPP_GATEWAY_URL, WHATSAPP_GATEWAY_API_KEY, WHATSAPP_GATEWAY_SESSION). Resend guard: 60s per prescription.
+- T4: RED (4 failing) -> GREEN 7/7 in `PostConsultation.test.tsx`. Also fixed a regression I had introduced earlier (diagnosis placeholder removal broke a test -> aria-label) and 2 DoctorDashboard tests tied to the old summary copy.
+- T5: `COOLIFY_DEPLOYMENT.md` section 4 (WAHA container, env vars, QR linking, care and verification).
+- Final: full suite 484 passed / 7 failed; the 7 failures are in files untouched by this work (crypto, VideoRoom notes placeholder, DashboardRepository, MedicalHistory).
+
+## Pending on the user (manual)
+1. Apply migration `20260920010000_prescription_deliveries.sql` to remote (`supabase db push`), after OK.
+2. Deploy the app; create the WAHA service in Coolify, set the 3 env vars, scan the QR with the company phone.
+3. End-to-end test with a real consultation. Nothing here was exercised against a real WhatsApp session.
 
 ## Next step
-T4.
+Manual setup and real-world test (user).
