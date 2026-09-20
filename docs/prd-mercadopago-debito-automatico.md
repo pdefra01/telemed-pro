@@ -9,7 +9,7 @@
 
 ## 1. Objetivo
 
-Permitir que un paciente pueda adherirse al plan de cobertura médica y autorizar un débito automático mensual a través de Mercado Pago, sin necesidad de ingresar los datos de su tarjeta directamente en la plataforma. El cobro se realiza según el día elegido por el afiliado en la adhesión (**día 1 o día 10 de cada mes**; por defecto día 10).
+Permitir que un paciente pueda adherirse al plan de cobertura médica y autorizar un débito automático mensual a través de Mercado Pago, sin necesidad de ingresar los datos de su tarjeta directamente en la plataforma. Todo alta pasa por un paso obligatorio de Mercado Pago (suscripción o Checkout Pro, ver 2.1). Para los débitos automáticos, el cobro se realiza según el día elegido por el afiliado en la adhesión (**día 1 o día 10 de cada mes**; por defecto día 10).
 
 ---
 
@@ -35,21 +35,22 @@ Permitir que un paciente pueda adherirse al plan de cobertura médica y autoriza
 
 ---
 
-## 2.1. Precios y medios que generan suscripción MP
+## 2.1. Paso de Mercado Pago obligatorio por opción
 
-El monto de la suscripción sale del precio fijo del plan (no hay descuento por débito; el 20 % anterior fue eliminado).
+Toda adhesión termina en un paso de Mercado Pago. Si el link no se puede crear, la afiliación no se completa: el formulario muestra un error y un botón **Reintentar** que repite solo la llamada a MP para la misma solicitud (nunca crea una segunda solicitud). El paso de éxito muestra **Ir a pagar con Mercado Pago**. El monto sale del precio fijo del plan (sin descuento por débito).
 
-| Plan / opción | Precio | Suscripción MP |
+| Plan / opción | Precio | Mecanismo MP |
 |---|---|---|
-| Individual (solo titular) | $14.999 / mes | No (sin pregunta de medio de pago) |
-| Familiar estándar | $49.999 / mes | Sí, si elige **débito** o **débito QR** (igual que tarjeta) |
-| Familiar, débito automático con tarjeta de crédito | $39.999 / mes | Sí |
-| Familiar prepago semestral (6+1 meses) | 6 x 39.999 = $239.994 | No |
-| Familiar prepago anual (12+2 meses) | 12 x 39.999 = $479.988 | No |
+| Individual (solo titular) | $14.999 / mes | Suscripción mensual (preapproval) |
+| Familiar, débito automático con tarjeta de crédito | $39.999 / mes | Suscripción mensual |
+| Familiar, **débito** o **débito QR** | $49.999 / mes | Suscripción mensual |
+| Familiar prepago semestral (6+1 meses) | 6 x 39.999 = $239.994 | Suscripción recurrente cada 6 meses |
+| Familiar prepago anual (12+2 meses) | 12 x 39.999 = $479.988 | Suscripción recurrente cada 12 meses |
+| Familiar con efectivo, transferencia, Rapipago o link | $49.999 / mes | Pago Checkout Pro del primer período; los siguientes por factura |
 
-Efectivo, transferencia, Rapipago y link de pago no crean suscripción. El Individual nunca puede usar MP.
+Checkout Pro cubre Rapipago/Pago Fácil y transferencia. En suscripciones el monto es precio mensual x meses de la frecuencia.
 
----
+> ⚠️ **Riesgo no verificado:** la recurrencia de 6 / 12 meses en un preapproval no está documentada explícitamente por Mercado Pago (los ejemplos solo muestran frecuencia 1) y queda sin verificar hasta la primera llamada real. **Alternativa** si MP la rechaza: cobros mensuales con `repetitions`, o una suscripción basada en plan.
 
 ## 3. Variables de Entorno Requeridas (Coolify)
 
@@ -57,23 +58,32 @@ Efectivo, transferencia, Rapipago y link de pago no crean suscripción. El Indiv
 |---|---|
 | `MERCADOPAGO_ACCESS_TOKEN` | Access Token de MP. Empieza con `TEST-` en sandbox o `APP_USR-` en producción. |
 | `MERCADOPAGO_WEBHOOK_SECRET` | Secret para verificar la firma HMAC-SHA256 de los webhooks entrantes. |
-| `PUBLIC_APP_URL` | URL pública de la app (ej: `https://medinex.duckdns.org`). Usada como `back_url`. |
+| `PUBLIC_APP_URL` | URL pública de la app (ej: `https://medinex.duckdns.org`). Usada como `back_url` y, si está definida, como `notification_url`. |
+
+Si faltan los secretos de MP, los endpoints de adhesión devuelven 503 y las altas no pueden completarse (en desarrollo hay que definir las variables).
 
 ---
 
 ## 4. Endpoints del Backend
 
 ### `POST /api/adhesion/preapproval`
-Crea la suscripción de débito automático en MP para un nuevo afiliado (pre-afiliado, aún sin cuenta).
+Crea la suscripción en MP para un nuevo afiliado (pre-afiliado, aún sin cuenta), para todas las opciones con suscripción (ver 2.1). Es idempotente por solicitud de adhesión.
 
 - **Quién lo llama:** Frontend (`AdhesionForm.tsx`) tras enviar el formulario.
 - **Qué hace:**
   1. Resuelve el plan solicitado.
   2. Toma el precio mensual del plan elegido (precio fijo por plan, sin fórmulas de descuento; ver sección 2.1).
-  3. Crea el preapproval en MP con `start_date` = próximo día 10.
+  3. Crea el preapproval en MP con `start_date` = próximo día 10; monto = precio mensual x meses de la frecuencia (1, 6 o 12).
   4. Guarda la reserva en `affiliate_payment_subscriptions` con `status: 'pending'`.
   5. Devuelve `{ ok: true, initPoint: "https://www.mercadopago.com.ar/..." }`.
-- **Respuesta de error:** `{ ok: false }` (nunca 5xx para no alarmar al usuario).
+- **Respuesta de error:** código no 2xx (400/404/409/502; 503 si MP no está configurado). El formulario lo trata como fallo y ofrece **Reintentar**.
+
+### `POST /api/adhesion/checkout-preference`
+Crea el pago Checkout Pro del primer período para Familiar con efectivo, transferencia, Rapipago o link.
+
+- **Quién lo llama:** `AdhesionForm.tsx` tras crear la solicitud; idempotente por solicitud de adhesión.
+- **Qué hace:** crea la preferencia con `external_reference` = `adhesion:<id>:checkout` y devuelve `{ ok: true, initPoint }`.
+- **Errores:** igual que el endpoint anterior (no 2xx).
 
 ### `POST /api/payments/subscribe`
 Crea la suscripción para un afiliado que **ya tiene cuenta** y quiere activar el débito automático desde su panel.
@@ -89,7 +99,7 @@ Recibe notificaciones de Mercado Pago.
 
 | Topic | Qué hace |
 |---|---|
-| `payment` | Registra el pago en el ledger (`affiliate_account_movements`) con número de recibo correlativo. |
+| `payment` | Registra el pago en el ledger (`affiliate_account_movements`) con número de recibo correlativo. Si el `external_reference` es `adhesion:<id>:checkout`, registra `mp_payment_id`, `payment_status` y `paid_at` en la solicitud de adhesión (los roles `anon`/`authenticated` no pueden escribir esas columnas) y un evento de auditoría. |
 | `subscription_authorized_payment` | Procesa el cobro mensual: registra el pago + extiende cobertura del afiliado 1 mes. |
 | `subscription_preapproval` | Actualiza el estado de la suscripción (`authorized`, `cancelled`, `paused`). |
 | Cualquier otro | Responde 200 sin procesar (ack silencioso). |
@@ -197,6 +207,8 @@ Para probar sin dinero real:
 
 ## 11. Pendientes / Backlog
 
+- [ ] **Asentar el primer pago Checkout Pro en el ledger/facturas:** hoy solo se registra en la solicitud de adhesión; falta publicarlo al aprobar la afiliación.
+- [ ] **Verificar la recurrencia de 6/12 meses** en la primera llamada real (ver riesgo en 2.1).
 - [ ] **Scheduler de reconciliación:** Crear una cron job (Edge Function o servicio externo) que llame a `runDeferredReconciliation` mensualmente (sugerido: día 12 de cada mes a las 09:00 AR).
 - [ ] **Notificaciones al paciente:** Email automático cuando el cobro mensual falla (`payment_failed`), para que el paciente actualice su tarjeta en MP.
 - [ ] **Panel de admin para suscripciones:** Vista de todas las suscripciones activas, pausadas y canceladas con su historial de cobros.

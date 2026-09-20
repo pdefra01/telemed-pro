@@ -37,7 +37,10 @@ TeleMed Pro is a high-end, premium telemedicine platform designed for doctors an
 | Familiar prepaid semester | 6 x 39.999 = $239.994 | 6 + 1 months, price frozen |
 | Familiar prepaid annual | 12 x 39.999 = $479.988 | 12 + 2 months, price frozen |
 
-- **Individual**: no Mercado Pago subscription, no payment-method question, no prepaid option. Debit and QR auto debit are Mercado Pago subscriptions (like credit-card auto debit); the former 20% debit discount no longer exists.
+- **Individual**: no payment-method question and no prepaid option; it is a monthly Mercado Pago subscription. The former 20% debit discount no longer exists.
+- **Mandatory Mercado Pago step**: every sign-up ends in a Mercado Pago step, whatever the plan or payment option. The affiliation is not completed if the payment link cannot be created: the form shows an error and a "Reintentar" that repeats only the Mercado Pago call for the same request (never a second request). If Mercado Pago secrets are missing the endpoints return 503 and sign-ups cannot complete.
+  - **Subscription (recurring preapproval)**: Individual, Familiar credit-card auto debit, debit and QR auto debit (monthly), and prepaid semester/annual as a recurring charge every 6 / 12 months (monthly price x months = $239.994 / $479.988). The 6/12-month recurrence is not explicitly documented by Mercado Pago and is unverified until the first real call.
+  - **Checkout Pro first-period payment**: Familiar with cash, transfer, Rapipago and link; later periods are invoiced. The `payment` webhook (external reference `adhesion:<id>:checkout`) records the payment on the adhesion request; posting it into the ledger/invoices at approval is not implemented yet.
 - **Plan Duration**: Each plan defines a billed duration in months (`paidMonths`) plus an optional free duration (`bonusMonths`) added on top (e.g. the annual prepaid is 12+2 = 14 months for the price of 12).
 - **Price Changes**: A change is a new plan version and applies to new sign-ups only. A plan in use cannot change price or terms (DB trigger); offering a new version automatically withdraws the previous one (`is_offered`). Affiliates keep the plan and price they signed up with.
 - **Admin Plans Page**: Shows kind, payment option, offered flag, price, months, size and advisor commission. In-use plans are read-only and expose a "Crear nueva version" action that prefills a draft.
@@ -55,7 +58,7 @@ TeleMed Pro is a high-end, premium telemedicine platform designed for doctors an
 - **Manual Renewal**: Once a window expires, an admin can trigger an explicit "Renovar Cobertura" action from the affiliate roster to open a fresh window sourced from the affiliate's currently assigned plan and reset consumed quota. There is no automatic renewal (no scheduler yet) — it is always a deliberate admin action.
 
 ### 4.3. Payment & Billing
-- **Hybrid Payments**: Supports digital gateways (Mercado Pago, etc.) and manual reconciliation via bank file imports.
+- **Hybrid Payments**: Every new sign-up goes through Mercado Pago (subscription or Checkout Pro, see 4.1); manual reconciliation via bank file imports remains available for later periods and other gateways.
 - **Billing Methods**: Supports billing by **Individual Affiliate** and by **Agreement (Convenio/Company)**.
 - **Tax Engine**: Must account for local and national taxes (IVA, IIBB, etc.) in invoice generation.
 - **Accounting Export**: Ability to generate accounting records/exports for external accounting firms (Estudio Contable).

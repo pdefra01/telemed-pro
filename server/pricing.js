@@ -72,9 +72,26 @@ export function subscriptionAmount(plan) {
   return Number(Number(plan.monthly_cost).toFixed(2));
 }
 
-/** Individual plans are never subscribed through Mercado Pago. */
-export function canSubscribeToMercadoPago(plan) {
-  return plan?.plan_kind !== 'individual';
+/**
+ * Mercado Pago preapproval terms for a plan: it recurs every `paid_months`
+ * months (1 for monthly plans, 6 semester, 12 annual) and charges
+ * monthly_cost x paid_months each time.
+ */
+export function preapprovalTerms(plan) {
+  const paid = Number(plan?.paid_months);
+  const frequency = Number.isInteger(paid) && paid >= 1 ? paid : 1;
+  const amount = Number((Number(plan.monthly_cost) * frequency).toFixed(2));
+  return { frequency, frequencyType: 'months', amount };
+}
+
+const CHECKOUT_METHODS = ['cash', 'transfer', 'rapipago', 'link'];
+
+/**
+ * Whether a sign-up pays its first period through Checkout Pro (manual
+ * methods, Familiar only). Every other option is a Mercado Pago subscription.
+ */
+export function requiresCheckoutPayment(paymentMethod, planKind) {
+  return planKind === 'familiar' && CHECKOUT_METHODS.includes(paymentMethod);
 }
 
 /** Sum of the fixed advisor commission over plan rows (null-safe). */

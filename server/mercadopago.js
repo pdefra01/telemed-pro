@@ -245,6 +245,7 @@ export function resolveOccurredAt(resource, kind) {
 
 // ── handlePaymentSettlement ───────────────────────────────────────────────
 
+const ADHESION_CHECKOUT_REFERENCE_PATTERN = /^adhesion:([^:]+):checkout$/;
 const CHECKOUT_PRO_REFERENCE_PATTERN = /^affiliate:([^:]+):invoice:([^:]+)$/;
 
 /**
@@ -406,6 +407,80 @@ async function correlateInvoice(supabaseAdmin, payment, preapprovalId) {
 }
 
 /**
+ * Records a re-fetched Checkout Pro payment made for a sign-up (external_reference
+ * `adhesion:<id>:checkout`) on its adhesion_requests row. No invoice or ledger
+ * exists yet at sign-up, so this never touches them; the audit row carries
+ * invoice_id null. Idempotent, and an approved request is never regressed by a
+ * later non-approved notification. Never throws.
+ */
+async function handleAdhesionCheckoutPayment(ctx, payment, adhesionId) {
+  const { supabaseAdmin } = ctx;
+  const mpResourceId = String(payment.id);
+  const audit = (row) => writeMercadopagoAuditEvent(supabaseAdmin, {
+    mp_resource_id: mpResourceId,
+    mp_status: payment.status,
+    invoice_id: null,
+    profile_id: null,
+    detail: null,
+    ...row,
+  });
+  const done = async (result, row) => {
+    const { error } = await audit(row);
+    return { posted: false, ...result, auditError: error ? error.message : null };
+  };
+
+  const { data: adhesion, error: readError } = await supabaseAdmin
+    .from('adhesion_requests')
+    .select('id, payment_status, mp_payment_id')
+    .eq('id', adhesionId)
+    .maybeSingle();
+
+  if (readError) {
+    return done({ outcome: 'rpc_error', detail: readError.message }, {
+      outcome: 'rpc_error', resolution_state: 'pending', detail: readError.message, amount: payment.transaction_amount ?? null,
+    });
+  }
+  if (!adhesion) {
+    return done({ outcome: 'adhesion_not_found', detail: adhesionId }, {
+      outcome: 'adhesion_not_found', resolution_state: 'needs_admin', detail: adhesionId, amount: payment.transaction_amount ?? null,
+    });
+  }
+
+  if (payment.status === 'approved') {
+    if (adhesion.payment_status !== 'approved') {
+      const { error: updateError } = await supabaseAdmin
+        .from('adhesion_requests')
+        .update({
+          mp_payment_id: String(payment.id),
+          payment_status: 'approved',
+          paid_at: resolveOccurredAt(payment, 'payment'),
+        })
+        .eq('id', adhesionId);
+      if (updateError) {
+        return done({ outcome: 'rpc_error', detail: updateError.message }, {
+          outcome: 'rpc_error', resolution_state: 'pending', detail: updateError.message, amount: payment.transaction_amount ?? null,
+        });
+      }
+    }
+    return done({ outcome: 'adhesion_paid' }, {
+      outcome: 'adhesion_paid', resolution_state: 'final', amount: payment.transaction_amount ?? null,
+    });
+  }
+
+  const mapped = TERMINAL_REJECTED_PAYMENT_STATUSES.includes(payment.status) ? 'rejected' : 'pending';
+  if (adhesion.payment_status !== 'approved' && adhesion.payment_status !== mapped) {
+    await supabaseAdmin.from('adhesion_requests').update({ payment_status: mapped }).eq('id', adhesionId);
+  }
+  return done({ outcome: 'not_approved', mpStatus: payment.status }, {
+    outcome: 'not_approved',
+    resolution_state: (payment.status === 'refunded' || payment.status === 'charged_back')
+      ? 'needs_admin'
+      : TERMINAL_REJECTED_PAYMENT_STATUSES.includes(payment.status) ? 'final' : 'pending',
+    amount: null,
+  });
+}
+
+/**
  * Settles a re-fetched Mercado Pago payment against the receivables ledger
  * (D-A/D-B/D-C). Callable from BOTH the `payment` webhook topic (`paymentId`
  * known directly from the body) and the `subscription_authorized_payment`
@@ -437,6 +512,13 @@ export async function handlePaymentSettlement(ctx, { paymentId, preapprovalId = 
   }
 
   const mpResourceId = String(payment.id);
+
+  // Sign-up first-period payment (Checkout Pro): recorded on the adhesion
+  // request, never correlated to an invoice (none exists yet).
+  const adhesionMatch = ADHESION_CHECKOUT_REFERENCE_PATTERN.exec(payment.external_reference || '');
+  if (adhesionMatch) {
+    return handleAdhesionCheckoutPayment(ctx, payment, adhesionMatch[1]);
+  }
 
   if (payment.status !== 'approved') {
     const { error: auditWriteError } = await writeMercadopagoAuditEvent(supabaseAdmin, {
@@ -772,7 +854,7 @@ function classifyPaymentSettlementOutcome(result) {
 
   // R25: a mismatched or stale reference, or an invoice that no longer
   // exists, is a human decision — never something a re-fetch resolves.
-  if (result.outcome === 'ref_mismatch' || result.outcome === 'invoice_not_found') return 'needs_admin';
+  if (result.outcome === 'ref_mismatch' || result.outcome === 'invoice_not_found' || result.outcome === 'adhesion_not_found') return 'needs_admin';
 
   // R1-R5: still blocked on a dependency (link, invoice, coverage window) or
   // a transient DB error reading them — worth another attempt.
