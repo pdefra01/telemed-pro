@@ -8,7 +8,6 @@ import {
   handleSubscriptionEvent,
   routeWebhookNotification,
   runDeferredReconciliation,
-  DEBITO_AUTOMATICO_DISCOUNT,
 } from '../mercadopago.js';
 
 /**
@@ -675,12 +674,6 @@ describe('handlePaymentSettlement', () => {
     // verified directly by the pgTAP "freeze-once-needs_admin" tests)
     // rejects the second write.
     expect(currentResolutionState).toBe('needs_admin');
-  });
-});
-
-describe('DEBITO_AUTOMATICO_DISCOUNT', () => {
-  it('is the 20% discount factor (0.8) mirrored from AdhesionForm.tsx', () => {
-    expect(DEBITO_AUTOMATICO_DISCOUNT).toBe(0.8);
   });
 });
 

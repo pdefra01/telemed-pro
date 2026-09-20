@@ -46,7 +46,7 @@ export class AdhesionRepository {
    * `adhesion_request_id` is the only stable handle available.
    */
   async submitApplication(data: AdhesionRequest): Promise<{ id: string }> {
-    // Pre-insert duplicate check (DNI + CUIL) against affiliates, family members
+    // Pre-insert duplicate check (DNI + CUIL + titular phone, plus family size by plan) against affiliates, family members
     // and pending requests, for the titular and every family member.
     const checkResponse = await fetch('/api/adhesion/check-duplicates', {
       method: 'POST',
@@ -54,6 +54,8 @@ export class AdhesionRepository {
       body: JSON.stringify({
         titularDni: data.titular_dni,
         titularCuil: data.titular_cuil,
+        titularPhone: data.titular_phone,
+        planType: data.plan_type,
         family: (data.family_members || []).map((member: any) => ({
           dni: member.dni,
           cuil: member.cuil,
@@ -74,7 +76,7 @@ export class AdhesionRepository {
       throw new Error(
         conflictMessages.length > 0
           ? conflictMessages.join(' ')
-          : 'Ya existe una solicitud con datos duplicados.'
+          : checkResult.error || 'Ya existe una solicitud con datos duplicados.'
       );
     }
 

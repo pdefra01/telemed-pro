@@ -11,10 +11,11 @@ import {
   handleSubscriptionEvent,
   routeWebhookNotification,
   runDeferredReconciliation,
-  DEBITO_AUTOMATICO_DISCOUNT,
 } from './server/mercadopago.js';
 import { buildPatientAuthUser, sendActivationEmail } from './server/affiliateActivation.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
+import { resolveSellablePlan, subscriptionAmount, canSubscribeToMercadoPago, computeAdvisorCommissions } from './server/pricing.js';
+import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
 
@@ -241,33 +242,6 @@ async function mpFetch(path, init = {}) {
 }
 
 /**
- * Resolves a plan by its requested name, falling back to the admin-marked
- * default plan when no name matches — mirrors /api/approve-adhesion's plan
- * resolution (2c) for the signup-time preapproval endpoint below, which
- * needs the plan's LIVE monthly_cost before any profile/plan_id snapshot
- * exists. Kept as its own small helper rather than refactoring
- * /api/approve-adhesion's inline (already-shipped) resolution, to keep this
- * PR's blast radius on that endpoint limited to the MP back-fill addition.
- */
-async function resolvePlanByRequestedName(requestedPlanName) {
-  const cleanName = (requestedPlanName || '').trim();
-  if (cleanName) {
-    const { data: matchedPlan } = await supabaseAdmin
-      .from('plans')
-      .select('id, name, monthly_cost')
-      .eq('name', cleanName)
-      .maybeSingle();
-    if (matchedPlan) return matchedPlan;
-  }
-  const { data: fallbackPlan } = await supabaseAdmin
-    .from('plans')
-    .select('id, name, monthly_cost')
-    .eq('is_default', true)
-    .maybeSingle();
-  return fallbackPlan || null;
-}
-
-/**
  * POST /api/webhooks/mercadopago
  * Signature-verified, session-free receiver (D-C). Mounted here — before any
  * requireAuth/requireAdmin usage in this file — because MP notifications
@@ -342,7 +316,7 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
 
     const { data: request, error: fetchError } = await supabaseAdmin
       .from('adhesion_requests')
-      .select('titular_email, titular_dni, plan_type, preferred_billing_day')
+      .select('titular_email, titular_dni, plan_type, payment_method, preferred_billing_day')
       .eq('id', adhesionRequestId)
       .single();
 
@@ -352,13 +326,17 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
     }
 
     const payerEmail = request.titular_email?.trim() || `${request.titular_dni.trim()}@medinex-paciente.com`;
-    const plan = await resolvePlanByRequestedName(request.plan_type);
+    const plan = await resolveSellablePlan(supabaseAdmin, { planType: request.plan_type, paymentMethod: request.payment_method });
     if (!plan) {
       console.error('[adhesion/preapproval] No plan resolved (requested or default) for adhesion', adhesionRequestId);
       return res.status(200).json({ ok: false });
     }
 
-    const discountedMonthlyCost = Number((plan.monthly_cost * DEBITO_AUTOMATICO_DISCOUNT).toFixed(2));
+    if (!canSubscribeToMercadoPago(plan)) {
+      return res.status(400).json({ ok: false, error: 'El plan Individual no admite suscripción de débito automático en Mercado Pago.' });
+    }
+
+    const planAmount = subscriptionAmount(plan);
     const requestedDay = Number(request.preferred_billing_day);
     const billingDay = Number.isInteger(requestedDay) && requestedDay >= 1 && requestedDay <= 28 ? requestedDay : 10;
 
@@ -374,7 +352,7 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
           auto_recurring: {
             frequency: 1,
             frequency_type: 'months',
-            transaction_amount: discountedMonthlyCost,
+            transaction_amount: planAmount,
             currency_id: 'ARS',
             start_date: nextBillingDate(billingDay),
           },
@@ -393,7 +371,7 @@ app.post('/api/adhesion/preapproval', async (req, res) => {
         adhesion_request_id: adhesionRequestId,
         mp_preapproval_id: preapproval.id,
         status: 'pending',
-        discounted_monthly_cost: discountedMonthlyCost,
+        discounted_monthly_cost: planAmount, // DB column name kept; holds the plan price (no discount)
         billing_day: billingDay,
       });
 
@@ -499,7 +477,7 @@ async function createAndFinalizeSubscription(req, res, reservationId) {
 
   const { data: plan, error: planError } = await supabaseAdmin
     .from('plans')
-    .select('name, monthly_cost')
+    .select('name, monthly_cost, plan_kind')
     .eq('id', profile.plan_id)
     .maybeSingle();
 
@@ -508,7 +486,12 @@ async function createAndFinalizeSubscription(req, res, reservationId) {
     return res.status(400).json({ ok: false, error: 'No se pudo resolver el plan del afiliado.' });
   }
 
-  const discountedMonthlyCost = Number((plan.monthly_cost * DEBITO_AUTOMATICO_DISCOUNT).toFixed(2));
+  if (!canSubscribeToMercadoPago(plan)) {
+    await supabaseAdmin.rpc('release_subscription_reservation', { p_reservation_id: reservationId });
+    return res.status(400).json({ ok: false, error: 'El plan Individual no admite suscripción de débito automático en Mercado Pago.' });
+  }
+
+  const planAmount = subscriptionAmount(plan);
 
   let preapproval;
   try {
@@ -522,7 +505,7 @@ async function createAndFinalizeSubscription(req, res, reservationId) {
         auto_recurring: {
           frequency: 1,
           frequency_type: 'months',
-          transaction_amount: discountedMonthlyCost,
+          transaction_amount: planAmount,
           currency_id: 'ARS',
           start_date: nextBillingDate(10),
         },
@@ -538,7 +521,7 @@ async function createAndFinalizeSubscription(req, res, reservationId) {
   const { data: finalizeResult, error: finalizeError } = await supabaseAdmin.rpc('finalize_subscription_enrollment', {
     p_reservation_id: reservationId,
     p_mp_preapproval_id: String(preapproval.id),
-    p_discounted_monthly_cost: discountedMonthlyCost,
+    p_discounted_monthly_cost: planAmount, // DB contract name; holds the plan price
   });
 
   if (finalizeError) {
@@ -1192,134 +1175,7 @@ app.post('/api/email-verification/verify', async (req, res) => {
   }
 });
 
-/**
- * Normaliza un identificador (DNI o CUIL) a su forma canónica: solo dígitos.
- * Compartido entre el endpoint de duplicados y la aprobación de adhesión.
- * NULL/undefined normalizan a cadena vacía — nunca deben "matchear" entre sí.
- */
-function normalize(value) {
-  if (value === null || value === undefined) return '';
-  return String(value).replace(/\D/g, '');
-}
-
-/**
- * Arma el mensaje de rechazo correspondiente a un identificador (dni|cuil)
- * y a la razón de la coincidencia (affiliate|family_member|pending_request).
- * Función pura — sin efectos secundarios, fácil de testear en aislamiento.
- */
-function buildConflictMessage(identifier, reason) {
-  const label = identifier === 'cuil' ? 'CUIL' : 'DNI';
-  if (reason === 'affiliate') return `Este ${label} ya se encuentra afiliado a Medinex.`;
-  if (reason === 'family_member') return `Este ${label} ya está registrado como integrante de otro grupo familiar.`;
-  if (reason === 'pending_request') return `Ya existe una solicitud pendiente con este ${label}.`;
-  return `Este ${label} ya se encuentra registrado.`;
-}
-
-/**
- * POST /api/adhesion/check-duplicates
- * Valida, antes del insert público, que el DNI y el CUIL del titular y de
- * cada familiar (hasta 4) no colisionen con afiliados activos (profiles),
- * integrantes de otro grupo familiar (family_members), o solicitudes
- * pendientes existentes (adhesion_requests con status='pending'). DNI y CUIL
- * se evalúan de forma independiente — basta una sola coincidencia. Las
- * solicitudes rechazadas ('rejected') nunca bloquean. Los identificadores sin
- * valor (NULL/'') nunca "matchean" entre sí.
- */
-app.post('/api/adhesion/check-duplicates', async (req, res) => {
-  if (!supabaseAdmin) {
-    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
-  }
-
-  const { titularDni, titularCuil, family } = req.body;
-  if (!titularDni) {
-    return res.status(400).json({ error: 'Falta el DNI del titular.' });
-  }
-
-  const familyList = Array.isArray(family) ? family.slice(0, 4) : [];
-
-  // Personas a validar: titular + familiares. Cada una guarda su valor crudo
-  // (para el mensaje) y su valor normalizado (para comparar).
-  const people = [
-    { person: 'titular', name: null, rawDni: titularDni, rawCuil: titularCuil, dni: normalize(titularDni), cuil: normalize(titularCuil) },
-    ...familyList.map(f => ({
-      person: 'family',
-      name: f?.name || null,
-      rawDni: f?.dni,
-      rawCuil: f?.cuil,
-      dni: normalize(f?.dni),
-      cuil: normalize(f?.cuil)
-    }))
-  ];
-
-  const dniSet = [...new Set(people.map(p => p.dni).filter(Boolean))];
-  const cuilSet = [...new Set(people.map(p => p.cuil).filter(Boolean))];
-
-  // Compara una fila existente (con dni/cuil normalizables) contra cada
-  // persona de la solicitud entrante y agrega un conflicto por cada
-  // identificador coincidente.
-  const conflicts = [];
-  function collectConflicts(row, reason) {
-    const rowDni = normalize(row.dni);
-    const rowCuil = normalize(row.cuil);
-    for (const p of people) {
-      if (rowDni && p.dni && rowDni === p.dni) {
-        conflicts.push({ identifier: 'dni', value: p.rawDni, person: p.person, name: p.name, reason, message: buildConflictMessage('dni', reason) });
-      }
-      if (rowCuil && p.cuil && rowCuil === p.cuil) {
-        conflicts.push({ identifier: 'cuil', value: p.rawCuil, person: p.person, name: p.name, reason, message: buildConflictMessage('cuil', reason) });
-      }
-    }
-  }
-
-  try {
-    if (dniSet.length > 0 || cuilSet.length > 0) {
-      // Traemos todas las filas con DNI o CUIL cargado y comparamos
-      // normalizado en JS (via collectConflicts), en vez de filtrar con
-      // dni.in()/cuil.in() por valor exacto: los identificadores existentes
-      // pueden estar guardados con separadores (p. ej. CUIL "20-30111222-3"),
-      // y un filtro .in() de PostgREST hace match de string exacto contra la
-      // columna cruda, por lo que NUNCA encontraría esa fila comparándola con
-      // el valor normalizado "20301112223" — rompiendo el requisito de
-      // normalización del spec. Las tablas son chicas pre-lanzamiento (ver
-      // design.md), así que traer todo y comparar en JS es seguro.
-
-      // 1. Afiliados activos
-      const { data: profileMatches, error: profileErr } = await supabaseAdmin
-        .from('profiles')
-        .select('id,dni,cuil')
-        .or('dni.not.is.null,cuil.not.is.null');
-      if (profileErr) throw profileErr;
-      for (const row of profileMatches || []) collectConflicts(row, 'affiliate');
-
-      // 2. Integrantes de otro grupo familiar
-      const { data: familyMatches, error: familyErr } = await supabaseAdmin
-        .from('family_members')
-        .select('id,dni,cuil,full_name')
-        .or('dni.not.is.null,cuil.not.is.null');
-      if (familyErr) throw familyErr;
-      for (const row of familyMatches || []) collectConflicts(row, 'family_member');
-
-      // 3. Solicitudes pendientes
-      const { data: pendingMatches, error: pendingErr } = await supabaseAdmin
-        .from('adhesion_requests')
-        .select('id,titular_dni,titular_cuil')
-        .eq('status', 'pending');
-      if (pendingErr) throw pendingErr;
-      for (const row of pendingMatches || []) {
-        collectConflicts({ dni: row.titular_dni, cuil: row.titular_cuil }, 'pending_request');
-      }
-    }
-
-    if (conflicts.length > 0) {
-      return res.status(409).json({ ok: false, conflicts });
-    }
-
-    return res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('[adhesion/check-duplicates] Unexpected error:', err);
-    res.status(500).json({ error: 'Error interno al validar duplicados.' });
-  }
-});
+app.post('/api/adhesion/check-duplicates', checkDuplicatesHandler({ supabaseAdmin }));
 
 /**
  * POST /api/approve-adhesion
@@ -1391,35 +1247,14 @@ app.post('/api/approve-adhesion', requireAuth, requireAdmin, async (req, res) =>
       resolvedProducerId = producer?.id || null;
     }
 
-    // 2c. Resolver plan_id real a partir del nombre de plan enviado en la solicitud
-    // (request.plan_type). Nunca escribimos plan_name directo — el trigger
-    // sync_profile_plan_name_trigger lo sincroniza automáticamente a partir de plan_id.
-    const requestedPlanName = (request.plan_type || '').trim();
-    let resolvedPlanId = null;
-    if (requestedPlanName) {
-      const { data: matchedPlan } = await supabaseAdmin
-        .from('plans')
-        .select('id')
-        .eq('name', requestedPlanName)
-        .maybeSingle();
-      resolvedPlanId = matchedPlan?.id || null;
-    }
-    if (!resolvedPlanId) {
-      // El plan_type solicitado no coincide con ningún plan real (typo, dato
-      // legado, etc.) — en vez de dejar plan_id null en silencio, caemos al
-      // plan marcado is_default por un admin (sin nombres hardcodeados).
-      const { data: fallbackPlan } = await supabaseAdmin
-        .from('plans')
-        .select('id, name')
-        .eq('is_default', true)
-        .maybeSingle();
-      resolvedPlanId = fallbackPlan?.id || null;
-      if (resolvedPlanId) {
-        console.warn(`[approve-adhesion] plan_type "${request.plan_type}" no coincide con ningún plan real; usando el plan por defecto "${fallbackPlan.name}".`);
-      } else {
-        console.error(`[approve-adhesion] No se encontró ni el plan solicitado ("${request.plan_type}") ni ningún plan marcado como default. plan_id quedará sin asignar.`);
-      }
-    }
+    // 2c. Resolver plan_id real con el catálogo vigente (tipo de plan + medio de pago).
+    // Nunca escribimos plan_name directo — el trigger sync_profile_plan_name_trigger
+    // lo sincroniza a partir de plan_id.
+    const resolvedPlan = await resolveSellablePlan(supabaseAdmin, {
+      planType: request.plan_type,
+      paymentMethod: request.payment_method,
+    });
+    const resolvedPlanId = resolvedPlan?.id || null;
 
     // 3. Actualizar perfil del Paciente en public.profiles (que se autogeneró por trigger)
     console.log(`[approve-adhesion] Actualizando perfil del titular: ${userId}`);
@@ -1654,17 +1489,24 @@ app.get('/api/advisor/stats', requireAuth, async (req, res) => {
       .eq('promoter_id', promoterCode)
       .eq('status', 'pending');
 
-    // 4. Obtener links_shared_count y commission_rate desde producers
+    // 4. Obtener links_shared_count desde producers
     const { data: producer } = await supabaseAdmin
       .from('producers')
-      .select('links_shared_count, commission_rate')
+      .select('links_shared_count')
       .eq('id', req.user.id)
       .maybeSingle();
 
     const linksSharedCount = producer?.links_shared_count || 0;
-    const commissionRate = producer?.commission_rate ?? 10;
     const approvedSales = approvedCount || 0;
-    const commissions = approvedSales * 10000 * (commissionRate / 10); // base $10k * tasa proporcional
+
+    // 5. Comisión fija por plan vendido (plans.advisor_commission_amount)
+    const { data: approvedRequests, error: approvedError } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('approved_profile_id, plan_type, payment_method')
+      .eq('promoter_id', promoterCode)
+      .eq('status', 'approved');
+    if (approvedError) throw approvedError;
+    const commissions = await computeAdvisorCommissions({ supabaseAdmin }, approvedRequests);
 
     res.status(200).json({
       totalSales: totalCount || 0,

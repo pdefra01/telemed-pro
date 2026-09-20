@@ -64,6 +64,8 @@ describe('AdhesionRepository', () => {
       body: JSON.stringify({
         titularDni: request.titular_dni,
         titularCuil: request.titular_cuil,
+        titularPhone: request.titular_phone,
+        planType: request.plan_type,
         family: [
           { dni: '31123456', cuil: '27-31123456-4', name: 'María Pérez' }
         ]
@@ -131,6 +133,50 @@ describe('AdhesionRepository', () => {
       'Titular: Este DNI ya se encuentra afiliado a Medinex.'
     );
 
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('renders a phone conflict for the titular', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        ok: false,
+        conflicts: [
+          {
+            identifier: 'phone',
+            value: '3416123456',
+            person: 'titular',
+            name: null,
+            reason: 'affiliate',
+            message: 'El telefono ya esta registrado en otro afiliado o solicitud pendiente.'
+          }
+        ]
+      })
+    } as Response);
+
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+    await expect(repository.submitApplication(buildRequest())).rejects.toThrow(
+      'Titular: El telefono ya esta registrado en otro afiliado o solicitud pendiente.'
+    );
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the server error message (e.g. plan family cap) on a 400 response and does not insert', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'El plan Individual no admite integrantes adicionales.' })
+    } as Response);
+
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+    await expect(repository.submitApplication(buildRequest({ plan_type: 'individual' }))).rejects.toThrow(
+      'El plan Individual no admite integrantes adicionales.'
+    );
     expect(insertMock).not.toHaveBeenCalled();
   });
 

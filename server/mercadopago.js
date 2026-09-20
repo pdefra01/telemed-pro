@@ -33,9 +33,6 @@ import crypto from 'node:crypto';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-/** Mirrors AdhesionForm.tsx's débito-automático 20% discount copy (D-F). */
-export const DEBITO_AUTOMATICO_DISCOUNT = 0.8;
-
 // MP payment statuses that will NEVER transition further — safe to mark
 // resolution_state='final' immediately. Every other non-'approved' status
 // (pending, in_process, in_mediation, authorized) is assumed to still become
