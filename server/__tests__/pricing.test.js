@@ -3,7 +3,8 @@ import {
   paymentOptionFor,
   resolveSellablePlan,
   subscriptionAmount,
-  canSubscribeToMercadoPago,
+  preapprovalTerms,
+  requiresCheckoutPayment,
   sumAdvisorCommissions,
   computeAdvisorCommissions,
 } from '../pricing.js';
@@ -109,14 +110,48 @@ describe('resolveSellablePlan', () => {
   });
 });
 
-describe('subscriptionAmount / canSubscribeToMercadoPago', () => {
+describe('subscriptionAmount', () => {
   it('returns the plan price rounded to 2 decimals, with no discount', () => {
     expect(subscriptionAmount({ monthly_cost: '49999' })).toBe(49999);
     expect(subscriptionAmount({ monthly_cost: 39999.456 })).toBe(39999.46);
   });
-  it('refuses MP subscription for individual only', () => {
-    expect(canSubscribeToMercadoPago({ plan_kind: 'individual' })).toBe(false);
-    expect(canSubscribeToMercadoPago({ plan_kind: 'familiar' })).toBe(true);
+});
+
+describe('preapprovalTerms', () => {
+  it('monthly plans recur every month at the monthly cost (Individual included)', () => {
+    expect(preapprovalTerms({ monthly_cost: 14999, paid_months: 1, plan_kind: 'individual' }))
+      .toEqual({ frequency: 1, frequencyType: 'months', amount: 14999 });
+    expect(preapprovalTerms({ monthly_cost: '39999' }))
+      .toEqual({ frequency: 1, frequencyType: 'months', amount: 39999 });
+  });
+  it('semester recurs every 6 months at monthly_cost x 6', () => {
+    expect(preapprovalTerms({ monthly_cost: 39999, paid_months: 6 }))
+      .toEqual({ frequency: 6, frequencyType: 'months', amount: 239994 });
+  });
+  it('annual recurs every 12 months at monthly_cost x 12', () => {
+    expect(preapprovalTerms({ monthly_cost: 39999, paid_months: 12 }))
+      .toEqual({ frequency: 12, frequencyType: 'months', amount: 479988 });
+  });
+  it('rounds to 2 decimals', () => {
+    expect(preapprovalTerms({ monthly_cost: 100.333, paid_months: 6 }).amount).toBe(602);
+  });
+});
+
+describe('requiresCheckoutPayment', () => {
+  it('is true for Familiar with manual methods', () => {
+    for (const m of ['cash', 'transfer', 'rapipago', 'link']) {
+      expect(requiresCheckoutPayment(m, 'familiar')).toBe(true);
+    }
+  });
+  it('is false for subscription options', () => {
+    for (const m of ['card_debit', 'debit', 'qr_debit', 'prepaid_6', 'prepaid_12']) {
+      expect(requiresCheckoutPayment(m, 'familiar')).toBe(false);
+    }
+  });
+  it('is false for Individual whatever the method (monthly subscription)', () => {
+    for (const m of ['monthly', 'cash', 'transfer', 'card_debit']) {
+      expect(requiresCheckoutPayment(m, 'individual')).toBe(false);
+    }
   });
 });
 

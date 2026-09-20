@@ -677,6 +677,97 @@ describe('handlePaymentSettlement', () => {
   });
 });
 
+describe('handlePaymentSettlement: adhesion checkout payments', () => {
+  const REF = 'adhesion:adh-1:checkout';
+
+  /** Stub with an adhesion_requests row and a recorder for its updates. */
+  function adhesionStub(row, { updateError = null } = {}) {
+    const updates = [];
+    const from = (table) => {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        update: (payload) => { updates.push({ table, payload }); return builder; },
+        maybeSingle: async () => ({ data: table === 'adhesion_requests' ? row : null, error: null }),
+        then: (resolve, reject) => Promise.resolve({ data: null, error: updateError }).then(resolve, reject),
+      };
+      return builder;
+    };
+    const rpc = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    return { from, rpc, updates };
+  }
+
+  const auditCall = (db) => db.rpc.mock.calls.find(([name]) => name === 'record_mercadopago_payment_audit_event')?.[1];
+
+  it('records an approved payment on the adhesion request and audits it without an invoice, skipping the ledger', async () => {
+    const db = adhesionStub({ id: 'adh-1', payment_status: 'pending', mp_payment_id: null });
+    const mpFetch = vi.fn().mockResolvedValue({ id: 900, status: 'approved', transaction_amount: 49999, external_reference: REF, date_approved: '2026-09-20T10:00:00Z' });
+
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch }, { paymentId: '900' });
+
+    expect(result).toMatchObject({ outcome: 'adhesion_paid', posted: false });
+    expect(db.updates).toHaveLength(1);
+    expect(db.updates[0].table).toBe('adhesion_requests');
+    expect(db.updates[0].payload).toMatchObject({ mp_payment_id: '900', payment_status: 'approved' });
+    expect(new Date(db.updates[0].payload.paid_at).toISOString()).toBe('2026-09-20T10:00:00.000Z');
+    expect(db.rpc).not.toHaveBeenCalledWith('post_payment_movement_from_webhook', expect.anything());
+    expect(auditCall(db)).toMatchObject({ p_mp_resource_id: '900', p_outcome: 'adhesion_paid', p_resolution_state: 'final', p_invoice_id: null, p_amount: 49999 });
+  });
+
+  it('is idempotent: a repeated approved notification does not rewrite the request', async () => {
+    const db = adhesionStub({ id: 'adh-1', payment_status: 'approved', mp_payment_id: '900' });
+    const mpFetch = vi.fn().mockResolvedValue({ id: 900, status: 'approved', transaction_amount: 49999, external_reference: REF });
+
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch }, { paymentId: '900' });
+
+    expect(result.outcome).toBe('adhesion_paid');
+    expect(db.updates).toHaveLength(0);
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'adhesion_paid', p_resolution_state: 'final' });
+  });
+
+  it('a non-approved status updates payment_status (rejected) but never regresses an approved one', async () => {
+    const pending = adhesionStub({ id: 'adh-1', payment_status: 'pending', mp_payment_id: null });
+    await handlePaymentSettlement({ supabaseAdmin: pending, mpFetch: vi.fn().mockResolvedValue({ id: 901, status: 'rejected', external_reference: REF }) }, { paymentId: '901' });
+    expect(pending.updates[0].payload).toEqual({ payment_status: 'rejected' });
+    expect(auditCall(pending)).toMatchObject({ p_outcome: 'not_approved', p_resolution_state: 'final', p_invoice_id: null });
+
+    const approved = adhesionStub({ id: 'adh-1', payment_status: 'approved', mp_payment_id: '900' });
+    const res = await handlePaymentSettlement({ supabaseAdmin: approved, mpFetch: vi.fn().mockResolvedValue({ id: 902, status: 'refunded', external_reference: REF }) }, { paymentId: '902' });
+    expect(res).toMatchObject({ outcome: 'not_approved', mpStatus: 'refunded' });
+    expect(approved.updates).toHaveLength(0);
+    expect(auditCall(approved)).toMatchObject({ p_outcome: 'not_approved', p_resolution_state: 'needs_admin' });
+  });
+
+  it('an in-flight status (in_process) keeps the request pending and the audit row pending', async () => {
+    const db = adhesionStub({ id: 'adh-1', payment_status: null, mp_payment_id: null });
+    await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue({ id: 903, status: 'in_process', external_reference: REF }) }, { paymentId: '903' });
+    expect(db.updates[0].payload).toEqual({ payment_status: 'pending' });
+    expect(auditCall(db)).toMatchObject({ p_resolution_state: 'pending' });
+  });
+
+  it('an unknown adhesion id is audited for an admin and does not throw', async () => {
+    const db = adhesionStub(null);
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue({ id: 904, status: 'approved', transaction_amount: 1, external_reference: 'adhesion:ghost:checkout' }) }, { paymentId: '904' });
+    expect(result).toMatchObject({ outcome: 'adhesion_not_found', posted: false });
+    expect(db.updates).toHaveLength(0);
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'adhesion_not_found', p_resolution_state: 'needs_admin', p_invoice_id: null });
+  });
+
+  it('a failed update is audited as rpc_error/pending so the sweep retries it', async () => {
+    const db = adhesionStub({ id: 'adh-1', payment_status: 'pending', mp_payment_id: null }, { updateError: { message: 'db down' } });
+    const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue({ id: 905, status: 'approved', transaction_amount: 5, external_reference: REF }) }, { paymentId: '905' });
+    expect(result).toMatchObject({ outcome: 'rpc_error', posted: false });
+    expect(auditCall(db)).toMatchObject({ p_outcome: 'rpc_error', p_resolution_state: 'pending' });
+  });
+
+  it('routes the payment topic through the adhesion branch', async () => {
+    const db = adhesionStub({ id: 'adh-1', payment_status: 'pending', mp_payment_id: null });
+    const mpFetch = vi.fn().mockResolvedValue({ id: 906, status: 'approved', transaction_amount: 5, external_reference: REF });
+    const result = await routeWebhookNotification({ supabaseAdmin: db, mpFetch }, { topic: 'payment', dataId: '906' });
+    expect(result).toEqual({ status: 200, body: { outcome: 'adhesion_paid' } });
+  });
+});
+
 describe('handleSubscriptionEvent', () => {
   it('acks without any RPC call when deriveSubscriptionEventKey returns null (unmodelled status)', async () => {
     const supabaseAdmin = createSupabaseStub();
