@@ -12,6 +12,18 @@ export class PlanRepository {
     return (data || []).map(row => this.mapRowToPlan(row));
   }
 
+  /** Plans sellable to new sign-ups (is_offered = true), cheapest first. */
+  async getOffered(): Promise<Plan[]> {
+    const { data, error } = await supabase
+      .from('plans')
+      .select('*')
+      .eq('is_offered', true)
+      .order('monthly_cost');
+
+    if (error) throw error;
+    return (data || []).map(row => this.mapRowToPlan(row));
+  }
+
   async getById(id: string): Promise<Plan | null> {
     const { data, error } = await supabase
       .from('plans')
@@ -83,6 +95,10 @@ export class PlanRepository {
       // default defensively rather than propagate null, per spec.
       paidMonths: row.paid_months ?? 1,
       bonusMonths: row.bonus_months ?? 0,
+      planKind: row.plan_kind,
+      paymentOption: row.payment_option,
+      isOffered: row.is_offered,
+      advisorCommissionAmount: row.advisor_commission_amount,
       metadata: row.metadata,
     };
   }

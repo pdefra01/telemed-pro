@@ -37,7 +37,7 @@ Replace every existing plan with the new catalog, price each sign-up from a fixe
 - [x] T1 DB: plan catalog migration (columns, 5 seed plans, default, in-use immutability trigger) + SQL tests
 - [x] T2 DB: identity guards (phone normalizer, phone unique, DNI/CUIL cross-checks incl. family limits by plan) + SQL tests
 - [x] T3 Server: MP amounts from plan price, fixed commissions, check-duplicates (phone + Individual rule), plan resolution
-- [ ] T4 Adhesion form: choose plan, options per plan, no promo banner, family section only for Familiar (max 4)
+- [x] T4 Adhesion form: choose plan, options per plan, no promo banner, family section only for Familiar (max 4)
 - [ ] T5 Admin UI: plans page shows kind/option/offered, in-use plans read-only
 - [ ] T6 Data wipe (destructive, last, needs explicit OK)
 - [ ] T7 Docs
@@ -47,6 +47,7 @@ Replace every existing plan with the new catalog, price each sign-up from a fixe
 - T2 (mapper agent + inline): RED observed (`normalize_ar_phone` missing), then GREEN 22/22 on local Supabase in a rolled-back tx. Guards: normalized phone unique (profiles patients + pending adhesions), DNI/CUIL unique across profiles+family_members, family size from titular plan. Limitation: CUIL-vs-DNI cross match (CUIL middle digits) not checked. Index creation needs the wipe first (T6) on remote.
 - T3 (delegated: mapper + one writer; trigger: 4+ files, 2+ non-trivial files): RED then GREEN per unit (pricing 14, adhesionChecks 14, AdhesionRepository 14). Full `npx vitest run`: 515 pass / 5 fail, verified by the orchestrator; the 5 (VideoRoom x3, crypto, DashboardRepository) are in files untouched by T3 and also fail on baseline per the writer's stash check. New: server/pricing.js, server/adhesionChecks.js. Discount formula removed; Individual cannot use MP; fixed advisor commissions in stats. No route-level test for Individual 400s (server.js not importable).
 - Contract for T4: form sends plan_type 'individual'|'familiar', payment_method card_debit|prepaid_6|prepaid_12|<any standard method>.
+- T4 (delegated writer): RED then GREEN (PlanRepository 13/13, AdhesionForm 21/21). Full suite 528 pass / 5 pre-existing fails, verified by the orchestrator. Form now driven by offered plan rows; promo banner and client discount math removed. Open: qr_debit/debit trigger an MP preapproval (AUTO_DEBIT_METHODS) - to confirm with the user; terms clause 4 wording generic; Familiar card shows "Desde $39.999".
 
 ## Next step
-T4.
+T5.

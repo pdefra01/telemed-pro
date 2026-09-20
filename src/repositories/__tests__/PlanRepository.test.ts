@@ -103,6 +103,57 @@ describe('PlanRepository', () => {
     });
   });
 
+  describe('catalog fields and getOffered', () => {
+    const row = {
+      id: 'plan-fam-card',
+      name: 'Familiar Debito Tarjeta',
+      monthly_cost: 39999,
+      bonified_consultations: 0,
+      is_unlimited: true,
+      max_family_members: 4,
+      paid_months: 1,
+      bonus_months: 0,
+      plan_kind: 'familiar',
+      payment_option: 'card_debit',
+      is_offered: true,
+      advisor_commission_amount: 25000,
+      metadata: null,
+    };
+
+    it('maps plan_kind, payment_option, is_offered and advisor_commission_amount', async () => {
+      const orderMock = vi.fn().mockResolvedValue({ data: [row], error: null });
+      vi.mocked(supabase.from).mockReturnValue({ select: vi.fn().mockReturnValue({ order: orderMock }) } as any);
+
+      const [plan] = await repository.getAll();
+
+      expect(plan.planKind).toBe('familiar');
+      expect(plan.paymentOption).toBe('card_debit');
+      expect(plan.isOffered).toBe(true);
+      expect(plan.advisorCommissionAmount).toBe(25000);
+    });
+
+    it('getOffered only queries plans with is_offered = true', async () => {
+      const orderMock = vi.fn().mockResolvedValue({ data: [row], error: null });
+      const eqMock = vi.fn().mockReturnValue({ order: orderMock });
+      vi.mocked(supabase.from).mockReturnValue({ select: vi.fn().mockReturnValue({ eq: eqMock }) } as any);
+
+      const plans = await repository.getOffered();
+
+      expect(eqMock).toHaveBeenCalledWith('is_offered', true);
+      expect(plans).toHaveLength(1);
+      expect(plans[0].paymentOption).toBe('card_debit');
+    });
+
+    it('getOffered throws on a DB error', async () => {
+      const orderMock = vi.fn().mockResolvedValue({ data: null, error: new Error('boom') });
+      vi.mocked(supabase.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ order: orderMock }) }),
+      } as any);
+
+      await expect(repository.getOffered()).rejects.toThrow('boom');
+    });
+  });
+
   describe('getById', () => {
     it('maps a single snake_case DB row to the camelCase Plan shape', async () => {
       const row = {

@@ -51,6 +51,23 @@ const CIUDADES_POR_PROVINCIA: Record<string, string[]> = {
   'Tucumán': ['San Miguel de Tucumán', 'Yerba Buena', 'Tafí Viejo', 'Concepción', 'Banda del Río Salí', 'Aguilares']
 };
 
+type PlanKind = 'individual' | 'familiar';
+type FamiliarOption = 'standard' | 'card_debit' | 'prepaid_6' | 'prepaid_12';
+
+// Standard Familiar payment methods (all priced at the standard Familiar plan).
+// The values are what gets stored in adhesion_requests.payment_method.
+const STANDARD_METHODS: { value: string; label: string }[] = [
+  { value: 'transfer', label: 'Transferencia bancaria' },
+  { value: 'cash', label: 'Efectivo' },
+  { value: 'rapipago', label: 'Rapipago / Pago Fácil' },
+  { value: 'link', label: 'Link de pago' },
+  { value: 'debit', label: 'Débito automático' },
+  { value: 'qr_debit', label: 'Débito automático por QR' },
+];
+
+// Methods that need a Mercado Pago subscription (auto debit). Never Individual.
+const AUTO_DEBIT_METHODS = ['card_debit', 'debit', 'qr_debit'];
+
 // Glass Container for Step Card
 const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl ${className}`}>
@@ -115,7 +132,7 @@ export const AdhesionForm: React.FC = () => {
     healthInsurance: '',
   });
 
-  const [activePlan, setActivePlan] = useState<Plan | null>(null);
+  const [offeredPlans, setOfferedPlans] = useState<Plan[]>([]);
   const [availableCities, setAvailableCities] = useState<string[]>(CIUDADES_POR_PROVINCIA['Salta'] || []);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
 
@@ -168,18 +185,19 @@ export const AdhesionForm: React.FC = () => {
   }, [titular.province]);
 
   useEffect(() => {
-    const loadPlan = async () => {
+    let isMounted = true;
+    const loadPlans = async () => {
       try {
-        const plans = await planRepository.getAll();
-        const defaultOrMedinex = plans.find(p => p.isDefault) || plans.find(p => p.name === 'Plan Familiar Medinex') || plans[0];
-        if (defaultOrMedinex) {
-          setActivePlan(defaultOrMedinex);
-        }
+        const plans = await planRepository.getOffered();
+        if (isMounted) setOfferedPlans(plans);
       } catch (err) {
-        console.warn("Could not load plans dynamically from DB, using fallback values", err);
+        console.error('Could not load the offered plans', err);
+        if (isMounted) toast('No pudimos cargar los planes disponibles. Reintentá en unos minutos.', 'error');
       }
     };
-    loadPlan();
+    loadPlans();
+    return () => { isMounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [availableBillingDays, setAvailableBillingDays] = useState<number[]>([1, 10]);
@@ -203,21 +221,59 @@ export const AdhesionForm: React.FC = () => {
     fetchBillingDays();
   }, []);
 
-  const baseMonthlyCost = activePlan ? activePlan.monthlyCost : 25000;
-  const maxFamilyMembersCount = activePlan ? activePlan.maxFamilyMembers : 4;
-  const planDisplayName = activePlan ? activePlan.name : 'Plan Familiar Medinex';
-  const debitMonthlyCost = Math.round(baseMonthlyCost * 0.8);
-  const prepaid6TotalCost = debitMonthlyCost * 6;
-  const prepaid12TotalCost = debitMonthlyCost * 12;
+  const formatCurrency = (val: number | undefined | null) =>
+    val === undefined || val === null ? '—' : `$${val.toLocaleString('es-AR')}`;
 
-  const formatCurrency = (val: number) => `$${val.toLocaleString('es-AR')}`;
-
-  const [plan, setPlan] = useState({
-    type: 'Plan Familiar Medinex',
-    paymentMethod: 'debit', // 'monthly' | 'debit' | 'prepaid_6' | 'prepaid_12'
-    paymentDetail: 'Tarjeta de Crédito',
+  const [plan, setPlan] = useState<{
+    kind: PlanKind;
+    familiarOption: FamiliarOption;
+    standardMethod: string;
+    paymentDetail: string;
+    preferredBillingDay: number;
+  }>({
+    kind: 'familiar',
+    familiarOption: 'card_debit',
+    standardMethod: 'transfer',
+    paymentDetail: 'Tarjeta de Crédito Visa',
     preferredBillingDay: 10, // 1 | 10
   });
+
+  // Every price comes from the offered plan rows; nothing is computed client-side
+  // beyond monthly_cost x paid_months for the prepaid totals.
+  const findOffered = (kind: PlanKind, option: FamiliarOption | 'standard') =>
+    offeredPlans.find(p => p.planKind === kind && p.paymentOption === option) ?? null;
+
+  const paymentOption: FamiliarOption = plan.kind === 'individual' ? 'standard' : plan.familiarOption;
+  const selectedPlan = findOffered(plan.kind, paymentOption);
+  const individualPlan = findOffered('individual', 'standard');
+  const standardFamiliarPlan = findOffered('familiar', 'standard');
+  const cardDebitPlan = findOffered('familiar', 'card_debit');
+  const prepaid6Plan = findOffered('familiar', 'prepaid_6');
+  const prepaid12Plan = findOffered('familiar', 'prepaid_12');
+
+  const prepaidTotal = (p: Plan | null) => (p ? p.monthlyCost * p.paidMonths : undefined);
+  const coverageMonths = (p: Plan | null) => (p ? p.paidMonths + p.bonusMonths : undefined);
+
+  const maxFamilyMembersCount = plan.kind === 'individual' ? 0 : (selectedPlan?.maxFamilyMembers ?? 4);
+  const planDisplayName = plan.kind === 'individual' ? 'Plan Individual' : 'Plan Familiar';
+
+  const submittedPaymentMethod =
+    plan.kind === 'individual' ? 'monthly' : plan.familiarOption === 'standard' ? plan.standardMethod : plan.familiarOption;
+  const isAutoDebit = plan.kind === 'familiar' && AUTO_DEBIT_METHODS.includes(submittedPaymentMethod);
+
+  const standardMethodLabel = (value: string) => STANDARD_METHODS.find(m => m.value === value)?.label ?? value;
+
+  const submittedPaymentDetail = (() => {
+    if (plan.kind === 'individual') return 'Pago mensual';
+    if (plan.familiarOption === 'card_debit') return plan.paymentDetail;
+    if (plan.familiarOption === 'standard') return standardMethodLabel(plan.standardMethod);
+    return 'Pago anticipado';
+  })();
+
+  const selectPlanKind = (kind: PlanKind) => {
+    setPlan(prev => ({ ...prev, kind }));
+    if (kind === 'individual') setFamilyMembers([]);
+  };
 
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [newFamilyMember, setNewFamilyMember] = useState({
@@ -490,6 +546,16 @@ export const AdhesionForm: React.FC = () => {
       }
     }
 
+    if (step === 2) {
+      if (!selectedPlan) {
+        toast("No pudimos cargar el plan elegido. Reintentá en unos minutos.", "error");
+        return;
+      }
+      // Individual covers the titular only: skip the family step.
+      setStep(plan.kind === 'individual' ? 4 : 3);
+      return;
+    }
+
     setStep(prev => prev + 1);
   };
 
@@ -527,11 +593,11 @@ export const AdhesionForm: React.FC = () => {
         discovery_source: medical.discoverySource,
         discovery_other: medical.discoveryOther,
         preferred_contact_time: medical.preferredContactTime,
-        plan_type: plan.type,
-        payment_method: plan.paymentMethod,
-        payment_detail: plan.paymentDetail,
+        plan_type: plan.kind,
+        payment_method: submittedPaymentMethod,
+        payment_detail: submittedPaymentDetail,
         preferred_billing_day: plan.preferredBillingDay,
-        family_members: familyMembers,
+        family_members: plan.kind === 'individual' ? [] : familyMembers,
         medical_history: medical.history,
         medical_history_other: medical.historyOther,
         recommended_friend_phone: medical.recommendedFriendPhone,
@@ -548,7 +614,7 @@ export const AdhesionForm: React.FC = () => {
       // the form still completes (Resolved Decision #5) — enrollment is
       // best-effort, adhesion approval is not blocked by it. The manual/
       // Checkout Pro payment path remains available regardless.
-      if (plan.paymentMethod === 'debit') {
+      if (isAutoDebit) {
         try {
           const preapprovalRes = await fetch('/api/adhesion/preapproval', {
             method: 'POST',
@@ -576,12 +642,12 @@ export const AdhesionForm: React.FC = () => {
   };
 
   const getPaymentMethodLabel = () => {
-    switch (plan.paymentMethod) {
-      case 'monthly': return 'Pago Mensual ($50.000/mes)';
-      case 'debit': return 'Débito Automático TC ($40.000/mes - 20% OFF)';
-      case 'prepaid_6': return 'Prepago 6 meses (Pago Único - Cobertura 7 meses)';
-      case 'prepaid_12': return 'Prepago 12 meses (Pago Único - Cobertura 14 meses)';
-      default: return '';
+    if (plan.kind === 'individual') return 'Pago mensual, mes a mes';
+    switch (plan.familiarOption) {
+      case 'card_debit': return `Débito automático con tarjeta de crédito (${formatCurrency(cardDebitPlan?.monthlyCost)}/mes)`;
+      case 'prepaid_6': return `Pago anticipado 6 meses (${formatCurrency(prepaidTotal(prepaid6Plan))} - cobertura ${coverageMonths(prepaid6Plan) ?? '-'} meses)`;
+      case 'prepaid_12': return `Pago anticipado 12 meses (${formatCurrency(prepaidTotal(prepaid12Plan))} - cobertura ${coverageMonths(prepaid12Plan) ?? '-'} meses)`;
+      default: return `${standardMethodLabel(plan.standardMethod)} (${formatCurrency(standardFamiliarPlan?.monthlyCost)}/mes)`;
     }
   };
 
@@ -889,174 +955,215 @@ export const AdhesionForm: React.FC = () => {
               <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-400 border border-emerald-500/20">
                 <CreditCard size={24} />
               </div>
-              <h2 className="text-3xl font-bold tracking-tight text-white">2. Plan Familiar y Forma de Pago</h2>
+              <h2 className="text-3xl font-bold tracking-tight text-white">2. Elegí tu Plan y Forma de Pago</h2>
             </div>
-            <p className="text-slate-400 text-sm mb-8">El {planDisplayName} cubre al titular y hasta {maxFamilyMembersCount} integrantes convivientes adicionales.</p>
+            <p className="text-slate-400 text-sm mb-8">Ambos planes incluyen consultas ilimitadas por videollamada, recetas digitales y órdenes de estudios.</p>
 
-            {/* Plan Info Card */}
-            <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/20 rounded-3xl p-6 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]">
-              <div>
-                <span className="text-[10px] uppercase font-bold px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{planDisplayName.toUpperCase()}</span>
-                <h3 className="text-xl font-bold text-white mt-3">Cobertura Completa Familiar</h3>
-                <p className="text-slate-400 text-sm mt-1 max-w-md">Incluye hasta {maxFamilyMembersCount + 1} integrantes convivientes en total (titular + {maxFamilyMembersCount} adicionales) con acceso a videoconsultas ilimitadas y recetas digitales.</p>
-              </div>
-              <div className="text-left md:text-right">
-                <p className="text-xs text-slate-400 font-medium">Valor Estándar</p>
-                <h4 className="text-3xl font-extrabold text-white">{formatCurrency(baseMonthlyCost)}<span className="text-sm font-medium text-slate-400">/ mes</span></h4>
-              </div>
-            </div>
-
-            {/* Payment Method Selector Grid */}
-            <label className="block text-slate-400 text-xs font-bold uppercase mb-4">Modalidad de Pago y Promociones</label>
-            
-            <div className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-4 py-3 rounded-2xl mb-6 text-sm flex items-start gap-3 shadow-lg">
-              <Sparkles size={20} className="text-emerald-400 flex-shrink-0 mt-0.5" />
-              <p>
-                <strong className="font-extrabold tracking-wide">PROMOCION AGOSTO:</strong> PAGA $25.000 el primer mes por su GRUPO FAMILIAR, luego $ 40.000 o $ 50.000 según acuerdo
-              </p>
-            </div>
-
+            {/* Plan selector */}
+            <label className="block text-slate-400 text-xs font-bold uppercase mb-4">Plan</label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              {/* Option 1: Monthly */}
-              <div 
-                onClick={() => setPlan({ ...plan, paymentMethod: 'monthly' })}
-                className={`border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
-                  plan.paymentMethod === 'monthly'
+              <button
+                type="button"
+                aria-pressed={plan.kind === 'individual'}
+                onClick={() => selectPlanKind('individual')}
+                className={`text-left border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
+                  plan.kind === 'individual'
                     ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
                     : 'border-white/10 bg-white/5 hover:bg-white/10'
                 }`}
               >
                 <div>
-                  <h4 className="font-bold text-white text-base">Pago Mensual</h4>
-                  <p className="text-slate-400 text-xs mt-1">Efectivo, Rapipago, Link de Pago, Transferencia.</p>
+                  <h4 className="font-bold text-white text-base">Plan Individual</h4>
+                  <p className="text-slate-400 text-xs mt-1">Cobertura para el titular. Mes a mes, sin permanencia.</p>
+                  <p className="text-emerald-400 text-xs font-semibold mt-2">Consultas ilimitadas</p>
                 </div>
                 <div className="mt-6 flex justify-between items-end">
                   <span className="text-xs text-slate-500 font-semibold">Mensual</span>
-                  <span className="text-xl font-bold text-white">{formatCurrency(baseMonthlyCost)}</span>
+                  <span className="text-xl font-bold text-white">{formatCurrency(individualPlan?.monthlyCost)} <span className="text-xs font-normal text-slate-400">/ mes</span></span>
                 </div>
-              </div>
+              </button>
 
-              {/* Option 2: Automatic Debit */}
-              <div 
-                onClick={() => setPlan({ ...plan, paymentMethod: 'debit' })}
-                className={`border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between relative overflow-hidden ${
-                  plan.paymentMethod === 'debit'
-                    ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                <div className="absolute top-0 right-0 bg-emerald-400 text-slate-900 font-bold text-[9px] px-3 py-1 uppercase rounded-bl-xl tracking-wider flex items-center gap-1 shadow-md">
-                  <Sparkles size={10} />
-                  Recomendado
-                </div>
-                <div>
-                  <h4 className="font-bold text-white text-base">Débito Automático (TC)</h4>
-                  <p className="text-slate-400 text-xs mt-1">20% de descuento permanente sobre la cuota mensual.</p>
-                </div>
-                <div className="mt-6 flex justify-between items-end">
-                  <span className="text-xs text-emerald-400 font-semibold">20% Descuento</span>
-                  <span className="text-xl font-bold text-white">{formatCurrency(debitMonthlyCost)} <span className="text-xs font-normal text-slate-400">/ mes</span></span>
-                </div>
-              </div>
-
-              {/* Option 3: Prepago 6 meses */}
-              <div 
-                onClick={() => setPlan({ ...plan, paymentMethod: 'prepaid_6' })}
-                className={`border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
-                  plan.paymentMethod === 'prepaid_6'
+              <button
+                type="button"
+                aria-pressed={plan.kind === 'familiar'}
+                onClick={() => selectPlanKind('familiar')}
+                className={`text-left border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
+                  plan.kind === 'familiar'
                     ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
                     : 'border-white/10 bg-white/5 hover:bg-white/10'
                 }`}
               >
                 <div>
-                  <h4 className="font-bold text-white text-base">Pago Anticipado 6 meses</h4>
-                  <p className="text-slate-400 text-xs mt-1">20% de descuento + 1 mes de cobertura adicional sin cargo.</p>
+                  <h4 className="font-bold text-white text-base">Plan Familiar</h4>
+                  <p className="text-slate-400 text-xs mt-1">Cobertura para el titular y hasta {standardFamiliarPlan?.maxFamilyMembers ?? 4} integrantes convivientes adicionales.</p>
+                  <p className="text-emerald-400 text-xs font-semibold mt-2">Consultas ilimitadas</p>
                 </div>
                 <div className="mt-6 flex justify-between items-end">
-                  <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">7 Meses Cobertura</span>
-                  <span className="text-xl font-bold text-white">{formatCurrency(prepaid6TotalCost)} <span className="text-xs font-normal text-slate-500">único</span></span>
+                  <span className="text-xs text-slate-500 font-semibold">Desde</span>
+                  <span className="text-xl font-bold text-white">{formatCurrency(cardDebitPlan?.monthlyCost ?? standardFamiliarPlan?.monthlyCost)} <span className="text-xs font-normal text-slate-400">/ mes</span></span>
                 </div>
-              </div>
-
-              {/* Option 4: Prepago 12 meses */}
-              <div 
-                onClick={() => setPlan({ ...plan, paymentMethod: 'prepaid_12' })}
-                className={`border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
-                  plan.paymentMethod === 'prepaid_12'
-                    ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                <div>
-                  <h4 className="font-bold text-white text-base">Pago Anticipado 12 meses</h4>
-                  <p className="text-slate-400 text-xs mt-1">20% de descuento + 2 meses de cobertura adicional sin cargo.</p>
-                </div>
-                <div className="mt-6 flex justify-between items-end">
-                  <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">14 Meses Cobertura</span>
-                  <span className="text-xl font-bold text-white">{formatCurrency(prepaid12TotalCost)} <span className="text-xs font-normal text-slate-500">único</span></span>
-                </div>
-              </div>
+              </button>
             </div>
 
-            {/* Payment Details Input */}
-            {plan.paymentMethod === 'debit' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-in fade-in duration-300">
-                <div>
-                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Marca / Tarjeta de Débito Automático</label>
-                  <select 
-                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
-                    value={plan.paymentDetail}
-                    onChange={(e) => setPlan({ ...plan, paymentDetail: e.target.value })}
+            {plan.kind === 'familiar' && (
+              <>
+                <label className="block text-slate-400 text-xs font-bold uppercase mb-4">Modalidad de Pago</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                  {/* Standard methods */}
+                  <button
+                    type="button"
+                    aria-pressed={plan.familiarOption === 'standard'}
+                    onClick={() => setPlan({ ...plan, familiarOption: 'standard' })}
+                    className={`text-left border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
+                      plan.familiarOption === 'standard'
+                        ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
                   >
-                    <option value="Tarjeta de Crédito Visa">Tarjeta de Crédito Visa</option>
-                    <option value="Tarjeta de Crédito MasterCard">Tarjeta de Crédito MasterCard</option>
-                    <option value="Tarjeta de Crédito American Express">Tarjeta de Crédito American Express</option>
-                    <option value="Tarjeta de Débito Visa Débito">Tarjeta de Débito Visa Débito</option>
-                    <option value="Tarjeta de Débito Maestro">Tarjeta de Débito Maestro</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Día de Débito Mensual Preferido</label>
-                  <select 
-                    className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
-                    value={plan.preferredBillingDay}
-                    onChange={(e) => setPlan({ ...plan, preferredBillingDay: Number(e.target.value) })}
-                  >
-                    {availableBillingDays.map(day => (
-                      <option key={day} value={day}>
-                        Día {day} de cada mes {day === 10 ? '(Recomendado)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
+                    <div>
+                      <h4 className="font-bold text-white text-base">Pago mensual</h4>
+                      <p className="text-slate-400 text-xs mt-1">Transferencia, efectivo, Rapipago, link de pago, débito o débito por QR.</p>
+                    </div>
+                    <div className="mt-6 flex justify-between items-end">
+                      <span className="text-xs text-slate-500 font-semibold">Mensual</span>
+                      <span className="text-xl font-bold text-white">{formatCurrency(standardFamiliarPlan?.monthlyCost)} <span className="text-xs font-normal text-slate-400">/ mes</span></span>
+                    </div>
+                  </button>
 
-            {plan.paymentMethod === 'monthly' && (
-              <div className="mb-8 animate-in fade-in duration-300">
-                <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Medio de Pago Mensual Elegido</label>
-                <select 
-                  className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
-                  value={plan.paymentDetail}
-                  onChange={(e) => setPlan({ ...plan, paymentDetail: e.target.value })}
-                >
-                  <option value="Transferencia Bancaria / CBU">Transferencia Bancaria / CBU</option>
-                  <option value="Link de Pago Web">Link de Pago Web</option>
-                  <option value="Efectivo por Rapipago / Pago Fácil">Efectivo por Rapipago / Pago Fácil</option>
-                  <option value="Código QR / Billetera Virtual">Código QR / Billetera Virtual</option>
-                </select>
-              </div>
+                  {/* Credit card auto debit */}
+                  <button
+                    type="button"
+                    aria-pressed={plan.familiarOption === 'card_debit'}
+                    onClick={() => setPlan({ ...plan, familiarOption: 'card_debit' })}
+                    className={`text-left border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between relative overflow-hidden ${
+                      plan.familiarOption === 'card_debit'
+                        ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="absolute top-0 right-0 bg-emerald-400 text-slate-900 font-bold text-[9px] px-3 py-1 uppercase rounded-bl-xl tracking-wider flex items-center gap-1 shadow-md">
+                      <Sparkles size={10} />
+                      Recomendado
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white text-base">Débito automático con tarjeta de crédito</h4>
+                      <p className="text-slate-400 text-xs mt-1">Cuota mensual con débito automático en tu tarjeta.</p>
+                    </div>
+                    <div className="mt-6 flex justify-between items-end">
+                      <span className="text-xs text-emerald-400 font-semibold">Mensual</span>
+                      <span className="text-xl font-bold text-white">{formatCurrency(cardDebitPlan?.monthlyCost)} <span className="text-xs font-normal text-slate-400">/ mes</span></span>
+                    </div>
+                  </button>
+
+                  {/* Prepaid semester */}
+                  <button
+                    type="button"
+                    aria-pressed={plan.familiarOption === 'prepaid_6'}
+                    onClick={() => setPlan({ ...plan, familiarOption: 'prepaid_6' })}
+                    className={`text-left border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
+                      plan.familiarOption === 'prepaid_6'
+                        ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="font-bold text-white text-base">Pago anticipado 6 meses</h4>
+                      <p className="text-slate-400 text-xs mt-1">
+                        {prepaid6Plan ? `${prepaid6Plan.paidMonths} cuotas de ${formatCurrency(prepaid6Plan.monthlyCost)} en un solo pago` : 'Un solo pago'}
+                        {prepaid6Plan && prepaid6Plan.bonusMonths > 0 ? ` + ${prepaid6Plan.bonusMonths} mes de cobertura sin cargo.` : '.'}
+                      </p>
+                    </div>
+                    <div className="mt-6 flex justify-between items-end">
+                      <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">{coverageMonths(prepaid6Plan) ?? '-'} Meses Cobertura</span>
+                      <span className="text-xl font-bold text-white">{formatCurrency(prepaidTotal(prepaid6Plan))} <span className="text-xs font-normal text-slate-500">único</span></span>
+                    </div>
+                  </button>
+
+                  {/* Prepaid annual */}
+                  <button
+                    type="button"
+                    aria-pressed={plan.familiarOption === 'prepaid_12'}
+                    onClick={() => setPlan({ ...plan, familiarOption: 'prepaid_12' })}
+                    className={`text-left border rounded-3xl p-6 cursor-pointer transition-all flex flex-col justify-between ${
+                      plan.familiarOption === 'prepaid_12'
+                        ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="font-bold text-white text-base">Pago anticipado 12 meses</h4>
+                      <p className="text-slate-400 text-xs mt-1">
+                        {prepaid12Plan ? `${prepaid12Plan.paidMonths} cuotas de ${formatCurrency(prepaid12Plan.monthlyCost)} en un solo pago` : 'Un solo pago'}
+                        {prepaid12Plan && prepaid12Plan.bonusMonths > 0 ? ` + ${prepaid12Plan.bonusMonths} meses de cobertura sin cargo.` : '.'}
+                      </p>
+                    </div>
+                    <div className="mt-6 flex justify-between items-end">
+                      <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">{coverageMonths(prepaid12Plan) ?? '-'} Meses Cobertura</span>
+                      <span className="text-xl font-bold text-white">{formatCurrency(prepaidTotal(prepaid12Plan))} <span className="text-xs font-normal text-slate-500">único</span></span>
+                    </div>
+                  </button>
+                </div>
+
+                {plan.familiarOption === 'standard' && (
+                  <div className="mb-8 animate-in fade-in duration-300">
+                    <label htmlFor="standard-method" className="block text-slate-400 text-xs font-bold uppercase mb-2">Medio de pago</label>
+                    <select
+                      id="standard-method"
+                      className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                      value={plan.standardMethod}
+                      onChange={(e) => setPlan({ ...plan, standardMethod: e.target.value })}
+                    >
+                      {STANDARD_METHODS.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {isAutoDebit && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-in fade-in duration-300">
+                    {plan.familiarOption === 'card_debit' && (
+                      <div>
+                        <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Marca / Tarjeta de Débito Automático</label>
+                        <select
+                          className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                          value={plan.paymentDetail}
+                          onChange={(e) => setPlan({ ...plan, paymentDetail: e.target.value })}
+                        >
+                          <option value="Tarjeta de Crédito Visa">Tarjeta de Crédito Visa</option>
+                          <option value="Tarjeta de Crédito MasterCard">Tarjeta de Crédito MasterCard</option>
+                          <option value="Tarjeta de Crédito American Express">Tarjeta de Crédito American Express</option>
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Día de Débito Mensual Preferido</label>
+                      <select
+                        className="w-full bg-[#0f172a] border border-white/10 rounded-2xl py-3.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-400/50 transition-colors"
+                        value={plan.preferredBillingDay}
+                        onChange={(e) => setPlan({ ...plan, preferredBillingDay: Number(e.target.value) })}
+                      >
+                        {availableBillingDays.map(day => (
+                          <option key={day} value={day}>
+                            Día {day} de cada mes {day === 10 ? '(Recomendado)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="flex justify-between items-center mt-8">
-              <button 
+              <button
                 onClick={() => setStep(1)}
                 className="border border-white/10 hover:bg-white/5 text-slate-300 font-bold py-4 px-6 rounded-2xl transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
               >
                 <ArrowLeft size={18} />
                 Atrás
               </button>
-              <button 
+              <button
                 onClick={handleNextStep}
                 className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-4 px-8 rounded-2xl transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.25)] active:scale-95 cursor-pointer"
               >
@@ -1075,7 +1182,7 @@ export const AdhesionForm: React.FC = () => {
               </div>
               <h2 className="text-3xl font-bold tracking-tight text-white">3. Grupo Familiar Conviviente</h2>
             </div>
-            <p className="text-slate-400 text-sm mb-6">Podés agregar hasta 4 integrantes convivientes adicionales para incluirlos en la cobertura familiar.</p>
+            <p className="text-slate-400 text-sm mb-6">Podés agregar hasta {maxFamilyMembersCount} integrantes convivientes adicionales para incluirlos en la cobertura familiar.</p>
 
             {/* List of current added family members */}
             {familyMembers.length > 0 ? (
@@ -1121,7 +1228,7 @@ export const AdhesionForm: React.FC = () => {
             )}
 
             {/* Add new family member form */}
-            {familyMembers.length < 4 ? (
+            {familyMembers.length < maxFamilyMembersCount ? (
               <div className="bg-white/5 border border-white/10 rounded-3xl p-6 mb-8">
                 <h4 className="font-bold text-white text-base mb-4 flex items-center gap-2">
                   <Plus size={18} className="text-emerald-400" />
@@ -1219,7 +1326,7 @@ export const AdhesionForm: React.FC = () => {
             ) : (
               <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-3xl p-6 mb-8 flex items-center gap-3">
                 <CheckCircle2 size={20} className="flex-shrink-0" />
-                Alcanzaste el límite de 4 familiares adicionales para este plan.
+                Alcanzaste el límite de {maxFamilyMembersCount} familiares adicionales para este plan.
               </div>
             )}
 
@@ -1330,7 +1437,7 @@ export const AdhesionForm: React.FC = () => {
 
             <div className="flex justify-between items-center mt-8">
               <button 
-                onClick={() => setStep(3)}
+                onClick={() => setStep(plan.kind === 'individual' ? 2 : 3)}
                 className="border border-white/10 hover:bg-white/5 text-slate-300 font-bold py-4 px-6 rounded-2xl transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
               >
                 <ArrowLeft size={18} />
@@ -1369,7 +1476,7 @@ export const AdhesionForm: React.FC = () => {
               <p className="mb-4">MEDINEX NO reemplaza a las guardias médicas, servicios de emergencia (como SAME o ambulancias) ni la atención presencial cuando esta sea necesaria. Declaro que los datos consignados son verdaderos y que recibí información suficiente sobre el servicio.</p>
               
               <h5 className="font-bold text-white mb-2">4. CONDICIONES ECONÓMICAS Y FACTURACIÓN</h5>
-              <p className="mb-4">El valor del Plan Familiar es de $50.000 mensuales cuando el pago se realiza mediante transferencia, QR, Link de Pago, Pago Fácil o Rapipago. Quienes adhieran al Débito Automático con Tarjeta de Crédito obtendrán un 20% de descuento permanente, abonando $40.000 mensuales. Los cobros se procesan del 1 al 10 de cada mes.</p>
+              <p className="mb-4">Plan elegido: {planDisplayName} - {getPaymentMethodLabel()}. El valor informado en el paso 2 corresponde al plan y a la modalidad de pago elegidos. Los cobros se procesan del 1 al 10 de cada mes.</p>
             </div>
 
             {/* Consent checkboxes */}
@@ -1458,7 +1565,7 @@ export const AdhesionForm: React.FC = () => {
             </div>
             <h2 className="text-3xl font-black text-white tracking-tight mb-4">¡Solicitud Enviada!</h2>
             <p className="text-slate-400 text-sm leading-relaxed mb-8 max-w-md mx-auto">
-              Muchas gracias, <span className="text-white font-bold">{titular.name}</span>. Hemos recibido tu solicitud para el <span className="text-white font-bold">{plan.type}</span> pagando vía <span className="text-white font-bold">{getPaymentMethodLabel()}</span>.
+              Muchas gracias, <span className="text-white font-bold">{`${titular.firstName} ${titular.lastName}`.trim()}</span>. Hemos recibido tu solicitud para el <span className="text-white font-bold">{planDisplayName}</span> pagando vía <span className="text-white font-bold">{getPaymentMethodLabel()}</span>.
             </p>
 
             <div className="bg-white/5 border border-white/5 rounded-3xl p-6 text-left mb-8 space-y-4">
@@ -1495,19 +1602,20 @@ export const AdhesionForm: React.FC = () => {
               onClick={() => {
                 // Clear fields and go back to step 1
                 setStep(1);
-                setTitular({
-                  name: '',
+                setTitular(prev => ({
+                  ...prev,
+                  firstName: '',
+                  lastName: '',
                   dni: '',
                   cuil: '',
                   birthDate: '',
                   address: '',
-                  locality: '',
                   neighborhood: '',
                   email: '',
                   phone: '',
                   civilStatus: 'Soltero/a',
                   healthInsurance: '',
-                });
+                }));
                 setFamilyMembers([]);
                 setConsents({ dataTreatment: false, promotions: false });
                 setHasSigned(false);
