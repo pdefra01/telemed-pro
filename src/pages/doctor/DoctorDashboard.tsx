@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Doctor, Appointment, MedicalRecord, Prescription, MedicalDocument, DoctorWorkShift } from '../../types';
-import { Video, Calendar, Clock, Star, AlertCircle, FileText, CheckCircle, TrendingUp, Users, Activity, AlertTriangle, X, Search, Clipboard, Shield, ChevronRight, Zap, ArrowRight, MousePointer2, LogIn, LogOut as LogOutIcon, MapPin } from 'lucide-react';
+import { Video, Calendar, Clock, Star, AlertCircle, FileText, CheckCircle, TrendingUp, Users, Activity, AlertTriangle, X, Search, ChevronRight, Zap, ArrowRight, LogIn, LogOut as LogOutIcon, MapPin } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { appointmentRepository } from '../../repositories/AppointmentRepository';
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
@@ -23,6 +23,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [activeTab, setActiveTab] = useState<'queue' | 'history'>('queue');
     const [doctorStatus, setDoctorStatus] = useState<'online' | 'away'>('online');
     const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+    const [selectedPatientName, setSelectedPatientName] = useState<string>('');
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -82,7 +83,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 setToast({ message: `No se encontró ningún paciente con DNI ${cleanDni}`, type: 'error' });
             } else {
                 setSelectedPatientId(data[0].id);
-                setToast({ message: `Expediente cargado para ${data[0].full_name}`, type: 'success' });
+                setSelectedPatientName(data[0].full_name || '');
             }
         } catch (err) {
             console.error("Error al buscar paciente por DNI:", err);
@@ -427,6 +428,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                     if (appt) {
                                         setSelectedAppointment(appt);
                                         setSelectedPatientId(appt.patientId);
+                                        setSelectedPatientName(appt.patientName || '');
                                     }
                                     setActiveArrivalAlert(null);
                                 }}
@@ -446,91 +448,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 </div>
             )}
 
-            {/* Header Section */}
-            <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 relative z-10">
-                <div className="space-y-2">
-                    <div className="flex items-center space-x-3 group">
-                        <div className="h-0.5 w-12 bg-emerald-500/50 group-hover:w-16 transition-all duration-700"></div>
-                        <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-[0.4em] drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]">System Active • Dr. {user.specialty}</span>
-                    </div>
-                    <h1 className="text-6xl font-bold text-white tracking-tighter leading-none">
-                        Dashboard <span className="text-emerald-500">Médico</span>
-                    </h1>
-                    <div className="flex items-center gap-3 pt-1">
-                        <Clock size={14} className="text-emerald-500" /> 
-                        <span className="text-slate-400 font-medium text-sm tracking-wide">Estado actual:</span>
-                        <button
-                            onClick={() => setDoctorStatus(prev => prev === 'online' ? 'away' : 'online')}
-                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2.5 transition-all duration-300 border backdrop-blur-md shadow-lg active:scale-95 ${
-                                doctorStatus === 'online'
-                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 shadow-emerald-500/5'
-                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 shadow-amber-500/5'
-                            }`}
-                        >
-                            <span>{doctorStatus === 'online' ? 'EN LÍNEA' : 'AUSENTE'}</span>
-                            <div className="relative flex items-center justify-center">
-                                <span className={`w-2 h-2 rounded-full ${
-                                    doctorStatus === 'online' ? 'bg-emerald-500' : 'bg-amber-500'
-                                }`}></span>
-                                {doctorStatus === 'online' && (
-                                    <span className="absolute w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                                )}
-                            </div>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Control de Jornada Laboral Card */}
-                <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/5 p-6 rounded-3xl shadow-2xl flex flex-col sm:flex-row items-center gap-6">
-                    <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
-                            activeShift ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-500'
-                        }`}>
-                            <Activity size={24} className={activeShift ? 'animate-pulse' : ''} />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Jornada Laboral</span>
-                                {activeShift && (
-                                    <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                                        <MapPin size={10} /> {activeShift.officeName}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-2xl font-bold text-white tracking-tight font-mono mt-0.5">
-                                {shiftDurationText}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="h-10 w-px bg-white/5 hidden sm:block"></div>
-
-                    <div>
-                        {activeShift ? (
-                            <button
-                                onClick={handleClockOut}
-                                disabled={isShiftLoading}
-                                className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-red-500/5 disabled:opacity-50"
-                            >
-                                {isShiftLoading ? <div className="w-4 h-4 border-2 border-red-400/20 border-t-red-400 rounded-full animate-spin"></div> : <LogOutIcon size={16} />}
-                                <span>Fichar Salida</span>
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleClockIn}
-                                disabled={isShiftLoading}
-                                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
-                            >
-                                {isShiftLoading ? <div className="w-4 h-4 border-2 border-slate-950/20 border-t-slate-950 rounded-full animate-spin"></div> : <LogIn size={16} />}
-                                <span>Fichar Entrada</span>
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </header>
-
-            {/* Metrics HUD */}
-            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+            {/* Top bar: metrics + shift control */}
+            <div className="flex flex-col xl:flex-row xl:items-stretch gap-4 relative z-10">
+            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 flex-1 min-w-0">
                 {/* Consultas Pendientes Card */}
                 <div className="bg-slate-900/40 backdrop-blur-2xl p-4 rounded-[1.25rem] border border-white/5 relative group hover:border-amber-500/20 transition-all duration-700 overflow-hidden">
                     <div className="absolute -right-3 -top-3 w-16 h-16 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"></div>
@@ -612,21 +532,21 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
 
                 {/* Reputación Card */}
                 {metrics && (
-                    <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5 relative group hover:border-yellow-500/20 transition-all duration-700 overflow-hidden">
+                    <div className="bg-slate-900/40 backdrop-blur-2xl p-4 rounded-[1.25rem] border border-white/5 relative group hover:border-yellow-500/20 transition-all duration-700 overflow-hidden">
                         <div className="absolute -right-6 -top-6 w-32 h-32 bg-yellow-500/5 rounded-full blur-2xl group-hover:bg-yellow-500/10 transition-colors"></div>
-                        <div className="flex justify-between items-start mb-6">
+                        <div className="flex justify-between items-start mb-3">
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Reputación</p>
-                            <Star className="text-yellow-500/40 group-hover:rotate-12 transition-transform" size={20} />
+                            <Star className="text-yellow-500/40 group-hover:rotate-12 transition-transform" size={14} />
                         </div>
                         <div className="flex items-baseline gap-3">
-                            <h3 className="text-5xl font-bold text-white tracking-tighter group-hover:scale-105 transition-transform origin-left duration-700">{metrics.starRating}</h3>
+                            <h3 className="text-2xl font-bold text-white tracking-tighter group-hover:scale-105 transition-transform origin-left duration-700">{metrics.starRating}</h3>
                             <div className="flex text-yellow-500/30 gap-0.5">
                                 {[1, 2, 3, 4, 5].map((s) => (
                                     <Star key={s} fill={s <= Math.round(metrics.starRating) ? "#eab308" : "none"} size={12} className={s <= Math.round(metrics.starRating) ? "drop-shadow-[0_0_5px_rgba(234,179,8,0.5)]" : ""} />
                                 ))}
                             </div>
                         </div>
-                        <div className="mt-8 flex items-center gap-3">
+                        <div className="mt-4 flex items-center gap-3">
                              <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
                                 <div className="bg-yellow-500 h-full w-[95%] rounded-full shadow-[0_0_8px_rgba(234,179,8,0.5)]"></div>
                              </div>
@@ -634,6 +554,72 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                     </div>
                 )}
             </section>
+                {/* Control de Jornada Laboral Card */}
+                <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/5 p-4 rounded-[1.25rem] shadow-2xl flex flex-col sm:flex-row items-center gap-4 xl:shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                            activeShift ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-500'
+                        }`}>
+                            <Activity size={24} className={activeShift ? 'animate-pulse' : ''} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Jornada Laboral</span>
+                                {activeShift && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                                        <MapPin size={10} /> {activeShift.officeName}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-2xl font-bold text-white tracking-tight font-mono mt-0.5">
+                                {shiftDurationText}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="h-16 w-px bg-white/5 hidden sm:block"></div>
+
+                    <div className="flex flex-col items-stretch gap-2">
+                        <button
+                            onClick={() => setDoctorStatus(prev => prev === 'online' ? 'away' : 'online')}
+                            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 border active:scale-95 ${
+                                doctorStatus === 'online'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                            }`}
+                        >
+                            <span>{doctorStatus === 'online' ? 'EN LÍNEA' : 'AUSENTE'}</span>
+                            <div className="relative flex items-center justify-center">
+                                <span className={`w-2 h-2 rounded-full ${
+                                    doctorStatus === 'online' ? 'bg-emerald-500' : 'bg-amber-500'
+                                }`}></span>
+                                {doctorStatus === 'online' && (
+                                    <span className="absolute w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                                )}
+                            </div>
+                        </button>
+                        {activeShift ? (
+                            <button
+                                onClick={handleClockOut}
+                                disabled={isShiftLoading}
+                                className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-red-500/5 disabled:opacity-50"
+                            >
+                                {isShiftLoading ? <div className="w-4 h-4 border-2 border-red-400/20 border-t-red-400 rounded-full animate-spin"></div> : <LogOutIcon size={16} />}
+                                <span>Fichar Salida</span>
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleClockIn}
+                                disabled={isShiftLoading}
+                                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                            >
+                                {isShiftLoading ? <div className="w-4 h-4 border-2 border-slate-950/20 border-t-slate-950 rounded-full animate-spin"></div> : <LogIn size={16} />}
+                                <span>Fichar Entrada</span>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             {/* Main Operational Area */}
             <section className="space-y-6 relative z-10">
@@ -722,7 +708,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
 
                                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 relative z-10 w-full md:w-auto pt-4 md:pt-0 border-t border-white/5 md:border-t-0">
                                             <button 
-                                                onClick={() => setSelectedPatientId(apt.patientId)}
+                                                onClick={() => { setSelectedPatientId(apt.patientId); setSelectedPatientName(apt.patientName || ''); }}
                                                 className="h-12 sm:h-14 px-6 sm:px-8 bg-slate-950 hover:bg-slate-900 border border-white/5 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2.5 sm:gap-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-white transition-all group/btn"
                                             >
                                                 <FileText size={14} className="group-hover/btn:text-emerald-500 transition-colors" /> Expediente
@@ -818,9 +804,11 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                     <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl" onClick={() => setSelectedPatientId(null)}></div>
                     <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-5xl h-[94vh] overflow-hidden flex flex-col shadow-3xl relative animate-in fade-in slide-in-from-bottom-4 duration-300">
                         <div className="px-4 sm:px-6 py-3 border-b border-white/5 bg-slate-950/40 flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-baseline gap-3 min-w-0">
+                            <div className="flex flex-wrap items-baseline gap-x-3 min-w-0" title={selectedPatientId}>
                                 <h3 className="font-bold text-xl text-white tracking-tight">Historia clínica</h3>
-                                <span className="text-[10px] font-mono text-slate-500 truncate" title={selectedPatientId}>#{selectedPatientId.slice(0, 8)}</span>
+                                {selectedPatientName && (
+                                    <span className="font-bold text-xl text-emerald-400 tracking-tight truncate">{selectedPatientName}</span>
+                                )}
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -921,153 +909,92 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
 
             {/* Consultation Details Modal */}
             {selectedAppointment && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-3xl" onClick={() => setSelectedAppointment(null)}></div>
-                    <div className="bg-slate-900 border border-white/10 rounded-[4rem] w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-[0_0_100px_rgba(0,0,0,0.8)] relative animate-in fade-in zoom-in duration-700">
-                        {/* Header estio Ticket */}
-                        <div className="p-12 bg-white text-slate-950 relative overflow-hidden">
-                            <div className="absolute right-[-5%] top-[-10%] opacity-5 rotate-12 scale-150">
-                                <Shield size={300} />
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4">
+                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl" onClick={() => setSelectedAppointment(null)}></div>
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl h-[94vh] overflow-hidden flex flex-col shadow-3xl relative animate-in fade-in slide-in-from-bottom-4 duration-300">
+                        <div className="px-4 sm:px-6 py-3 border-b border-white/5 bg-slate-950/40 flex items-center justify-between gap-3">
+                            <div className="flex flex-wrap items-baseline gap-x-3 min-w-0" title={`Protocolo ${selectedAppointment.id}`}>
+                                <h3 className="font-bold text-xl text-white tracking-tight">Resumen clínico</h3>
+                                <span className="font-bold text-xl text-emerald-400 tracking-tight truncate">{selectedAppointment.patientName}</span>
+                                <span className="text-xs text-slate-500">{selectedAppointment.date}</span>
                             </div>
-                            <div className="flex justify-between items-start relative z-10">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <span className="px-3 py-1 bg-slate-950 text-white text-[9px] font-bold uppercase tracking-[0.3em] rounded-full">Protocolo {selectedAppointment.id.slice(0, 8)}</span>
-                                    </div>
-                                    <h3 className="font-bold text-5xl tracking-tighter uppercase leading-none">Resumen <span className="text-emerald-600 italic">Clínico</span></h3>
-                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.4em] pt-2">Paciente: {selectedAppointment.patientName} • {selectedAppointment.date}</p>
-                                </div>
-                                <button onClick={() => setSelectedAppointment(null)} className="w-16 h-16 flex items-center justify-center rounded-[1.5rem] bg-slate-950 text-white hover:bg-emerald-600 transition-all duration-500 shadow-2xl">
-                                    <X size={32} />
-                                </button>
-                            </div>
+                            <button
+                                onClick={() => setSelectedAppointment(null)}
+                                aria-label="Cerrar resumen clínico"
+                                className="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white hover:bg-red-500/20 transition-all"
+                            >
+                                <X size={20} />
+                            </button>
                         </div>
-                        
-                        <div className="overflow-y-auto p-12 space-y-16 custom-scrollbar">
+
+                        <div className="overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar flex-1">
                             {isFetchingDetails ? (
-                                <div className="flex flex-col items-center justify-center py-32">
-                                    <div className="w-20 h-20 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-8"></div>
-                                    <p className="text-[11px] font-bold uppercase tracking-[0.5em] text-emerald-500 animate-pulse">Sincronizando con nodo de datos...</p>
+                                <div className="flex flex-col items-center justify-center py-24">
+                                    <div className="w-10 h-10 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
+                                    <p className="text-xs font-bold text-emerald-500 animate-pulse">Cargando datos de la consulta...</p>
                                 </div>
                             ) : (
                                 <>
-                                    {/* Medical Record Section */}
-                                    <section className="space-y-10">
-                                        <div className="flex items-center text-white font-bold uppercase tracking-[0.4em] text-[11px]">
-                                            <span className="w-12 h-px bg-emerald-500/50 mr-4"></span>
-                                            Conclusiones Médicas
-                                        </div>
+                                    <section className="space-y-3">
+                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conclusiones médicas</h4>
                                         {selectedRecord ? (
-                                            <div className="bg-white/5 p-12 rounded-[3.5rem] border border-white/5 relative group shadow-inner">
-                                                <div className="absolute right-10 top-10 text-white/[0.01] pointer-events-none transition-transform duration-1000 group-hover:scale-110">
-                                                    <Activity size={240} />
-                                                </div>
-                                                <div className="mb-10 relative z-10">
-                                                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.3em] mb-4">Diagnóstico Principal</p>
-                                                    <p className="text-4xl font-bold text-white tracking-tighter leading-tight drop-shadow-2xl">{selectedRecord.diagnosis}</p>
-                                                </div>
-                                                <div className="relative z-10 space-y-4">
-                                                    <div className="h-px w-full bg-white/5 mb-8"></div>
-                                                    <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em] mb-4">
-                                                        <Clipboard size={14} className="text-emerald-500" /> Notas de Campo
-                                                    </div>
-                                                    <div className="bg-slate-950/80 p-10 rounded-[2.5rem] border border-white/5 shadow-2xl">
-                                                        <p className="text-slate-300 text-lg leading-relaxed font-medium italic">"{selectedRecord.notes}"</p>
-                                                    </div>
-                                                </div>
+                                            <div className="bg-white/[0.03] rounded-xl p-4 sm:p-5 border border-white/5">
+                                                <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1">Diagnóstico principal</p>
+                                                <p className="text-xl font-bold text-white leading-snug">{selectedRecord.diagnosis}</p>
+                                                {selectedRecord.notes && (
+                                                    <>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-5 mb-1">Notas</p>
+                                                        <p className="text-slate-300 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{selectedRecord.notes}</p>
+                                                    </>
+                                                )}
                                             </div>
                                         ) : (
-                                            <div className="text-center py-20 bg-amber-500/5 rounded-[3rem] border border-amber-500/10">
-                                                <AlertCircle size={40} className="mx-auto text-amber-500/40 mb-6" />
-                                                <p className="text-[11px] font-bold text-amber-500 uppercase tracking-[0.4em]">Sin diagnóstico registrado en este nodo</p>
+                                            <div className="text-center py-10 bg-amber-500/5 rounded-xl border border-amber-500/10">
+                                                <AlertCircle size={24} className="mx-auto text-amber-500/60 mb-2" />
+                                                <p className="text-sm text-amber-500">Sin diagnóstico registrado para esta consulta.</p>
                                             </div>
                                         )}
                                     </section>
 
-                                    {/* Prescription Section */}
-                                    <section className="space-y-10 pb-10">
-                                        <div className="flex items-center text-white font-bold uppercase tracking-[0.4em] text-[11px]">
-                                            <span className="w-12 h-px bg-blue-500/50 mr-4"></span>
-                                            Prescripción Farmacológica
-                                        </div>
+                                    <section className="space-y-3">
+                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Prescripción</h4>
                                         {selectedPrescription ? (
-                                            <div className="bg-slate-950/40 p-12 rounded-[3.5rem] border border-white/10 shadow-2xl relative overflow-hidden group">
-                                                <div className="absolute inset-0 bg-blue-500/[0.01] group-hover:bg-blue-500/[0.03] transition-colors duration-1000"></div>
-                                                
-                                                <div className="flex justify-between items-center mb-12 relative z-10">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
-                                                        <span className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.3em]">Validado via Blockchain</span>
-                                                    </div>
-                                                    <span className="text-[10px] text-slate-700 font-mono font-bold tracking-widest">{selectedPrescription.id.toUpperCase()}</span>
-                                                </div>
-
-                                                <div className="space-y-6 relative z-10">
+                                            <div className="bg-white/[0.03] rounded-xl p-4 sm:p-5 border border-white/5">
+                                                <div className="space-y-2">
                                                     {selectedPrescription.medications.map((med, idx) => (
-                                                        <div key={idx} className="flex flex-col md:flex-row md:items-center justify-between p-8 bg-white/[0.03] hover:bg-white/[0.07] rounded-[2.5rem] border border-white/5 transition-all duration-500">
-                                                            <div className="space-y-2 mb-4 md:mb-0">
-                                                                <h5 className="font-bold text-white text-2xl tracking-tighter">{med.name}</h5>
-                                                                <div className="flex items-center gap-3">
-                                                                    <Zap size={12} className="text-blue-500" />
-                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{med.instructions}</p>
-                                                                </div>
+                                                        <div key={idx} className="flex items-center justify-between gap-4 p-3 bg-slate-950/50 rounded-lg border border-white/5">
+                                                            <div className="min-w-0">
+                                                                <h5 className="font-bold text-white text-base">{med.name}</h5>
+                                                                <p className="text-sm text-slate-400 break-words">{med.instructions}</p>
                                                             </div>
-                                                            <div className="px-6 py-3 bg-blue-500 text-slate-950 rounded-2xl font-bold text-xs tracking-tighter shadow-xl shadow-blue-500/20">
-                                                                CANT: {med.quantity}
-                                                            </div>
+                                                            <span className="shrink-0 px-3 py-1.5 bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-lg font-bold text-xs">
+                                                                Cant. {med.quantity}
+                                                            </span>
                                                         </div>
                                                     ))}
                                                 </div>
 
                                                 {selectedPrescription.notes && (
-                                                    <div className="mt-12 pt-10 border-t border-white/5 relative z-10">
-                                                        <div className="flex items-center gap-3 mb-6">
-                                                            <MousePointer2 size={14} className="text-slate-600" />
-                                                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.3em]">Instrucciones Clínicas</p>
-                                                        </div>
-                                                        <p className="text-slate-400 text-base italic font-medium leading-relaxed bg-white/[0.02] p-8 rounded-[2rem] border border-white/5">"{selectedPrescription.notes}"</p>
-                                                    </div>
+                                                    <>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-5 mb-1">Instrucciones</p>
+                                                        <p className="text-slate-300 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{selectedPrescription.notes}</p>
+                                                    </>
                                                 )}
 
-                                                <div className="mt-12 flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
-                                                    <div className="flex items-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em] bg-white/5 px-6 py-3 rounded-2xl border border-white/5">
-                                                        <Calendar size={14} className="text-slate-700" /> Caduca: {selectedPrescription.expirationDate}
-                                                    </div>
-                                                    <div className="flex flex-col items-end">
-                                                        <div className="text-[9px] text-slate-800 font-mono mb-2 max-w-[200px] truncate">{selectedPrescription.digitalSignature}</div>
-                                                        <div className="flex items-center gap-3 text-[10px] font-bold text-emerald-500 uppercase tracking-[0.3em]">
-                                                            <Shield size={14} className="drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" /> Signature Verified
-                                                        </div>
-                                                    </div>
+                                                <div className="mt-5 pt-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                                                    <span className="flex items-center gap-2"><Calendar size={14} /> Vence: {selectedPrescription.expirationDate}</span>
+                                                    <span className="font-mono truncate max-w-[220px]" title={selectedPrescription.digitalSignature}>Firma: {selectedPrescription.digitalSignature}</span>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="text-center py-20 bg-white/5 rounded-[3rem] border border-white/5 border-dashed">
-                                                <FileText size={40} className="mx-auto text-slate-800 mb-6" />
-                                                <p className="text-[11px] font-bold text-slate-600 uppercase tracking-[0.4em]">Sin prescripciones en este registro</p>
+                                            <div className="text-center py-10 bg-white/[0.02] rounded-xl border border-white/5 border-dashed">
+                                                <FileText size={24} className="mx-auto text-slate-700 mb-2" />
+                                                <p className="text-sm text-slate-500">Sin prescripciones en esta consulta.</p>
                                             </div>
                                         )}
                                     </section>
                                 </>
                             )}
-                        </div>
-                        
-                        <div className="p-12 border-t border-white/5 bg-slate-950/80 flex flex-col md:flex-row justify-between items-center gap-8">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-white/5 flex items-center justify-center text-emerald-500 shadow-inner">
-                                    <Shield size={24} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em] leading-none mb-1">Status de Seguridad</p>
-                                    <p className="text-xs font-bold text-white tracking-tight uppercase">Hash de Sesión Consolidado</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setSelectedAppointment(null)}
-                                className="w-full md:w-auto px-16 py-6 bg-emerald-500 text-slate-950 hover:bg-white rounded-[2rem] font-bold uppercase tracking-[0.3em] text-[11px] transition-all duration-500 shadow-[0_0_40px_rgba(16,185,129,0.3)] active:scale-95"
-                            >
-                                Archivar Protocolo
-                            </button>
                         </div>
                     </div>
                 </div>
