@@ -166,7 +166,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         }
     };
 
-    const [kpiTimeframe, setKpiTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+    const kpiTimeframe = 'daily' as const;
     const [dynamicKPIs, setDynamicKPIs] = useState<{
         pendingConsultations: number;
         effectiveConsultations: number;
@@ -486,47 +486,19 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                     </div>
                 </div>
 
-                {/* Tiempo Promedio de Sesión Card (Con Selector Diaria / Semanal / Mensual) */}
+                {/* Tiempo Promedio de Sesión Card (fijo en vista diaria) */}
                 <div className="bg-slate-900/40 backdrop-blur-2xl p-4 rounded-[1.25rem] border border-white/5 relative group hover:border-blue-500/20 transition-all duration-700 overflow-hidden md:col-span-2 lg:col-span-1">
                     <div className="absolute -right-3 -top-3 w-16 h-16 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
                     <div className="flex justify-between items-start mb-2">
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Promedio Sesión</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Promedio hoy</p>
                         <Activity className="text-blue-500/60" size={14} />
                     </div>
-                    <div className="flex items-baseline gap-2 mb-2">
+                    <div className="flex items-baseline gap-2">
                         <h3 className="text-2xl font-bold text-white tracking-tighter">
                             {dynamicKPIs.effectiveConsultations > 0
                                 ? <>{dynamicKPIs.avgSessionMinutes} <span className="text-base font-normal text-slate-400">min</span></>
                                 : '—'}
                         </h3>
-                    </div>
-
-                    {/* Botonera de Selector Rango Temporal */}
-                    <div className="flex p-1 bg-slate-950/60 rounded-xl border border-white/5 gap-1">
-                        <button
-                            onClick={() => setKpiTimeframe('daily')}
-                            className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-                                kpiTimeframe === 'daily' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                        >
-                            Diaria
-                        </button>
-                        <button
-                            onClick={() => setKpiTimeframe('weekly')}
-                            className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-                                kpiTimeframe === 'weekly' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                        >
-                            Semanal
-                        </button>
-                        <button
-                            onClick={() => setKpiTimeframe('monthly')}
-                            className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
-                                kpiTimeframe === 'monthly' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                        >
-                            Mensual
-                        </button>
                     </div>
                 </div>
 
