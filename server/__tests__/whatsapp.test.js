@@ -3,6 +3,7 @@ import {
   normalizeArgentinePhone,
   buildPrescriptionMessage,
   createWahaClient,
+  sendPrescriptionViaWhatsApp,
 } from '../whatsapp.js';
 
 describe('normalizeArgentinePhone', () => {
@@ -115,5 +116,153 @@ describe('createWahaClient', () => {
   it('treats an unreachable gateway as a session that is not ready', async () => {
     const client = createWahaClient({ ...config, fetchFn: vi.fn().mockRejectedValue(new Error('down')) });
     await expect(client.isSessionReady()).resolves.toBe(false);
+  });
+});
+
+describe('sendPrescriptionViaWhatsApp', () => {
+  const PRESCRIPTION = {
+    id: 'rx-1',
+    doctor_id: 'doc-1',
+    patient_id: 'pat-1',
+    doctor_name: 'Sergio Dib Ashur',
+    pdf_url: 'https://storage.example/receta.pdf',
+  };
+  const PATIENT = { full_name: 'Ana Pérez', phone: '011 15 1234-5678' };
+
+  /**
+   * Chainable fake of the few Supabase calls the service makes. `inserts`
+   * collects every row written to prescription_deliveries.
+   */
+  function createSupabaseStub({ prescription = PRESCRIPTION, patient = PATIENT, lastSent = null } = {}) {
+    const inserts = [];
+    const from = (table) => {
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        order: () => chain,
+        limit: () => chain,
+        maybeSingle: async () => {
+          if (table === 'prescriptions') return { data: prescription, error: null };
+          if (table === 'profiles') return { data: patient, error: null };
+          if (table === 'prescription_deliveries') return { data: lastSent, error: null };
+          return { data: null, error: null };
+        },
+        insert: async (row) => {
+          inserts.push(row);
+          return { error: null };
+        },
+      };
+      return chain;
+    };
+    return { client: { from }, inserts };
+  }
+
+  const pdfFetch = () =>
+    vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer });
+
+  function setup(overrides = {}) {
+    const stub = createSupabaseStub(overrides.db);
+    const waha = {
+      isSessionReady: vi.fn().mockResolvedValue(true),
+      sendFile: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+      ...overrides.waha,
+    };
+    const fetchFn = overrides.fetchFn || pdfFetch();
+    const now = overrides.now || (() => new Date('2026-09-20T12:00:00Z'));
+    const ctx = { supabaseAdmin: stub.client, waha, fetchFn, now };
+    return { ctx, waha, fetchFn, inserts: stub.inserts };
+  }
+
+  const run = (ctx, requesterId = 'doc-1') =>
+    sendPrescriptionViaWhatsApp(ctx, { prescriptionId: 'rx-1', requesterId });
+
+  it('sends the PDF to the normalized patient number and logs success', async () => {
+    const { ctx, waha, inserts } = setup();
+
+    const result = await run(ctx);
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ status: 'sent' });
+    const call = waha.sendFile.mock.calls[0][0];
+    expect(call.phone).toBe('5491112345678');
+    expect(call.filename).toMatch(/\.pdf$/);
+    expect(call.caption).toContain('Ana Pérez');
+    expect(call.caption).not.toMatch(/https?:\/\//);
+    expect([...call.bytes]).toEqual([1, 2, 3]);
+    expect(inserts).toEqual([
+      expect.objectContaining({ prescription_id: 'rx-1', status: 'sent', requested_by: 'doc-1' }),
+    ]);
+  });
+
+  it('returns 404 when the prescription does not exist', async () => {
+    const { ctx, waha } = setup({ db: { prescription: null } });
+    const result = await run(ctx);
+    expect(result.status).toBe(404);
+    expect(waha.sendFile).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 and sends nothing when the requester is not the issuing doctor', async () => {
+    const { ctx, waha, inserts } = setup();
+    const result = await run(ctx, 'someone-else');
+    expect(result.status).toBe(403);
+    expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(inserts).toEqual([]);
+  });
+
+  it('logs a failure and returns 422 when the patient phone is unusable', async () => {
+    const { ctx, waha, inserts } = setup({ db: { patient: { full_name: 'Ana', phone: 'No especificado' } } });
+    const result = await run(ctx);
+    expect(result.status).toBe(422);
+    expect(result.body.status).toBe('failed');
+    expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(inserts[0]).toMatchObject({ status: 'failed', error: 'invalid_phone' });
+  });
+
+  it('logs a failure and returns 503 when the WhatsApp session is not ready', async () => {
+    const { ctx, waha, inserts } = setup({ waha: { isSessionReady: vi.fn().mockResolvedValue(false) } });
+    const result = await run(ctx);
+    expect(result.status).toBe(503);
+    expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(inserts[0]).toMatchObject({ status: 'failed', error: 'session_not_ready' });
+  });
+
+  it('logs a failure and returns 502 when the gateway rejects the send', async () => {
+    const { ctx, inserts } = setup({ waha: { sendFile: vi.fn().mockRejectedValue(new Error('WAHA 500: boom')) } });
+    const result = await run(ctx);
+    expect(result.status).toBe(502);
+    expect(result.body.status).toBe('failed');
+    expect(inserts[0]).toMatchObject({ status: 'failed' });
+    expect(inserts[0].error).toContain('boom');
+  });
+
+  it('logs a failure and returns 502 when the PDF cannot be downloaded', async () => {
+    const { ctx, waha, inserts } = setup({ fetchFn: vi.fn().mockResolvedValue({ ok: false, status: 404 }) });
+    const result = await run(ctx);
+    expect(result.status).toBe(502);
+    expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(inserts[0]).toMatchObject({ status: 'failed', error: 'pdf_unavailable' });
+  });
+
+  it('returns 409 without sending when the prescription was already sent in the last minute', async () => {
+    const { ctx, waha, inserts } = setup({ db: { lastSent: { created_at: '2026-09-20T11:59:30Z' } } });
+    const result = await run(ctx);
+    expect(result.status).toBe(409);
+    expect(result.body.status).toBe('already_sent');
+    expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(inserts).toEqual([]);
+  });
+
+  it('allows a resend once the previous send is older than a minute', async () => {
+    const { ctx, waha } = setup({ db: { lastSent: { created_at: '2026-09-20T11:58:00Z' } } });
+    const result = await run(ctx);
+    expect(result.status).toBe(200);
+    expect(waha.sendFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 422 when the prescription has no generated PDF', async () => {
+    const { ctx, waha } = setup({ db: { prescription: { ...PRESCRIPTION, pdf_url: null } } });
+    const result = await run(ctx);
+    expect(result.status).toBe(422);
+    expect(waha.sendFile).not.toHaveBeenCalled();
   });
 });

@@ -26,7 +26,7 @@ After a video consultation, the electronic prescription reaches the patient by W
 ## Tasks
 - [x] T1 `server/whatsapp.js`: AR phone normalization, message builder, WAHA client (injectable fetch) + tests
 - [x] T2 Migration `prescription_deliveries` (status log, RLS: doctor of the appointment reads; writes via service role)
-- [ ] T3 `sendPrescriptionViaWhatsApp` service + `POST /api/prescriptions/:id/send-whatsapp` in `server.js` (auth: doctor of the appointment) + tests
+- [x] T3 `sendPrescriptionViaWhatsApp` service + `POST /api/prescriptions/:id/send-whatsapp` in `server.js` (auth: doctor of the appointment) + tests
 - [ ] T4 Frontend `PostConsultation.tsx`: auto-send after finalize, status + "Reenviar", remove `wa.me` button; drop the simulator and public link from `finalize-consultation`
 - [ ] T5 Docs: `COOLIFY_DEPLOYMENT.md` (WAHA container, env vars, QR linking, safeguards)
 
@@ -38,6 +38,7 @@ After a video consultation, the electronic prescription reaches the patient by W
 ## Progress / evidence
 - T1: RED (module missing) -> GREEN 24/24 with `npx vitest run server/__tests__/whatsapp.test.js`. Commit: feat(whatsapp) gateway client (see git log).
 - T2: migration `20260920010000_prescription_deliveries.sql` written; NOT applied to remote yet (needs user OK). No pgTAP run (local supabase stack not started); RLS verified by review only.
+- T3: RED (10 failing) -> GREEN 34/34; whole `server/` suite 162/162. Endpoint POST /api/prescriptions/:id/send-whatsapp (env: WHATSAPP_GATEWAY_URL, WHATSAPP_GATEWAY_API_KEY, WHATSAPP_GATEWAY_SESSION). Resend guard: 60s per prescription.
 
 ## Next step
-T3.
+T4.

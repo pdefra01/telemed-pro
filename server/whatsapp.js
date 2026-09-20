@@ -107,3 +107,94 @@ export function createWahaClient({ baseUrl, apiKey, session = 'default', fetchFn
 
   return { sendFile, isSessionReady };
 }
+
+// Minimum gap between two successful sends of the same prescription. Protects
+// the company number from accidental double-clicks (unofficial channel: bursts
+// of identical messages are the fastest way to get flagged).
+const RESEND_GUARD_MS = 60_000;
+
+/**
+ * Sends a prescription PDF to its patient from the company's WhatsApp number.
+ *
+ * Only the doctor who issued the prescription may trigger it. Every outcome
+ * (sent or failed) is written to `prescription_deliveries` so the doctor can
+ * see failures and retry. Returns `{ status, body }` for the HTTP layer.
+ */
+export async function sendPrescriptionViaWhatsApp(
+  { supabaseAdmin, waha, fetchFn = fetch, now = () => new Date() },
+  { prescriptionId, requesterId }
+) {
+  const { data: prescription } = await supabaseAdmin
+    .from('prescriptions')
+    .select('id, doctor_id, patient_id, doctor_name, pdf_url')
+    .eq('id', prescriptionId)
+    .maybeSingle();
+
+  if (!prescription) return { status: 404, body: { error: 'prescription_not_found' } };
+  if (prescription.doctor_id !== requesterId) return { status: 403, body: { error: 'forbidden' } };
+  if (!prescription.pdf_url) return { status: 422, body: { error: 'no_pdf' } };
+
+  const record = async (status, error = null) => {
+    const { error: insertError } = await supabaseAdmin.from('prescription_deliveries').insert({
+      prescription_id: prescription.id,
+      channel: 'whatsapp',
+      status,
+      error,
+      requested_by: requesterId,
+    });
+    if (insertError) console.error('[whatsapp] could not log delivery:', insertError.message);
+  };
+  const fail = async (httpStatus, reason) => {
+    await record('failed', reason.slice(0, 500));
+    return { status: httpStatus, body: { status: 'failed', reason } };
+  };
+
+  const { data: lastSent } = await supabaseAdmin
+    .from('prescription_deliveries')
+    .select('created_at')
+    .eq('prescription_id', prescription.id)
+    .eq('status', 'sent')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastSent && now() - new Date(lastSent.created_at) < RESEND_GUARD_MS) {
+    return { status: 409, body: { status: 'already_sent' } };
+  }
+
+  const { data: patient } = await supabaseAdmin
+    .from('profiles')
+    .select('full_name, phone')
+    .eq('id', prescription.patient_id)
+    .maybeSingle();
+
+  const phone = normalizeArgentinePhone(patient?.phone);
+  if (!phone) return fail(422, 'invalid_phone');
+
+  if (!(await waha.isSessionReady())) return fail(503, 'session_not_ready');
+
+  let bytes;
+  try {
+    const response = await fetchFn(prescription.pdf_url);
+    if (!response.ok) throw new Error(`status ${response.status}`);
+    bytes = new Uint8Array(await response.arrayBuffer());
+  } catch {
+    return fail(502, 'pdf_unavailable');
+  }
+
+  try {
+    await waha.sendFile({
+      phone,
+      bytes,
+      filename: `receta-${String(prescription.id).slice(0, 8)}.pdf`,
+      caption: buildPrescriptionMessage({
+        patientName: patient?.full_name,
+        doctorName: prescription.doctor_name,
+      }),
+    });
+  } catch (err) {
+    return fail(502, `send_failed: ${err?.message || err}`);
+  }
+
+  await record('sent');
+  return { status: 200, body: { status: 'sent' } };
+}

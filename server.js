@@ -14,6 +14,7 @@ import {
   DEBITO_AUTOMATICO_DISCOUNT,
 } from './server/mercadopago.js';
 import { buildPatientAuthUser, sendActivationEmail } from './server/affiliateActivation.js';
+import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
 
@@ -143,6 +144,45 @@ const requireAdmin = async (req, res, next) => {
   }
   next();
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// Prescription delivery over WhatsApp (odd/whatsapp-prescription-delivery)
+//
+// Sent from the company phone through a self-hosted WAHA gateway that lives on
+// the private network; the doctor's own number is never involved. All logic
+// is in ./server/whatsapp.js.
+// ═══════════════════════════════════════════════════════════════════════
+const WHATSAPP_GATEWAY_URL = process.env.WHATSAPP_GATEWAY_URL;
+const WHATSAPP_GATEWAY_API_KEY = process.env.WHATSAPP_GATEWAY_API_KEY;
+const WHATSAPP_GATEWAY_SESSION = process.env.WHATSAPP_GATEWAY_SESSION || 'default';
+
+const whatsappEnabled = Boolean(WHATSAPP_GATEWAY_URL && WHATSAPP_GATEWAY_API_KEY);
+if (!whatsappEnabled) {
+  console.warn('⚠️ WARNING: Missing WHATSAPP_GATEWAY_URL/WHATSAPP_GATEWAY_API_KEY — prescription WhatsApp delivery is disabled.');
+}
+const waha = whatsappEnabled
+  ? createWahaClient({ baseUrl: WHATSAPP_GATEWAY_URL, apiKey: WHATSAPP_GATEWAY_API_KEY, session: WHATSAPP_GATEWAY_SESSION })
+  : null;
+
+/**
+ * POST /api/prescriptions/:id/send-whatsapp
+ * Only the doctor who issued the prescription can trigger it.
+ */
+app.post('/api/prescriptions/:id/send-whatsapp', requireAuth, async (req, res) => {
+  if (!waha) {
+    return res.status(503).json({ status: 'failed', reason: 'whatsapp_disabled' });
+  }
+  try {
+    const { status, body } = await sendPrescriptionViaWhatsApp(
+      { supabaseAdmin, waha },
+      { prescriptionId: req.params.id, requesterId: req.user.id }
+    );
+    return res.status(status).json(body);
+  } catch (err) {
+    console.error('[prescriptions/send-whatsapp] Unexpected error:', err);
+    return res.status(500).json({ status: 'failed', reason: 'internal_error' });
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════════
 // Mercado Pago integration (sdd/mercadopago-integration, PR 3)
