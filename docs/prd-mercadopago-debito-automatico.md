@@ -3,7 +3,7 @@
 **Proyecto:** Medinex / Telemedicina  
 **Módulo:** Cobros y Suscripciones  
 **Estado:** ✅ Implementado y desplegado en producción (Coolify)  
-**Última actualización:** 2026-07-31
+**Última actualización:** 2026-09-20
 
 ---
 
@@ -35,6 +35,22 @@ Permitir que un paciente pueda adherirse al plan de cobertura médica y autoriza
 
 ---
 
+## 2.1. Precios y medios que generan suscripción MP
+
+El monto de la suscripción sale del precio fijo del plan (no hay descuento por débito; el 20 % anterior fue eliminado).
+
+| Plan / opción | Precio | Suscripción MP |
+|---|---|---|
+| Individual (solo titular) | $14.999 / mes | No (sin pregunta de medio de pago) |
+| Familiar estándar | $49.999 / mes | Sí, si elige **débito** o **débito QR** (igual que tarjeta) |
+| Familiar, débito automático con tarjeta de crédito | $39.999 / mes | Sí |
+| Familiar prepago semestral (6+1 meses) | 6 x 39.999 = $239.994 | No |
+| Familiar prepago anual (12+2 meses) | 12 x 39.999 = $479.988 | No |
+
+Efectivo, transferencia, Rapipago y link de pago no crean suscripción. El Individual nunca puede usar MP.
+
+---
+
 ## 3. Variables de Entorno Requeridas (Coolify)
 
 | Variable | Descripción |
@@ -53,7 +69,7 @@ Crea la suscripción de débito automático en MP para un nuevo afiliado (pre-af
 - **Quién lo llama:** Frontend (`AdhesionForm.tsx`) tras enviar el formulario.
 - **Qué hace:**
   1. Resuelve el plan solicitado.
-  2. Calcula el precio mensual con descuento por débito automático.
+  2. Toma el precio mensual del plan elegido (precio fijo por plan, sin fórmulas de descuento; ver sección 2.1).
   3. Crea el preapproval en MP con `start_date` = próximo día 10.
   4. Guarda la reserva en `affiliate_payment_subscriptions` con `status: 'pending'`.
   5. Devuelve `{ ok: true, initPoint: "https://www.mercadopago.com.ar/..." }`.

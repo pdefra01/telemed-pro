@@ -20,6 +20,23 @@ Bienvenido al manual oficial de la plataforma **MEDINEX**. Este documento guía 
 Desde la sección **Mi Perfil**, el afiliado titular puede mantener actualizada su información médica y familiar:
 - **Datos del Titular**: Actualización de nombre, teléfono, dirección, **Grupo Sanguíneo** (A+, O+, etc.) y **Fecha de Nacimiento**.
 - **Grupo Familiar**: Alta y baja de dependientes cubiertos por el plan de salud (cónyuge, hijos, padres). Los familiares quedan vinculados automáticamente al grupo familiar del titular.
+  - El plan **Individual** cubre solo al titular (sin familiares). El plan **Familiar** cubre al titular y hasta 4 familiares.
+  - Un DNI/CUIL solo puede pertenecer a un grupo o plan; el teléfono del titular también es único.
+
+#### Planes y precios vigentes
+| Plan / opción de pago | Precio |
+|---|---|
+| Individual | $14.999 por mes |
+| Familiar (débito, débito QR, efectivo, transferencia, Rapipago, link) | $49.999 por mes |
+| Familiar con débito automático en tarjeta de crédito | $39.999 por mes |
+| Familiar prepago semestral (6 + 1 meses) | $239.994 |
+| Familiar prepago anual (12 + 2 meses) | $479.988 |
+
+Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para nuevas adhesiones: cada afiliado conserva el plan y el precio con los que se adhirió.
+
+**Administradores (`Planes`)**: la lista muestra tipo, opción de pago, si está ofrecido, precio, meses, tamaño y comisión del asesor. Un plan en uso es de solo lectura; para cambiar precio o condiciones use **Crear nueva version** (al ofrecer la nueva, la anterior se retira sola).
+
+**Asesores**: la comisión es un monto fijo por plan (Individual $7.500, Familiar $25.000, semestral $30.000, anual $35.000).
 
 ### 1.2. Consulta de Historia Clínica y Recetas (`/history`)
 En la pestaña **Historia Clínica**, el paciente dispone de la bóveda médica con:
