@@ -191,7 +191,7 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
     });
   });
 
-  it('creates an MP preapproval for débito automático after a successful submission, then still shows the success screen', async () => {
+  it('creates an MP preapproval for débito automático after a successful submission, then shows the success screen with the pay link', async () => {
     vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-99' });
     const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue({
       ok: true,
@@ -218,27 +218,78 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
     await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
   });
 
-  it('still shows the success screen when the MP preapproval creation fails (Resolved Decision #5)', async () => {
+  it('stays on the payment step with a retry when MP creation fails, and retries only the MP call for the same id', async () => {
     vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-100' });
-    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: false }) } as Response);
+    const mpResponses = [
+      { ok: false, json: async () => ({ ok: false, error: 'boom' }) },
+      { ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/retry' }) },
+    ];
+    // Only /api/ calls consume the scripted MP responses (georef also uses fetch).
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((url: any) =>
+      Promise.resolve((String(url).startsWith('/api/') ? mpResponses.shift() : { ok: false, json: async () => ({}) }) as Response));
 
     const { container } = renderForm();
     await advanceToSignatureStep();
+    signAndSubmit(container);
 
-    fireEvent.click(screen.getByLabelText(/Autorizo el tratamiento de mis datos personales/i));
-    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
-    fireEvent.mouseDown(canvas);
-    fireEvent.mouseUp(canvas);
+    const retry = await screen.findByRole('button', { name: /Reintentar/i });
+    expect(screen.getByRole('alert')).toHaveTextContent(/Mercado Pago/i);
+    expect(screen.queryByText(/¡Solicitud Enviada!/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Condiciones, Consentimiento y Firma/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Enviar Solicitud/i }));
+    fireEvent.click(retry);
 
+    await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
+    expect(adhesionRepository.submitApplication).toHaveBeenCalledTimes(1);
+    const mpCalls = fetchSpy.mock.calls.filter((c: any[]) => String(c[0]).startsWith('/api/'));
+    expect(mpCalls).toHaveLength(2);
+    expect(mpCalls[1][1]).toEqual(expect.objectContaining({ body: JSON.stringify({ adhesionRequestId: 'adhesion-100' }) }));
+    expect(screen.getByRole('link', { name: /Ir a pagar con Mercado Pago/i })).toHaveAttribute('href', 'https://mp.test/retry');
+  });
+
+  it.each([
+    ['network error', () => Promise.reject(new Error('offline'))],
+    ['ok true without initPoint', () => Promise.resolve({ ok: true, json: async () => ({ ok: true }) } as Response)],
+  ])('does not reach the success step on %s', async (_label, impl) => {
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-102' });
+    vi.spyOn(window, 'fetch').mockImplementation(impl as any);
+
+    const { container } = renderForm();
+    await advanceToSignatureStep();
+    signAndSubmit(container);
+
+    await screen.findByRole('button', { name: /Reintentar/i });
+    expect(screen.queryByText(/¡Solicitud Enviada!/i)).not.toBeInTheDocument();
+  });
+
+  it('a double click on Reintentar sends a single MP request', async () => {
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-103' });
+    let resolveSecond: (r: Response) => void = () => {};
+    let mpCallCount = 0;
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((url: any) => {
+      if (!String(url).startsWith('/api/')) return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      mpCallCount += 1;
+      if (mpCallCount === 1) return Promise.resolve({ ok: false, json: async () => ({ ok: false }) } as Response);
+      return new Promise<Response>(r => { resolveSecond = r; });
+    });
+
+    const { container } = renderForm();
+    await advanceToSignatureStep();
+    signAndSubmit(container);
+
+    const retry = await screen.findByRole('button', { name: /Reintentar/i });
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+    expect(mpCallCount).toBe(2);
+    expect(fetchSpy).toBeDefined();
+    resolveSecond({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/x' }) } as Response);
     await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
   });
 
   describe('new plan catalog', () => {
     const submitWith = async (opts?: Parameters<typeof advanceToSignatureStep>[0]) => {
       vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-7' });
-      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true }) } as Response);
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
       const { container } = renderForm();
       await advanceToSignatureStep(opts);
       signAndSubmit(container);
@@ -247,6 +298,7 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
       return { fetchSpy, payload: vi.mocked(adhesionRepository.submitApplication).mock.calls[0][0] as any };
     };
     const preapprovalCalls = (spy: any) => spy.mock.calls.filter((c: any[]) => c[0] === '/api/adhesion/preapproval');
+    const checkoutCalls = (spy: any) => spy.mock.calls.filter((c: any[]) => c[0] === '/api/adhesion/checkout-preference');
 
     it('loads only the offered plans and shows every price from the plan rows, with no promo banner', async () => {
       renderForm();
@@ -265,14 +317,15 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
       expect(screen.getAllByText(/consultas ilimitadas/i).length).toBeGreaterThan(0);
     });
 
-    it('Individual: no payment question, no family step, submits individual/monthly and never calls MP', async () => {
+    it('Individual: no payment question, no family step, submits individual/monthly and creates an MP preapproval', async () => {
       const { fetchSpy, payload } = await submitWith({ kind: 'individual' });
 
       expect(payload.plan_type).toBe('individual');
       expect(payload.payment_method).toBe('monthly');
       expect(payload.family_members).toEqual([]);
       expect(payload.titular_phone).toBe('3416123456');
-      expect(preapprovalCalls(fetchSpy)).toHaveLength(0);
+      expect(preapprovalCalls(fetchSpy)).toHaveLength(1);
+      expect(checkoutCalls(fetchSpy)).toHaveLength(0);
     });
 
     it('Individual hides the payment options and the prepaid choices', async () => {
@@ -293,12 +346,12 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
       expect(preapprovalCalls(fetchSpy)).toHaveLength(1);
     });
 
-    it('Familiar prepaid semester submits prepaid_6 and does not call MP', async () => {
+    it('Familiar prepaid semester submits prepaid_6 and creates an MP preapproval', async () => {
       const { fetchSpy, payload } = await submitWith({ option: /Pago anticipado 6 meses/i });
 
       expect(payload.plan_type).toBe('familiar');
       expect(payload.payment_method).toBe('prepaid_6');
-      expect(preapprovalCalls(fetchSpy)).toHaveLength(0);
+      expect(preapprovalCalls(fetchSpy)).toHaveLength(1);
     });
 
     it('Familiar prepaid annual submits prepaid_12', async () => {
@@ -306,11 +359,14 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
       expect(payload.payment_method).toBe('prepaid_12');
     });
 
-    it('Familiar standard method (transfer) submits that method and does not call MP', async () => {
-      const { fetchSpy, payload } = await submitWith({ option: /Pago mensual/i, standardMethod: 'transfer' });
+    it.each(['transfer', 'cash', 'rapipago', 'link'])('Familiar manual method %s creates an MP checkout preference, not a preapproval', async (method) => {
+      const { fetchSpy, payload } = await submitWith({ option: /Pago mensual/i, standardMethod: method });
 
-      expect(payload.plan_type).toBe('familiar');
-      expect(payload.payment_method).toBe('transfer');
+      expect(payload.payment_method).toBe(method);
+      expect(checkoutCalls(fetchSpy)).toHaveLength(1);
+      expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion/checkout-preference', expect.objectContaining({
+        body: JSON.stringify({ adhesionRequestId: 'adhesion-7' })
+      }));
       expect(preapprovalCalls(fetchSpy)).toHaveLength(0);
     });
 
@@ -366,7 +422,7 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
 
   it('step 6 success screen never claims the DNI is the login password, and points to email-delivered credentials instead', async () => {
     vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-101' });
-    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: false }) } as Response);
+    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
 
     const { container } = renderForm();
     await advanceToSignatureStep();

@@ -65,8 +65,13 @@ const STANDARD_METHODS: { value: string; label: string }[] = [
   { value: 'qr_debit', label: 'Débito automático por QR' },
 ];
 
-// Methods that need a Mercado Pago subscription (auto debit). Never Individual.
+// Methods that show the auto-debit fields (billing day, card brand). Familiar only.
 const AUTO_DEBIT_METHODS = ['card_debit', 'debit', 'qr_debit'];
+
+// Familiar manual methods pay their first period through Mercado Pago Checkout Pro
+// (mirrors requiresCheckoutPayment in server/pricing.js). Every other option is a
+// Mercado Pago subscription (preapproval).
+const CHECKOUT_METHODS = ['cash', 'transfer', 'rapipago', 'link'];
 
 // Glass Container for Step Card
 const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
@@ -260,6 +265,7 @@ export const AdhesionForm: React.FC = () => {
   const submittedPaymentMethod =
     plan.kind === 'individual' ? 'monthly' : plan.familiarOption === 'standard' ? plan.standardMethod : plan.familiarOption;
   const isAutoDebit = plan.kind === 'familiar' && AUTO_DEBIT_METHODS.includes(submittedPaymentMethod);
+  const usesCheckoutPayment = plan.kind === 'familiar' && CHECKOUT_METHODS.includes(submittedPaymentMethod);
 
   const standardMethodLabel = (value: string) => STANDARD_METHODS.find(m => m.value === value)?.label ?? value;
 
@@ -315,6 +321,10 @@ export const AdhesionForm: React.FC = () => {
 
   // MP Preapproval link for debit subscriptions
   const [mpInitPoint, setMpInitPoint] = useState<string | null>(null);
+  const [mpError, setMpError] = useState<string | null>(null);
+  const [adhesionCreated, setAdhesionCreated] = useState(false);
+  const createdAdhesionId = useRef<string | null>(null);
+  const mpInFlight = useRef(false);
 
   // Countdown timer para el reenvío de OTP
   useEffect(() => {
@@ -559,7 +569,39 @@ export const AdhesionForm: React.FC = () => {
     setStep(prev => prev + 1);
   };
 
+  // Requests the Mercado Pago link for the already-created adhesion request.
+  // Mandatory: the form only reaches the success step once a link exists.
+  const completeMercadoPagoStep = async () => {
+    const adhesionRequestId = createdAdhesionId.current;
+    if (!adhesionRequestId || mpInFlight.current) return;
+    mpInFlight.current = true;
+    setIsLoading(true);
+    setMpError(null);
+    try {
+      const endpoint = usesCheckoutPayment ? '/api/adhesion/checkout-preference' : '/api/adhesion/preapproval';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adhesionRequestId })
+      });
+      const result = await res.json().catch(() => ({ ok: false }));
+      if (!res.ok || !result.ok || !result.initPoint) {
+        throw new Error(result?.error || 'mp-failed');
+      }
+      setMpInitPoint(result.initPoint);
+      setStep(6);
+      toast("Solicitud de adhesión enviada con éxito!", "success");
+    } catch (mpError) {
+      console.warn('[AdhesionForm] No se pudo crear el pago en Mercado Pago.', mpError);
+      setMpError('No pudimos generar tu pago en Mercado Pago. Tu solicitud ya fue guardada: reintentá para obtener el enlace de pago.');
+    } finally {
+      mpInFlight.current = false;
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    if (createdAdhesionId.current) return;
     if (!consents.dataTreatment) {
       toast("Debés autorizar el tratamiento de datos personales para afiliarte", "warning");
       return;
@@ -610,30 +652,11 @@ export const AdhesionForm: React.FC = () => {
 
       const { id: adhesionRequestId } = await adhesionRepository.submitApplication(payload);
 
-      // Débito automático: best-effort MP preapproval creation. On failure
-      // the form still completes (Resolved Decision #5) — enrollment is
-      // best-effort, adhesion approval is not blocked by it. The manual/
-      // Checkout Pro payment path remains available regardless.
-      if (isAutoDebit) {
-        try {
-          const preapprovalRes = await fetch('/api/adhesion/preapproval', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adhesionRequestId })
-          });
-          const preapprovalResult = await preapprovalRes.json().catch(() => ({ ok: false }));
-          if (!preapprovalResult.ok) {
-            console.warn('[AdhesionForm] No se pudo crear la suscripción de débito automático en Mercado Pago; la solicitud continúa.');
-          } else if (preapprovalResult.initPoint) {
-            setMpInitPoint(preapprovalResult.initPoint);
-          }
-        } catch (mpError) {
-          console.warn('[AdhesionForm] Error al contactar el servicio de Mercado Pago; la solicitud continúa.', mpError);
-        }
-      }
-
-      setStep(6); // Success screen
-      toast("Solicitud de adhesión enviada con éxito!", "success");
+      // The adhesion row exists from here on: a failure below must only repeat
+      // the Mercado Pago call for this same id, never the application submit.
+      createdAdhesionId.current = adhesionRequestId;
+      setAdhesionCreated(true);
+      await completeMercadoPagoStep();
     } catch (err: any) {
       toast(err.message || "Error al procesar la solicitud. Reintentá.", "error");
     } finally {
@@ -1022,7 +1045,7 @@ export const AdhesionForm: React.FC = () => {
                   >
                     <div>
                       <h4 className="font-bold text-white text-base">Pago mensual</h4>
-                      <p className="text-slate-400 text-xs mt-1">Transferencia, efectivo, Rapipago, link de pago, débito o débito por QR.</p>
+                      <p className="text-slate-400 text-xs mt-1">Transferencia, efectivo, Rapipago o link de pago: abonás el primer período con Mercado Pago. Débito o débito por QR: suscripción mensual en Mercado Pago.</p>
                     </div>
                     <div className="mt-6 flex justify-between items-end">
                       <span className="text-xs text-slate-500 font-semibold">Mensual</span>
@@ -1047,7 +1070,7 @@ export const AdhesionForm: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="font-bold text-white text-base">Débito automático con tarjeta de crédito</h4>
-                      <p className="text-slate-400 text-xs mt-1">Cuota mensual con débito automático en tu tarjeta.</p>
+                      <p className="text-slate-400 text-xs mt-1">Suscripción mensual en Mercado Pago con débito automático en tu tarjeta.</p>
                     </div>
                     <div className="mt-6 flex justify-between items-end">
                       <span className="text-xs text-emerald-400 font-semibold">Mensual</span>
@@ -1069,7 +1092,7 @@ export const AdhesionForm: React.FC = () => {
                     <div>
                       <h4 className="font-bold text-white text-base">Pago anticipado 6 meses</h4>
                       <p className="text-slate-400 text-xs mt-1">
-                        {prepaid6Plan ? `${prepaid6Plan.paidMonths} cuotas de ${formatCurrency(prepaid6Plan.monthlyCost)} en un solo pago` : 'Un solo pago'}
+                        {prepaid6Plan ? `${prepaid6Plan.paidMonths} cuotas de ${formatCurrency(prepaid6Plan.monthlyCost)} en un solo pago, con cobro que se repite cada 6 meses` : 'Un solo pago'}
                         {prepaid6Plan && prepaid6Plan.bonusMonths > 0 ? ` + ${prepaid6Plan.bonusMonths} mes de cobertura sin cargo.` : '.'}
                       </p>
                     </div>
@@ -1093,7 +1116,7 @@ export const AdhesionForm: React.FC = () => {
                     <div>
                       <h4 className="font-bold text-white text-base">Pago anticipado 12 meses</h4>
                       <p className="text-slate-400 text-xs mt-1">
-                        {prepaid12Plan ? `${prepaid12Plan.paidMonths} cuotas de ${formatCurrency(prepaid12Plan.monthlyCost)} en un solo pago` : 'Un solo pago'}
+                        {prepaid12Plan ? `${prepaid12Plan.paidMonths} cuotas de ${formatCurrency(prepaid12Plan.monthlyCost)} en un solo pago, con cobro que se repite cada 12 meses` : 'Un solo pago'}
                         {prepaid12Plan && prepaid12Plan.bonusMonths > 0 ? ` + ${prepaid12Plan.bonusMonths} meses de cobertura sin cargo.` : '.'}
                       </p>
                     </div>
@@ -1476,7 +1499,7 @@ export const AdhesionForm: React.FC = () => {
               <p className="mb-4">MEDINEX NO reemplaza a las guardias médicas, servicios de emergencia (como SAME o ambulancias) ni la atención presencial cuando esta sea necesaria. Declaro que los datos consignados son verdaderos y que recibí información suficiente sobre el servicio.</p>
               
               <h5 className="font-bold text-white mb-2">4. CONDICIONES ECONÓMICAS Y FACTURACIÓN</h5>
-              <p className="mb-4">Plan elegido: {planDisplayName} - {getPaymentMethodLabel()}. El valor informado en el paso 2 corresponde al plan y a la modalidad de pago elegidos. Los cobros se procesan del 1 al 10 de cada mes.</p>
+              <p className="mb-4">Plan elegido: {planDisplayName} - {getPaymentMethodLabel()}. El valor informado en el paso 2 corresponde al plan y a la modalidad de pago elegidos. Al enviar la solicitud te llevamos a Mercado Pago para completar el pago: con suscripción (se renueva automáticamente según la modalidad elegida) o con el pago del primer período. La afiliación se completa una vez realizado el pago.</p>
             </div>
 
             {/* Consent checkboxes */}
@@ -1528,33 +1551,62 @@ export const AdhesionForm: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex justify-between items-center mt-8">
-              <button 
-                onClick={() => setStep(4)}
-                disabled={isLoading}
-                className="border border-white/10 hover:bg-white/5 text-slate-300 font-bold py-4 px-6 rounded-2xl transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                <ArrowLeft size={18} />
-                Atrás
-              </button>
-              <button 
-                onClick={handleSubmit}
-                disabled={isLoading || !consents.dataTreatment || !hasSigned}
-                className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.25)] min-w-[150px] active:scale-95 cursor-pointer"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    Enviar Solicitud
-                    <CheckCircle2 size={18} />
-                  </>
-                )}
-              </button>
-            </div>
+            {adhesionCreated && mpError && (
+              <div role="alert" className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-sm text-red-200">
+                {mpError}
+              </div>
+            )}
+
+            {adhesionCreated ? (
+              <div className="flex justify-center mt-8">
+                <button
+                  type="button"
+                  onClick={completeMercadoPagoStep}
+                  disabled={isLoading}
+                  className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-2 min-w-[150px] active:scale-95 cursor-pointer"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Preparando tu pago...
+                    </>
+                  ) : (
+                    <>
+                      Reintentar
+                      <RefreshCw size={18} />
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-between items-center mt-8">
+                <button 
+                  onClick={() => setStep(4)}
+                  disabled={isLoading}
+                  className="border border-white/10 hover:bg-white/5 text-slate-300 font-bold py-4 px-6 rounded-2xl transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  <ArrowLeft size={18} />
+                  Atrás
+                </button>
+                <button 
+                  onClick={handleSubmit}
+                  disabled={isLoading || !consents.dataTreatment || !hasSigned}
+                  className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.25)] min-w-[150px] active:scale-95 cursor-pointer"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      Enviar Solicitud
+                      <CheckCircle2 size={18} />
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </GlassCard>
         )}
 
@@ -1580,19 +1632,21 @@ export const AdhesionForm: React.FC = () => {
               </ol>
             </div>
 
+            <p className="text-slate-300 text-sm leading-relaxed mb-6 max-w-md mx-auto">
+              Tu afiliación se completa una vez que realices el pago en Mercado Pago.
+            </p>
+
             {mpInitPoint && (
               <div className="mb-8">
                 <a
                   href={mpInitPoint}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="bg-[#009ee3] hover:bg-[#0089c7] text-white font-bold py-4 px-8 rounded-2xl transition-all inline-flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,158,227,0.25)] active:scale-95 cursor-pointer w-full max-w-sm"
                 >
                   <svg viewBox="0 0 452 355" fill="none" className="w-6 h-6 mr-1" xmlns="http://www.w3.org/2000/svg">
                     <path d="M129.563 325.326L48.2435 244.02C40.9419 236.717 40.9419 224.877 48.2435 217.574L199.167 66.6631C206.469 59.3615 218.31 59.3615 225.612 66.6631L332.617 173.668V21.4392C332.617 11.1176 340.985 2.75 351.306 2.75H433.311C443.633 2.75 452.001 11.1176 452.001 21.4392V333.684C452.001 344 443.633 352.368 433.311 352.368H351.306C340.985 352.368 332.617 344 332.617 333.684V202.973L254.918 280.672C247.617 287.973 235.776 287.973 228.474 280.672L129.563 325.326Z" fill="white"/>
                     <path d="M128.272 322.956L18.6892 213.373C3.5975 198.281 3.5975 173.813 18.6892 158.721L156.401 21.0093C171.493 5.91761 195.961 5.91761 211.053 21.0093L235.534 45.49L128.272 322.956Z" fill="white"/>
                   </svg>
-                  Adherir Tarjeta en Mercado Pago
+                  Ir a pagar con Mercado Pago
                 </a>
                 <p className="text-slate-500 text-[10px] mt-3">Serás redirigido a la plataforma segura de Mercado Pago.</p>
               </div>
