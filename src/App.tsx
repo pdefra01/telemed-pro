@@ -37,6 +37,9 @@ import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 import { getBranding } from './config/branding';
 
+// Temporarily hides the floating AI chatbot everywhere. Set to true to bring it back.
+const AI_CHATBOT_ENABLED = false;
+
 import { ToastProvider, useToast } from './context/ToastContext';
 
 import { authRepository } from './repositories/AuthRepository';
@@ -516,7 +519,7 @@ const App: React.FC = () => {
           )}
 
           {/* AI Assistant is available for authenticated users, but not on the public adhesion/encuesta pages */}
-          {user && !isPublicPath && <AIChatBot />}
+          {AI_CHATBOT_ENABLED && user && !isPublicPath && <AIChatBot />}
         </ToastProvider>
       </ErrorBoundary>
     </Router>
