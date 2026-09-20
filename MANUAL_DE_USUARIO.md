@@ -32,6 +32,14 @@ Desde la sección **Mi Perfil**, el afiliado titular puede mantener actualizada 
 | Familiar prepago semestral (6 + 1 meses) | $239.994 |
 | Familiar prepago anual (12 + 2 meses) | $479.988 |
 
+**Alta con Mercado Pago (obligatorio)**: toda adhesión termina en un paso de Mercado Pago, sea cual sea el plan o la opción de pago. La afiliación no se completa si no se puede crear el link de pago: el formulario muestra un error y un botón **Reintentar**, que repite solo la llamada a Mercado Pago para la misma solicitud (nunca genera una solicitud nueva). Al finalizar, el paso de éxito muestra **Ir a pagar con Mercado Pago**.
+
+| Opción de pago | Qué se crea en Mercado Pago |
+|---|---|
+| Individual, Familiar con débito automático en tarjeta de crédito, débito y débito QR | Suscripción mensual (débito automático) |
+| Prepago semestral / anual | Suscripción con cobro recurrente cada 6 / 12 meses |
+| Familiar con efectivo, transferencia, Rapipago o link | Pago único del primer período con Checkout Pro; los períodos siguientes se cobran por factura |
+
 Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para nuevas adhesiones: cada afiliado conserva el plan y el precio con los que se adhirió.
 
 **Administradores (`Planes`)**: la lista muestra tipo, opción de pago, si está ofrecido, precio, meses, tamaño y comisión del asesor. Un plan en uso es de solo lectura; para cambiar precio o condiciones use **Crear nueva version** (al ofrecer la nueva, la anterior se retira sola).

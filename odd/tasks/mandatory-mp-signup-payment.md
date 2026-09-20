@@ -28,13 +28,14 @@ Every new-affiliate sign-up must end in a Mercado Pago payment step, whatever th
 - [x] M2 Server endpoints: extend /api/adhesion/preapproval to all subscription options; new /api/adhesion/checkout-preference for manual methods; both idempotent, handlers extracted with tests
 - [x] M3 Webhook + migration: adhesion_requests payment columns, `payment` topic branch for `adhesion:<id>:checkout`, audit event, tests (migration local only)
 - [x] M4 Form: every option triggers its MP step, mandatory with retry, no step change until a link exists, tests flipped
-- [ ] M5 Docs (MANUAL, PRD, MP PRD) + apply migration to remote (needs OK)
+- [x] M5 Docs (MANUAL, PRD, MP PRD) + apply migration to remote (user OK)
 
 ## Progress / evidence
 - M1-M3 (delegated writer, trigger: 2+ non-trivial files): RED then GREEN per unit (pricing 20, adhesionPayments 19, webhook 74, pgTAP 12/12 local). Full suite 576 pass / 5 pre-existing fails, verified by the orchestrator. New: server/adhesionPayments.js, migration 20260920050000 (adhesion_requests payment columns + anon/authenticated forgery guard). Endpoints: /api/adhesion/preapproval serves all subscription options and now returns non-2xx on failure (502/404/409/400); new /api/adhesion/checkout-preference.
 - MP docs check: a 6/12-month preapproval is NOT explicitly documented (examples only show frequency 1; subscription plans list semiannual/annual). No sandbox call made: UNVERIFIED until the first real call. Alternative if rejected: frequency 1 with repetitions, or a plan-based subscription.
 - Assumptions to confirm: requiresCheckoutPayment is Familiar-only (Individual with cash/transfer falls to preapproval); notification_url added only when PUBLIC_APP_URL is set.
 - M4 (delegated writer): 27/27 AdhesionForm tests; full suite 582 pass / 5 pre-existing fails, verified by the orchestrator. TDD deviation disclosed: tests written after the code, RED then observed by running them against the stashed original (10 failures). Form blocks step 6 until an initPoint exists, "Reintentar" repeats only the MP call for the same adhesion id, success step has "Ir a pagar con Mercado Pago" (same tab). Untested: unmount mid-retry leaves an adhesion row without a link. Open: same tab vs new tab.
+- M5: migration 20260920050000 applied to remote with `supabase db push --linked` (user OK), 4 columns verified. Docs updated by a delegated writer (MANUAL, PRD, MP PRD). Left as is: MP PRD flow diagram lacks the Checkout Pro branch; pre-existing "day 1 or 10" vs "always day 10" inconsistency.
 
 ## Next step
-M5: docs, then apply migration 20260920050000 to remote (needs OK).
+Real-world check: first sandbox/real call with a 6/12-month preapproval (unverified), then decide push/PR.
