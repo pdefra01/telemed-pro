@@ -44,7 +44,7 @@ After a video consultation, the electronic prescription reaches the patient by W
 - Final: full suite 484 passed / 7 failed; the 7 failures are in files untouched by this work (crypto, VideoRoom notes placeholder, DashboardRepository, MedicalHistory).
 
 ## Pending on the user (manual)
-1. Apply migration `20260920010000_prescription_deliveries.sql` to remote (`supabase db push`), after OK.
+1. ~~Apply migration `20260920010000_prescription_deliveries.sql` to remote~~ DONE 2026-09-20 (`supabase db push`, only that migration was pending).
 2. Deploy the app; create the WAHA service in Coolify, set the 3 env vars, scan the QR with the company phone.
 3. End-to-end test with a real consultation. Nothing here was exercised against a real WhatsApp session.
 
