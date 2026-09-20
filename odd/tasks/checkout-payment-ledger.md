@@ -20,11 +20,11 @@ When a Familiar affiliate pays the first period through Mercado Pago Checkout Pr
 ## Tasks
 - [x] L1 DB: migration (adhesion_requests columns mp_paid_amount, ledger_posted_at; RPC post_adhesion_checkout_payment) + pgTAP
 - [x] L2 Server: store the paid amount, call the RPC from the webhook (already approved) and from approve-adhesion (payment first), tests
-- [ ] L3 Docs + apply migration to remote (needs OK)
+- [x] L3 Docs + apply migration to remote (user OK; applied with `supabase db push --linked`, RPC and 2 columns verified)
 
 ## Progress / evidence
 - L1-L2 (delegated writer, trigger: 2+ non-trivial files): RED then GREEN per unit. pgTAP verified by the orchestrator on local Docker (rolled back): post_adhesion_checkout_payment 43/43, adhesion_checkout_payment 12/12. Full suite 595 pass / 5 pre-existing fails. RPC returns JSONB {posted, reason, invoice_id}, service-role only. Server: postAdhesionCheckoutPayment (never throws), webhook stores mp_paid_amount and posts when already approved (`ledger_post_failed` retried by Pass A, `ledger_not_posted` needs_admin), approve-adhesion posts best-effort.
 - Assumptions to confirm: NULL mp_paid_amount is treated as the expected charge (only for payments recorded before the column; remote has none); payment movement created_at = paid_at; overpayment leaves a credit (negative balance); existing invoice total is never changed. Untested: approve-adhesion inline call (endpoint not unit-testable), concurrency beyond the FOR UPDATE lock.
 
 ## Next step
-L3: docs + apply migration 20260920060000 to remote (needs OK).
+Push/PR (user decision). Then a real end-to-end check of a Checkout Pro payment in sandbox.

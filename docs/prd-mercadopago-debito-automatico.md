@@ -99,7 +99,7 @@ Recibe notificaciones de Mercado Pago.
 
 | Topic | Qué hace |
 |---|---|
-| `payment` | Registra el pago en el ledger (`affiliate_account_movements`) con número de recibo correlativo. Si el `external_reference` es `adhesion:<id>:checkout`, registra `mp_payment_id`, `payment_status` y `paid_at` en la solicitud de adhesión (los roles `anon`/`authenticated` no pueden escribir esas columnas) y un evento de auditoría. |
+| `payment` | Registra el pago en el ledger (`affiliate_account_movements`) con número de recibo correlativo. Si el `external_reference` es `adhesion:<id>:checkout`, no usa `post_payment_movement_from_webhook`: registra `mp_payment_id`, `payment_status`, `paid_at` y `mp_paid_amount` (monto realmente cobrado) en la solicitud de adhesión (los roles `anon`/`authenticated` no pueden escribir esas columnas) y un evento de auditoría. Si la solicitud ya está aprobada, asienta el pago en el ledger con `post_adhesion_checkout_payment` (ver sección 6.1). |
 | `subscription_authorized_payment` | Procesa el cobro mensual: registra el pago + extiende cobertura del afiliado 1 mes. |
 | `subscription_preapproval` | Actualiza el estado de la suscripción (`authorized`, `cancelled`, `paused`). |
 | Cualquier otro | Responde 200 sin procesar (ack silencioso). |
@@ -139,6 +139,32 @@ Cuando un pago es exitoso:
 
 > **Idempotencia:** Si MP reenvía el mismo webhook, el `ON CONFLICT (external_ref)` en la base de datos lo ignora silenciosamente. El número de recibo ya asignado en el primer intento no se pierde ni se duplica.
 
+### 6.1. Primer pago Checkout Pro (Familiar con efectivo, transferencia, Rapipago o link)
+
+Este pago se asienta en el ledger con la RPC `post_adhesion_checkout_payment(p_adhesion_request_id)` (solo `service_role`, idempotente). No reutiliza `post_payment_movement_from_webhook`, porque esa función extendería la cobertura un mes adicional.
+
+**Qué asienta** (todo en una transacción):
+
+1. **`invoices`:** la primera factura del mes en curso (período `YYYY-MM`). Queda `paid` solo si los pagos cubren el total; el total de una factura existente nunca se modifica.
+2. **`affiliate_account_movements`:** un movimiento `charge` (precio mensual x meses facturados del plan) y un movimiento `payment` por el monto realmente cobrado (`adhesion_requests.mp_paid_amount`), con número de recibo. Un pago mayor al cargo deja saldo a favor.
+3. **`family_coverage_windows`:** abre la ventana de cobertura solo si el afiliado no tiene una; si ya existe, no se extiende.
+4. **`profiles`:** `plan_status` pasa a `active`.
+5. **`adhesion_requests.ledger_posted_at`:** marca de idempotencia y auditoría.
+
+**Dos puntos de entrada** (el segundo en ocurrir es el que asienta):
+
+| Punto de entrada | Cuándo |
+|---|---|
+| Webhook `payment` | El pago llega con la solicitud ya aprobada |
+| `approve-adhesion` | La solicitud se aprueba con el pago ya acreditado |
+
+**Fallas:**
+
+| Situación | Resultado |
+|---|---|
+| Error de la RPC (red, base de datos) | `ledger_post_failed`, queda pendiente y lo reintenta la reconciliación diferida (Pass A) |
+| Rechazo de negocio (por ejemplo, afiliado sin plan) | `ledger_not_posted`, pasa a `needs_admin` para revisión del administrador |
+
 ---
 
 ## 7. Base de Datos — Tablas Involucradas
@@ -149,12 +175,14 @@ Cuando un pago es exitoso:
 | `affiliate_account_movements` | Ledger de movimientos. Cada pago exitoso genera una fila con `receipt_number`. |
 | `mercadopago_audit` (o `mercadopago_events`) | Log de auditoría de todos los eventos recibidos del webhook. |
 | `invoices` | Facturas mensuales. El pago las marca como `paid`. |
+| `adhesion_requests` | Guarda el pago Checkout Pro del alta: `mp_payment_id`, `payment_status`, `paid_at`, `mp_paid_amount` y `ledger_posted_at`. |
 | `family_coverage_windows` | Ventana de cobertura del grupo familiar. Se extiende 1 mes por cada pago completo. |
 | `profiles` | `plan_status` pasa a `active` cuando el pago es aprobado. |
 
 ### Funciones SQL clave
 
 - **`post_payment_movement_from_webhook`**: Registra el movimiento de pago, asigna número de recibo, extiende cobertura. Idempotente por diseño.
+- **`post_adhesion_checkout_payment`**: Asienta el primer pago Checkout Pro (factura, cargo, pago, plan activo, ventana si no existe). Solo `service_role`, idempotente.
 - **`post_manual_adjustment`**: Contrapartida manual para el admin. Misma secuencia de recibos.
 - **`release_subscription_reservation`**: Libera reservas abandonadas.
 - **`claim_subscription_enrollment`** / **`finalize_subscription_enrollment`**: Ciclo de reserva para evitar condiciones de carrera al crear la suscripción.
@@ -168,7 +196,7 @@ Para casos donde MP nunca entregó el webhook final, el sistema tiene un sweep `
 | Pasada | Qué hace |
 |---|---|
 | Pass B | Intenta linkear suscripciones sin `mp_preapproval_id` |
-| Pass A | Reintenta pagos diferidos (`needs_admin`, `subscription_not_linked`) |
+| Pass A | Reintenta pagos diferidos (`ledger_post_failed`, `subscription_not_linked`; los `needs_admin` esperan revisión) |
 | Pass C | Re-consulta a MP suscripciones con eventos viejos o sin eventos |
 | Pass D | Elimina reservas abandonadas (más de 30 min sin confirmar) |
 
@@ -207,7 +235,8 @@ Para probar sin dinero real:
 
 ## 11. Pendientes / Backlog
 
-- [ ] **Asentar el primer pago Checkout Pro en el ledger/facturas:** hoy solo se registra en la solicitud de adhesión; falta publicarlo al aprobar la afiliación.
+- [x] **Migración `20260920060000_post_adhesion_checkout_payment.sql` aplicada en remoto** (2026-09-20).
+- [ ] **Revisión de administrador:** vista de los pagos Checkout Pro en `needs_admin` (`ledger_not_posted`).
 - [ ] **Verificar la recurrencia de 6/12 meses** en la primera llamada real (ver riesgo en 2.1).
 - [ ] **Scheduler de reconciliación:** Crear una cron job (Edge Function o servicio externo) que llame a `runDeferredReconciliation` mensualmente (sugerido: día 12 de cada mes a las 09:00 AR).
 - [ ] **Notificaciones al paciente:** Email automático cuando el cobro mensual falla (`payment_failed`), para que el paciente actualice su tarjeta en MP.
