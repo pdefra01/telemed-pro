@@ -867,7 +867,6 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                         ? 'border-red-500/50 ring-red-500/20 ring-4' 
                         : 'border-slate-800 focus:ring-blue-500/50 focus:border-blue-500/50 shadow-inner'
                     }`}
-                    placeholder="Escriba el diagnóstico principal del paciente en detalle (p. ej. Hipertensión Arterial Primaria)..."
                   />
                   {diagnosis && (
                     <div className="absolute right-4 top-4">
