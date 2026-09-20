@@ -1086,7 +1086,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
   }
 
   return (
-    <div className="flex h-screen bg-slate-950 overflow-hidden text-slate-200">
+    <div className="flex h-[calc(100vh-73px-2rem)] md:h-[calc(100vh-4rem)] min-h-0 bg-slate-950 overflow-hidden text-slate-200 rounded-2xl">
       {/* Sidebar logic moved to VideoRoomContent */}
 
       {/* 2. MAIN VIDEO AREA */}
