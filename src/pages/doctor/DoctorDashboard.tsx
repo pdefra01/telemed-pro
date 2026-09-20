@@ -66,17 +66,19 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
 
     const handleSearchDni = async (e: React.FormEvent) => {
         e.preventDefault();
-        const cleanDni = searchDni.trim();
+        const cleanDni = searchDni.replace(/\D/g, '');
         if (!cleanDni) return;
         setIsSearchingDni(true);
         try {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('id, full_name, dni')
-                .ilike('dni', `%${cleanDni}%`)
+                .eq('dni', cleanDni)
                 .limit(1);
 
-            if (error || !data || data.length === 0) {
+            if (error) throw error;
+
+            if (!data || data.length === 0) {
                 setToast({ message: `No se encontró ningún paciente con DNI ${cleanDni}`, type: 'error' });
             } else {
                 setSelectedPatientId(data[0].id);
