@@ -859,6 +859,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 <div className="relative">
                   <textarea
                     id="diagnosis"
+                    aria-label="Diagnóstico principal"
                     value={diagnosis}
                     onChange={(e) => setDiagnosis(e.target.value)}
                     rows={3}

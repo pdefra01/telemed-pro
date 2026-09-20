@@ -179,7 +179,8 @@ describe('DoctorDashboard - Consultation History', () => {
 
     // Verify modal title
     expect(await screen.findByRole('heading', { name: /Resumen/i })).toBeInTheDocument();
-    expect(await screen.findByText(/Paciente:.*John Wilson/i)).toBeInTheDocument();
+    // The name shows in the history list and again in the modal header.
+    expect((await screen.findAllByText('John Wilson')).length).toBeGreaterThanOrEqual(2);
 
     // Verify data fetching calls
     expect(medicalRecordRepository.getRecordByAppointmentId).toHaveBeenCalledWith('appt1');
@@ -202,11 +203,11 @@ describe('DoctorDashboard - Consultation History', () => {
 
     // Wait for fetch to finish
     await waitFor(() => {
-      expect(screen.queryByText(/Sincronizando con nodo de datos/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Cargando datos de la consulta/i)).not.toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Sin diagnóstico registrado en este nodo/i)).toBeInTheDocument();
-    expect(screen.getByText(/Sin prescripciones en este registro/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sin diagnóstico registrado para esta consulta/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sin prescripciones en esta consulta/i)).toBeInTheDocument();
   });
 
   it('never fabricates "Plan Global" in the queue when patient_plan is null (same fallback bug fixed elsewhere in AuthRepository)', async () => {

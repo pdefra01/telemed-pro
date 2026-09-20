@@ -106,7 +106,7 @@ describe('PostConsultation Page', () => {
 
     await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
 
-    const diagnosisInput = screen.getByPlaceholderText(/Diagnóstico Principal/i);
+    const diagnosisInput = screen.getByLabelText(/Diagnóstico principal/i);
     fireEvent.change(diagnosisInput, { target: { value: 'Diagnóstico de prueba' } });
 
     const saveButton = screen.getByRole('button', { name: /Finalizar Consulta/i });
