@@ -11,7 +11,7 @@ import { dashboardRepository } from '../../repositories/DashboardRepository';
 import { notificationRepository, Notification } from '../../repositories/NotificationRepository';
 import { doctorShiftRepository } from '../../repositories/DoctorShiftRepository';
 import { pharmacyRepository } from '../../repositories/PharmacyRepository';
-import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, Download, ExternalLink, History, FolderOpen, Pill } from 'lucide-react';
+import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, ExternalLink, History, FolderOpen, Pill } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { playArrivalSound } from '../../utils/audio';
 
@@ -814,145 +814,106 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
 
             {/* Modals with Premium Refactor */}
             {selectedPatientId && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-2xl" onClick={() => setSelectedPatientId(null)}></div>
-                    <div className="bg-slate-900 border border-white/10 rounded-[2rem] sm:rounded-[3.5rem] w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-3xl relative animate-in fade-in slide-in-from-bottom-10 duration-700">
-                        <div className="p-6 sm:p-8 md:p-12 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-950/30 gap-6">
-                            <div>
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.4em]">Secure Access Point</span>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4">
+                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl" onClick={() => setSelectedPatientId(null)}></div>
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-5xl h-[94vh] overflow-hidden flex flex-col shadow-3xl relative animate-in fade-in slide-in-from-bottom-4 duration-300">
+                        <div className="px-4 sm:px-6 py-3 border-b border-white/5 bg-slate-950/40 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-baseline gap-3 min-w-0">
+                                <h3 className="font-bold text-xl text-white tracking-tight">Historia clínica</h3>
+                                <span className="text-[10px] font-mono text-slate-500 truncate" title={selectedPatientId}>#{selectedPatientId.slice(0, 8)}</span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <div className="flex p-1 bg-slate-950/60 rounded-xl border border-white/5 gap-1">
+                                    <button
+                                        onClick={() => setHistoryView('records')}
+                                        className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'records' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        <History size={14} /> Evoluciones
+                                        {patientRecords.length > 0 && <span className="opacity-70">({patientRecords.length})</span>}
+                                    </button>
+                                    <button
+                                        onClick={() => setHistoryView('documents')}
+                                        className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'documents' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        <FolderOpen size={14} /> Estudios
+                                        {patientDocuments.length > 0 && <span className="opacity-70">({patientDocuments.length})</span>}
+                                    </button>
                                 </div>
-                                <h3 className="font-bold text-3xl sm:text-4xl text-white tracking-tighter">Bóveda Médica</h3>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">ID_PACIENTE: {selectedPatientId.toUpperCase()}</p>
-                            </div>
 
-                            <div className="flex flex-wrap p-1 bg-slate-950/50 rounded-2xl border border-white/5 w-full lg:w-auto gap-1">
                                 <button
-                                    onClick={() => setHistoryView('records')}
-                                    className={`flex-1 lg:flex-initial px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${historyView === 'records' ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 hover:text-slate-300'}`}
+                                    onClick={() => setSelectedPatientId(null)}
+                                    aria-label="Cerrar historia clínica"
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white hover:bg-red-500/20 transition-all"
                                 >
-                                    <History size={14} /> Evoluciones
-                                </button>
-                                <button
-                                    onClick={() => setHistoryView('documents')}
-                                    className={`flex-1 lg:flex-initial px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${historyView === 'documents' ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 hover:text-slate-300'}`}
-                                >
-                                    <FolderOpen size={14} /> Estudios
+                                    <X size={20} />
                                 </button>
                             </div>
-
-                            <button onClick={() => setSelectedPatientId(null)} className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-xl sm:rounded-2xl bg-white/5 text-slate-400 hover:text-white hover:bg-red-500/20 hover:text-red-500 transition-all duration-500 self-end lg:self-auto">
-                                <X size={24} className="sm:w-7 sm:h-7" />
-                            </button>
                         </div>
-                        
-                        <div className="overflow-y-auto p-5 sm:p-8 md:p-12 space-y-10 custom-scrollbar flex-1">
+
+                        <div className="overflow-y-auto p-4 sm:p-6 custom-scrollbar flex-1">
                             {isFetchingPatientHistory ? (
                                 <div className="flex flex-col items-center justify-center py-24">
-                                    <div className="w-16 h-16 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-8"></div>
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.5em] text-emerald-500 animate-pulse">Desencriptando registros históricos...</p>
+                                    <div className="w-10 h-10 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
+                                    <p className="text-xs font-bold text-emerald-500 animate-pulse">Cargando historia clínica...</p>
                                 </div>
                             ) : historyView === 'records' ? (
                                 patientRecords.length > 0 ? (
-                                    <div className="space-y-8 relative">
-                                        <div className="absolute left-6 top-0 bottom-0 w-px bg-white/5"></div>
-                                        {patientRecords.map((record, idx) => (
-                                            <div key={record.id} className="relative pl-16">
-                                                <div className="absolute left-[20px] top-4 w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)] z-10"></div>
-                                                <div className="bg-white/[0.03] hover:bg-white/[0.06] rounded-[2.5rem] p-10 border border-white/5 hover:border-emerald-500/30 transition-all duration-500 group shadow-2xl">
-                                                    <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-8">
-                                                        <div>
-                                                            <div className="flex items-center gap-3 mb-4">
-                                                                <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20">{record.type}</span>
-                                                                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{record.date}</span>
-                                                            </div>
-                                                            <h4 className="font-bold text-white text-3xl tracking-tighter leading-none group-hover:text-emerald-400 transition-colors">{record.diagnosis}</h4>
-                                                        </div>
-                                                    </div>
-                                                    <div className="bg-slate-950/50 p-8 rounded-[2rem] border border-white/5 italic">
-                                                        <p className="text-slate-400 text-base leading-relaxed font-medium">"{record.notes}"</p>
-                                                    </div>
-                                                    <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-emerald-500 font-bold border border-white/10 shadow-inner">
-                                                                {record.doctorName?.charAt(0) || 'D'}
-                                                            </div>
-                                                            <div>
-                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none">Emitido por</p>
-                                                                    <p className="text-sm font-bold text-white tracking-tight">Dr. {record.doctorName?.split(' ').pop()}</p>
-                                                            </div>
-                                                        </div>
-                                                        <button className="p-4 bg-white/5 hover:bg-emerald-500 hover:text-slate-950 rounded-2xl transition-all duration-500 text-white shadow-xl">
-                                                            <ArrowRight size={20} />
-                                                        </button>
-                                                    </div>
+                                    <div className="space-y-3">
+                                        {patientRecords.map((record) => (
+                                            <article key={record.id} className="bg-white/[0.03] rounded-xl p-4 sm:p-5 border border-white/5">
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
+                                                    <span className="text-xs font-bold text-slate-300">{record.date}</span>
+                                                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{record.type}</span>
+                                                    <span className="text-xs text-slate-500 sm:ml-auto">Dr. {record.doctorName?.split(' ').pop()}</span>
                                                 </div>
-                                            </div>
+                                                <h4 className="font-bold text-white text-lg leading-snug">{record.diagnosis}</h4>
+                                                {record.notes && (
+                                                    <p className="mt-2 text-slate-300 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{record.notes}</p>
+                                                )}
+                                            </article>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-32 bg-slate-950/30 rounded-[3rem] border border-white/5 border-dashed">
-                                        <div className="bg-white/5 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 border border-white/5">
-                                            <Search size={40} className="text-slate-800" />
-                                        </div>
-                                        <p className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[11px]">Memoria de registros vacía</p>
+                                    <div className="text-center py-20">
+                                        <Search size={28} className="text-slate-700 mx-auto mb-3" />
+                                        <p className="text-slate-500 text-sm">Este paciente todavía no tiene evoluciones registradas.</p>
                                     </div>
                                 )
                             ) : (
                                 patientDocuments.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
                                         {patientDocuments.map((doc) => (
-                                            <div key={doc.id} className="bg-white/[0.03] hover:bg-white/[0.06] rounded-[2.5rem] p-8 border border-white/5 hover:border-emerald-500/30 transition-all duration-500 group relative overflow-hidden">
-                                                <div className="flex items-start justify-between mb-6">
-                                                    <div className="p-4 rounded-2xl bg-slate-950 border border-white/5 text-emerald-500 group-hover:scale-110 transition-transform">
-                                                        {doc.type === 'lab_result' ? <FlaskConical size={24} /> : 
-                                                         doc.type === 'imaging' ? <ImageIcon size={24} /> : 
-                                                         <FileGeneric size={24} />}
-                                                    </div>
-                                                    <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">{doc.date}</span>
+                                            <div key={doc.id} className="flex items-center gap-4 bg-white/[0.03] rounded-xl px-4 py-3 border border-white/5">
+                                                <div className="p-2.5 rounded-lg bg-slate-950 border border-white/5 text-emerald-500 shrink-0">
+                                                    {doc.type === 'lab_result' ? <FlaskConical size={18} /> :
+                                                     doc.type === 'imaging' ? <ImageIcon size={18} /> :
+                                                     <FileGeneric size={18} />}
                                                 </div>
-                                                <h4 className="text-xl font-bold text-white tracking-tight mb-2 group-hover:text-emerald-400 transition-colors">{doc.title}</h4>
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-8">{doc.type === 'lab_result' ? 'Análisis de Laboratorio' : doc.type === 'imaging' ? 'Estudio de Imagen' : 'Documentación Médica'}</p>
-                                                
-                                                <div className="flex gap-3">
-                                                    <a 
-                                                        href={doc.url} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="flex-1 py-4 bg-white/5 hover:bg-emerald-500 text-white hover:text-slate-950 rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                                                    >
-                                                        <ExternalLink size={14} /> Ver Online
-                                                    </a>
-                                                    <button className="p-4 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl transition-all">
-                                                        <Download size={14} />
-                                                    </button>
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="text-sm font-bold text-white truncate">{doc.title}</h4>
+                                                    <p className="text-xs text-slate-500">
+                                                        {doc.type === 'lab_result' ? 'Laboratorio' : doc.type === 'imaging' ? 'Imagen' : 'Documentación'} · {doc.date}
+                                                    </p>
                                                 </div>
+                                                <a
+                                                    href={doc.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-4 py-2 bg-white/5 hover:bg-emerald-500 text-white hover:text-slate-950 rounded-lg font-bold text-xs transition-all flex items-center gap-2 shrink-0"
+                                                >
+                                                    <ExternalLink size={14} /> Abrir
+                                                </a>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-32 bg-slate-950/30 rounded-[3rem] border border-white/5 border-dashed">
-                                        <div className="bg-white/5 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 border border-white/5">
-                                            <FolderOpen size={40} className="text-slate-800" />
-                                        </div>
-                                        <p className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[11px]">No hay documentos cargados</p>
+                                    <div className="text-center py-20">
+                                        <FolderOpen size={28} className="text-slate-700 mx-auto mb-3" />
+                                        <p className="text-slate-500 text-sm">No hay estudios cargados para este paciente.</p>
                                     </div>
                                 )
                             )}
-                        </div>
-
-                        <div className="p-10 border-t border-white/5 bg-slate-950/50 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <Shield size={16} className="text-emerald-500" />
-                                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.3em]">End-to-End Encryption Enabled</span>
-                            </div>
-                            <button
-                                onClick={() => setSelectedPatientId(null)}
-                                className="px-14 py-5 bg-white hover:bg-emerald-500 text-slate-950 hover:text-white rounded-[1.5rem] font-bold uppercase tracking-[0.3em] text-[10px] transition-all shadow-3xl active:scale-95"
-                            >
-                                Cerrar Bóveda
-                            </button>
                         </div>
                     </div>
                 </div>
