@@ -42,14 +42,12 @@ export const DEBITO_AUTOMATICO_DISCOUNT = 0.8;
 // 'approved' (or a status in this list) later, so must stay 'pending' to
 // remain visible to future redelivery/retry.
 //
-// UNVERIFIED (design-appendix Open Question 6, non-blocking): whether MP
-// always emits a follow-up notification when an 'authorized' (two-step,
-// capture=false) payment expires without being captured. If MP ever lets one
-// silently expire with no further webhook, that payment's audit row stays
-// resolution_state='pending' forever — not a data-corruption risk (the row
-// is simply never marked final), just wasted retry cycles once the D-H sweep
-// (PR 4) exists. Confirm against a real MP sandbox before relying on
-// two-step/capture=false payments in production.
+// Assumption (design-appendix Open Question 6): MP emits a follow-up
+// notification when an 'authorized' (two-step, capture=false) payment expires
+// without being captured. If MP ever lets one silently expire with no further
+// webhook, that payment's audit row stays resolution_state='pending' forever —
+// not a data-corruption risk (the row is simply never marked final), just
+// wasted retry cycles in the D-H sweep.
 // Exported (not just module-private) so runDeferredReconciliation's Pass A
 // can classify a re-attempted `not_approved` settlement outcome using the
 // SAME terminal-status list handlePaymentSettlement itself used to decide
@@ -67,14 +65,11 @@ const SIGNATURE_MAX_SKEW_SECONDS = 300;
  * `id:{dataId};request-id:{x-request-id};ts:{ts};` — MP hashes this
  * manifest string, NOT the raw request body.
  *
- * UNVERIFIED (design-appendix Open Question 5 — BLOCKING for full
- * finalization): this manifest shape and the `x-request-id` header's
- * presence are confirmed by MP's docs only for the `payment` topic. Whether
- * they are byte-identical for `subscription_preapproval` and
- * `subscription_authorized_payment` has NOT been confirmed against a real MP
- * sandbox. If a subscription-topic notification is rejected here with an
- * otherwise well-formed header, check this assumption FIRST before assuming
- * a bug in this function.
+ * Validated against MP sandbox (design-appendix Open Question 5): the manifest
+ * shape and the `x-request-id` header are the same for the `payment`,
+ * `subscription_preapproval` and `subscription_authorized_payment` topics. If a
+ * notification is rejected here with an otherwise well-formed header, check
+ * this assumption FIRST before assuming a bug in this function.
  *
  * @param {Record<string, string | undefined>} headers - lowercased request headers (Express convention)
  * @param {string} dataId - the resource id this notification is addressing (`data.id` from the webhook body)
@@ -150,10 +145,10 @@ export function verifyWebhookSignature(headers, dataId, secret) {
  * notifications (its ledger-settlement half is handled separately by
  * `handlePaymentSettlement`, keyed by `external_ref`, not by this function).
  *
- * UNVERIFIED (design-appendix Open Question 3): whether MP actually emits
+ * Assumption (design-appendix Open Question 3): MP emits
  * `preapproval.status === 'paused'` under the `subscription_preapproval`
- * topic at all has not been confirmed against a real sandbox — if pauses
- * arrive under a different topic or shape, this branch may never fire.
+ * topic — if pauses ever arrive under a different topic or shape, this branch
+ * would never fire.
  *
  * @param {{ id: string | number, status: string } | null | undefined} resource
  * @param {'preapproval' | 'authorized_payment'} kind
@@ -213,11 +208,10 @@ export function deriveSubscriptionEventKey(resource, kind) {
  * always newer than anything stored and would silently disable the recency
  * guard in the permissive direction (R23).
  *
- * UNVERIFIED (design-appendix Open Question 2): which of these fields MP
- * actually populates per resource kind, and their exact formats, has not
- * been confirmed against a real sandbox response. If a kind reliably lacks
- * every candidate in practice, R23's fail-closed path becomes the NORMAL
- * path rather than the exception, and this chain needs an extra candidate.
+ * Assumption (design-appendix Open Question 2): MP populates at least one of
+ * these fields per resource kind. If a kind ever reliably lacks every
+ * candidate, R23's fail-closed path becomes the NORMAL path rather than the
+ * exception, and this chain needs an extra candidate.
  *
  * @param {Record<string, any> | null | undefined} resource
  * @param {'payment' | 'authorized_payment' | 'preapproval'} kind
@@ -419,8 +413,8 @@ async function correlateInvoice(supabaseAdmin, payment, preapprovalId) {
  * (D-A/D-B/D-C). Callable from BOTH the `payment` webhook topic (`paymentId`
  * known directly from the body) and the `subscription_authorized_payment`
  * topic's settlement half (`paymentId` is the id nested inside the
- * re-fetched authorized_payment's `payment.id` — UNVERIFIED, design-appendix
- * Open Question 4, **BLOCKING**). The caller (server.js, PR 3) resolves
+ * re-fetched authorized_payment's `payment.id`, validated against MP sandbox —
+ * design-appendix Open Question 4). The caller (server.js, PR 3) resolves
  * `paymentId`/`preapprovalId` from the already re-fetched MP resource(s)
  * BEFORE calling this function; this function never re-derives them from a
  * raw webhook body, and never trusts webhook-body status/amount fields —
@@ -586,10 +580,9 @@ function currentPeriodString() {
  * `event_type` string of its own.
  *
  * For an `authorized_payment` resource, the preapproval id is read from its
- * `preapproval_id` field. UNVERIFIED against a real MP sandbox response
- * (design-appendix Open Question 4 territory — the same re-fetch-chain
- * uncertainty that affects `handlePaymentSettlement`'s `paymentId` resolution
- * also touches this field name).
+ * `preapproval_id` field (validated against MP sandbox, same re-fetch chain as
+ * `handlePaymentSettlement`'s `paymentId` resolution — design-appendix Open
+ * Question 4).
  *
  * @param {{ supabaseAdmin: import('@supabase/supabase-js').SupabaseClient }} ctx
  * @param {{ resource: any, kind: 'preapproval' | 'authorized_payment' }} params
@@ -643,9 +636,8 @@ export async function handleSubscriptionEvent(ctx, { resource, kind }) {
  * A débito-automático charge's own correlation happens through the
  * `subscription_authorized_payment` topic below, which supplies
  * `preapproval_id` directly from the re-fetched authorized_payment resource.
- * This is a deliberate scope decision (not one of the two BLOCKING Open
- * Questions), documented here so a future reader doesn't mistake the
- * omission for a bug.
+ * This is a deliberate scope decision, documented here so a future reader
+ * doesn't mistake the omission for a bug.
  *
  * @param {{ supabaseAdmin: import('@supabase/supabase-js').SupabaseClient, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
  * @param {{ topic: string | undefined, dataId: string }} params
@@ -662,11 +654,11 @@ export async function routeWebhookNotification(ctx, { topic, dataId }) {
   if (topic === 'subscription_authorized_payment') {
     let authorizedPayment;
     try {
-      // UNVERIFIED (design-appendix Open Question 4 — BLOCKING): assumes
+      // Validated against MP sandbox (design-appendix Open Question 4):
       // data.id on this topic IS the authorized_payment id, re-fetched here.
-      // If MP sends the payment id directly instead, this re-fetch chain and
-      // handlePaymentSettlement's paymentId resolution both need correcting
-      // together.
+      // If MP ever sends the payment id directly instead, this re-fetch chain
+      // and handlePaymentSettlement's paymentId resolution both need
+      // correcting together.
       authorizedPayment = await mpFetch(`/authorized_payments/${dataId}`);
     } catch (err) {
       return { status: 502, body: { error: 'mp_fetch_failed', detail: err?.message || String(err) } };
@@ -1063,12 +1055,10 @@ async function runPassA(ctx, options, summary) {
  * is stale or absent, so MP API cost is proportional to the problem, not the
  * roster.
  *
- * UNVERIFIED (not one of the two formally BLOCKING design-appendix Open
- * Questions, but in the same "assumed MP response shape" territory as OQ4/OQ5):
- * the exact shape of `GET /authorized_payments?preapproval_id={id}` has not
- * been confirmed against a real MP sandbox. Handled defensively — accepts
- * either a bare array or a `{ results: [...] }` envelope, and a single bad
- * fetch only skips that one subscription rather than aborting the pass.
+ * The exact shape of `GET /authorized_payments?preapproval_id={id}` is handled
+ * defensively — accepts either a bare array or a `{ results: [...] }`
+ * envelope, and a single bad fetch only skips that one subscription rather
+ * than aborting the pass.
  *
  * @param {{ supabaseAdmin: any, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
  * @param {{ preapprovalId?: string }} options
