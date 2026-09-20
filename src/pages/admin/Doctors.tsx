@@ -326,14 +326,14 @@ const Doctors: React.FC = () => {
           <div className="bg-[#0f172a] border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 w-full max-w-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden max-h-[90vh] flex flex-col">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-indigo-500"></div>
             
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 shrink-0">
               <h3 className="text-2xl font-bold text-white">
                 Ficha Médica Integral — <span className="text-emerald-400">{editId ? 'Editar Legajo' : 'Nuevo Alta'}</span>
               </h3>
             </div>
 
             {/* Modal Tabs */}
-            <div className="flex p-1 bg-slate-950/80 rounded-2xl border border-white/10 mb-6 gap-1 overflow-x-auto">
+            <div className="flex p-1 bg-slate-950/80 rounded-2xl border border-white/10 mb-6 gap-1 overflow-x-auto shrink-0">
               <button
                 type="button"
                 onClick={() => setActiveTab('personal')}
