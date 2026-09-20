@@ -284,16 +284,6 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
           </div>
 
           <div className="flex items-center gap-3 pointer-events-auto">
-            {isDoctor && (
-              <button
-                onClick={() => setIsVaultOpen(true)}
-                className="h-16 px-5 bg-emerald-500/10 hover:bg-emerald-500/20 backdrop-blur-3xl border border-emerald-500/20 rounded-3xl flex items-center gap-2.5 text-emerald-400 transition-all shadow-2xl"
-                title="Historia clínica y consultas anteriores"
-              >
-                <Database size={18} />
-                <span className="hidden xl:inline text-[10px] font-bold uppercase tracking-widest">Historia clínica</span>
-              </button>
-            )}
             <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-4 rounded-3xl flex items-center gap-8 shadow-2xl">
               <div className="flex flex-col items-center">
                 <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">CONEXIÓN</span>
@@ -452,10 +442,10 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 <button 
                   onClick={() => setIsVaultOpen(true)}
                   className="flex-shrink-0 p-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl flex items-center gap-1.5 group transition-all"
-                  title="Bóveda Médica — Historial Previo"
+                  title="Historia clínica y consultas anteriores"
                 >
                   <Database size={14} className="text-emerald-400 group-hover:scale-110 transition-transform" />
-                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest hidden lg:inline">Bóveda</span>
+                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest">Historia clínica</span>
                 </button>
               </div>
 
