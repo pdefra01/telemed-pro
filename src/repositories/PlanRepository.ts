@@ -68,6 +68,20 @@ export class PlanRepository {
   }
 
   /**
+   * True when affiliates have the plan or a coverage window froze it. Mirrors
+   * the DB guard_plan_in_use trigger: such a plan keeps its price/terms.
+   */
+  async isInUse(id: string): Promise<boolean> {
+    const [profiles, windows] = await Promise.all([
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('plan_id', id),
+      supabase.from('family_coverage_windows').select('id', { count: 'exact', head: true }).eq('plan_id_snapshot', id),
+    ]);
+    if (profiles.error) throw profiles.error;
+    if (windows.error) throw windows.error;
+    return (profiles.count ?? 0) > 0 || (windows.count ?? 0) > 0;
+  }
+
+  /**
    * Marca `id` como el plan por defecto, desmarcando el anterior. Delegado a
    * la RPC `set_default_plan` (SECURITY DEFINER) que hace el toggle en una
    * única sentencia UPDATE atómica — evita la ventana de dos UPDATEs
@@ -112,6 +126,10 @@ export class PlanRepository {
     if (plan.maxFamilyMembers !== undefined) row.max_family_members = plan.maxFamilyMembers;
     if (plan.paidMonths !== undefined) row.paid_months = plan.paidMonths;
     if (plan.bonusMonths !== undefined) row.bonus_months = plan.bonusMonths;
+    if (plan.planKind !== undefined) row.plan_kind = plan.planKind;
+    if (plan.paymentOption !== undefined) row.payment_option = plan.paymentOption;
+    if (plan.isOffered !== undefined) row.is_offered = plan.isOffered;
+    if (plan.advisorCommissionAmount !== undefined) row.advisor_commission_amount = plan.advisorCommissionAmount;
     if (plan.metadata !== undefined) row.metadata = plan.metadata;
     return row;
   }

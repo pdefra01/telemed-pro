@@ -50,3 +50,81 @@ describe('isValidBonusMonths', () => {
     expect(isValidBonusMonths(NaN)).toBe(false);
   });
 });
+
+import {
+  validateCatalogFields,
+  mapPlanSaveError,
+  buildNewVersionDraft,
+  PAYMENT_OPTION_LABELS,
+  PLAN_KIND_LABELS,
+} from '../PlanFormModal';
+
+describe('validateCatalogFields', () => {
+  const ok = { isOffered: true, planKind: 'familiar', paymentOption: 'standard', commission: 25000 } as const;
+
+  it('accepts a valid offered Familiar plan', () => {
+    expect(validateCatalogFields(ok)).toBeNull();
+  });
+
+  it('requires kind and option when offered', () => {
+    expect(validateCatalogFields({ ...ok, planKind: '' })).toMatch(/tipo/i);
+    expect(validateCatalogFields({ ...ok, paymentOption: '' })).toMatch(/opci/i);
+  });
+
+  it('lets a withdrawn plan have no kind or option', () => {
+    expect(validateCatalogFields({ ...ok, isOffered: false, planKind: '', paymentOption: '' })).toBeNull();
+  });
+
+  it('allows only the standard option for Individual', () => {
+    expect(validateCatalogFields({ ...ok, planKind: 'individual', paymentOption: 'prepaid_6' })).toMatch(/individual/i);
+    expect(validateCatalogFields({ ...ok, planKind: 'individual', paymentOption: 'standard' })).toBeNull();
+  });
+
+  it('rejects negative or non-finite commission', () => {
+    expect(validateCatalogFields({ ...ok, commission: -1 })).toMatch(/comisi/i);
+    expect(validateCatalogFields({ ...ok, commission: NaN })).toMatch(/comisi/i);
+    expect(validateCatalogFields({ ...ok, commission: 0 })).toBeNull();
+  });
+});
+
+describe('mapPlanSaveError', () => {
+  it('explains the unique offered plan per kind+option violation', () => {
+    expect(mapPlanSaveError({ code: '23505', message: 'duplicate key value violates unique constraint "plans_one_offered_per_option_idx"' }))
+      .toMatch(/ya hay un plan ofrecido/i);
+  });
+
+  it('explains the in-use trigger', () => {
+    expect(mapPlanSaveError({ message: 'El plan "X" esta en uso: no se pueden modificar su precio' }))
+      .toMatch(/en uso/i);
+  });
+
+  it('falls back to the raw message, then a generic one', () => {
+    expect(mapPlanSaveError({ message: 'algo' })).toBe('algo');
+    expect(mapPlanSaveError(null)).toBe('Error al guardar el plan.');
+  });
+});
+
+describe('buildNewVersionDraft', () => {
+  it('prefills from the plan, is not offered and has a new name', () => {
+    const draft = buildNewVersionDraft({
+      id: 'a', name: 'Plan Familiar', monthlyCost: 49999, bonifiedConsultations: 0, isUnlimited: true,
+      maxFamilyMembers: 4, isDefault: true, paidMonths: 1, bonusMonths: 0,
+      planKind: 'familiar', paymentOption: 'standard', isOffered: true, advisorCommissionAmount: 25000,
+    });
+    expect(draft.name).toBe('Plan Familiar (nueva versión)');
+    expect(draft.isOffered).toBe(false);
+    expect(draft.isDefault).toBe(false);
+    expect(draft.monthlyCost).toBe(49999);
+    expect(draft.planKind).toBe('familiar');
+    expect(draft.advisorCommissionAmount).toBe(25000);
+    expect('id' in draft).toBe(false);
+  });
+});
+
+describe('labels', () => {
+  it('names kinds and options in Spanish', () => {
+    expect(PLAN_KIND_LABELS.individual).toBe('Individual');
+    expect(PAYMENT_OPTION_LABELS.card_debit).toBe('Débito tarjeta');
+    expect(PAYMENT_OPTION_LABELS.prepaid_12).toBe('Anual');
+  });
+});

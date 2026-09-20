@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Building2, Plus, Search, Edit2, Trash2,
   ChevronRight, Filter, Briefcase, Users,
-  Calendar, CheckCircle2, XCircle, Loader2, Star
+  Calendar, CheckCircle2, XCircle, Loader2, Star, Copy
 } from 'lucide-react';
 import { AgreementRepository } from '../../repositories/AgreementRepository';
 import { PlanRepository } from '../../repositories/PlanRepository';
@@ -10,7 +10,7 @@ import { bulkImportService } from '../../services/BulkImportService';
 import { useToast } from '../../context/ToastContext';
 import { Agreement, Plan } from '../../types';
 import { supabase } from '../../services/supabase';
-import PlanFormModal from './PlanFormModal';
+import PlanFormModal, { PLAN_KIND_LABELS, PAYMENT_OPTION_LABELS, buildNewVersionDraft } from './PlanFormModal';
 
 /**
  * Formatea el cupo de consultas bonificadas de un plan para su visualización,
@@ -50,13 +50,26 @@ const Agreements: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'agreements' | 'plans'>('agreements');
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
-  const [planModal, setPlanModal] = useState<{ mode: 'create' | 'edit'; plan: Plan | null } | null>(null);
+  const [planModal, setPlanModal] = useState<{ mode: 'create' | 'edit'; plan: Plan | null; draft?: Omit<Plan, 'id'> | null } | null>(null);
+  const [inUsePlanIds, setInUsePlanIds] = useState<Set<string>>(new Set());
+
+  // A failed lookup leaves the plan editable: the DB trigger still blocks
+  // price/terms changes and the modal surfaces that error.
+  const loadInUse = async (list: Plan[]) => {
+    try {
+      const flags = await Promise.all(list.map(async p => [p.id, await planRepo.isInUse(p.id)] as const));
+      setInUsePlanIds(new Set(flags.filter(([, used]) => used).map(([id]) => id)));
+    } catch (error) {
+      console.error("Error checking plans in use", error);
+    }
+  };
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
 
   const refreshPlans = async () => {
     try {
       const plansData = await planRepo.getAll();
       setPlans(plansData);
+      loadInUse(plansData);
     } catch (error) {
       console.error("Error refreshing plans", error);
     }
@@ -161,6 +174,7 @@ const Agreements: React.FC = () => {
         ]);
         setAgreements(agreementsData);
         setPlans(plansData);
+        loadInUse(plansData);
       } catch (error) {
         console.error("Error loading commercial data", error);
       } finally {
@@ -311,6 +325,9 @@ const Agreements: React.FC = () => {
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Costo Mensual</p>
                   <p className="text-2xl font-bold text-white">${plan.monthlyCost}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    {plan.paidMonths}+{plan.bonusMonths} meses
+                  </p>
                 </div>
               </div>
 
@@ -319,6 +336,33 @@ const Agreements: React.FC = () => {
                 {plan.isDefault && (
                   <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
                     <Star size={10} className="fill-amber-400" /> Predeterminado
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {plan.planKind && (
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-sky-300 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                    {PLAN_KIND_LABELS[plan.planKind]}
+                  </span>
+                )}
+                {plan.paymentOption && (
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
+                    {PAYMENT_OPTION_LABELS[plan.paymentOption]}
+                  </span>
+                )}
+                <span
+                  className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                    plan.isOffered
+                      ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                      : 'text-slate-400 bg-white/5 border-white/10'
+                  }`}
+                >
+                  {plan.isOffered ? 'Ofrecido' : 'Retirado'}
+                </span>
+                {inUsePlanIds.has(plan.id) && (
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                    En uso
                   </span>
                 )}
               </div>
@@ -335,6 +379,10 @@ const Agreements: React.FC = () => {
                 <div className="flex items-center text-sm text-slate-400">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
                   Hasta {plan.maxFamilyMembers} familiares
+                </div>
+                <div className="flex items-center text-sm text-slate-400">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
+                  Comisión asesor: ${plan.advisorCommissionAmount ?? 0}
                 </div>
               </div>
 
@@ -359,12 +407,21 @@ const Agreements: React.FC = () => {
                     </button>
                   )}
                 </div>
+                <div className="flex gap-2">
+                <button
+                  onClick={() => setPlanModal({ mode: 'create', plan: null, draft: buildNewVersionDraft(plan) })}
+                  className="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-white/10 transition-colors inline-flex items-center gap-1"
+                  title="Crear nueva versión con los datos de este plan"
+                >
+                  <Copy size={12} /> Crear nueva versión
+                </button>
                 <button
                   onClick={() => setPlanModal({ mode: 'edit', plan })}
                   className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-colors"
                 >
                   Editar Plan
                 </button>
+                </div>
               </div>
             </GlassCard>
           ))
@@ -390,6 +447,8 @@ const Agreements: React.FC = () => {
       {planModal && (
         <PlanFormModal
           plan={planModal.plan}
+          draft={planModal.draft ?? null}
+          inUse={!!planModal.plan && inUsePlanIds.has(planModal.plan.id)}
           onClose={() => setPlanModal(null)}
           onSaved={handlePlanSaved}
         />

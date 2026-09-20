@@ -6,6 +6,10 @@ import { useToast } from '../../context/ToastContext';
 
 interface PlanFormModalProps {
   plan: Plan | null; // null => create mode, otherwise edit mode
+  /** Create-mode prefill (used by "Crear nueva versión"). Ignored when editing. */
+  draft?: Omit<Plan, 'id'> | null;
+  /** Edit mode: the plan has affiliates/coverage windows, so price/terms are locked. */
+  inUse?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -34,19 +38,86 @@ export function isValidBonusMonths(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
 }
 
-const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved }) => {
+export const PLAN_KIND_LABELS = {
+  individual: 'Individual',
+  familiar: 'Familiar',
+} as const;
+
+export const PAYMENT_OPTION_LABELS = {
+  standard: 'Estándar',
+  card_debit: 'Débito tarjeta',
+  prepaid_6: 'Semestral',
+  prepaid_12: 'Anual',
+} as const;
+
+/**
+ * Mirrors the DB rules on the catalog columns: an offered plan needs kind and
+ * option, Individual only has the 'standard' option, commission >= 0.
+ * Returns a Spanish error message or null when valid.
+ */
+export function validateCatalogFields(input: {
+  isOffered: boolean;
+  planKind: string;
+  paymentOption: string;
+  commission: number;
+}): string | null {
+  if (input.isOffered && !input.planKind) {
+    return 'Un plan ofrecido necesita un tipo (Individual o Familiar).';
+  }
+  if (input.isOffered && !input.paymentOption) {
+    return 'Un plan ofrecido necesita una opción de pago.';
+  }
+  if (input.planKind === 'individual' && input.paymentOption && input.paymentOption !== 'standard') {
+    return 'El plan Individual solo admite la opción de pago Estándar.';
+  }
+  if (!Number.isFinite(input.commission) || input.commission < 0) {
+    return 'La comisión del asesor debe ser un número válido mayor o igual a 0.';
+  }
+  return null;
+}
+
+/** Turns a Supabase/Postgres error into a readable Spanish message. */
+export function mapPlanSaveError(err: any): string {
+  const message: string = err?.message || '';
+  if (err?.code === '23505' || message.includes('plans_one_offered_per_option_idx')) {
+    return 'Ya hay un plan ofrecido con ese tipo y opción de pago. Retire el otro plan primero.';
+  }
+  if (message.includes('esta en uso')) {
+    return 'Este plan está en uso: para cambiar el precio o las condiciones cree una nueva versión.';
+  }
+  return message || 'Error al guardar el plan.';
+}
+
+/** Prefill for "Crear nueva versión": same terms, new name, not offered, never default. */
+export function buildNewVersionDraft(plan: Plan): Omit<Plan, 'id'> {
+  const { id: _id, ...rest } = plan;
+  return {
+    ...rest,
+    name: `${plan.name} (nueva versión)`,
+    isOffered: false,
+    isDefault: false,
+  };
+}
+
+const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, draft = null, inUse = false, onClose, onSaved }) => {
   const { toast } = useToast();
   const isEditing = !!plan;
+  const lockTerms = isEditing && inUse;
+  const source: Partial<Plan> | null = plan ?? draft;
 
-  const [name, setName] = useState(plan?.name ?? '');
-  const [monthlyCost, setMonthlyCost] = useState(plan ? String(plan.monthlyCost) : '');
-  const [isUnlimited, setIsUnlimited] = useState(plan?.isUnlimited ?? false);
+  const [name, setName] = useState(source?.name ?? '');
+  const [monthlyCost, setMonthlyCost] = useState(source ? String(source.monthlyCost) : '');
+  const [isUnlimited, setIsUnlimited] = useState(source?.isUnlimited ?? false);
   const [bonifiedConsultations, setBonifiedConsultations] = useState(
-    plan ? String(plan.bonifiedConsultations) : ''
+    source ? String(source.bonifiedConsultations) : ''
   );
-  const [maxFamilyMembers, setMaxFamilyMembers] = useState(plan ? String(plan.maxFamilyMembers) : '');
-  const [paidMonths, setPaidMonths] = useState(plan ? String(plan.paidMonths) : '1');
-  const [bonusMonths, setBonusMonths] = useState(plan ? String(plan.bonusMonths) : '0');
+  const [maxFamilyMembers, setMaxFamilyMembers] = useState(source ? String(source.maxFamilyMembers) : '');
+  const [paidMonths, setPaidMonths] = useState(source ? String(source.paidMonths) : '1');
+  const [bonusMonths, setBonusMonths] = useState(source ? String(source.bonusMonths) : '0');
+  const [planKind, setPlanKind] = useState<string>(source?.planKind ?? '');
+  const [paymentOption, setPaymentOption] = useState<string>(source?.paymentOption ?? '');
+  const [commission, setCommission] = useState(String(source?.advisorCommissionAmount ?? 0));
+  const [isOffered, setIsOffered] = useState(source?.isOffered ?? false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -86,9 +157,24 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
       return;
     }
 
+    const catalogError = validateCatalogFields({
+      isOffered,
+      planKind,
+      paymentOption,
+      commission: Number(commission),
+    });
+    if (catalogError) {
+      setError(catalogError);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
+        planKind: (planKind || null) as Plan['planKind'],
+        paymentOption: (paymentOption || null) as Plan['paymentOption'],
+        isOffered,
+        advisorCommissionAmount: Number(commission),
         name: name.trim(),
         monthlyCost: parsedCost,
         isUnlimited,
@@ -103,7 +189,13 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
       };
 
       if (isEditing && plan) {
-        await planRepository.update(plan.id, payload);
+        if (lockTerms) {
+          // The DB trigger rejects any change to price/terms of a plan in use;
+          // send only what stays editable.
+          await planRepository.update(plan.id, { name: payload.name, isOffered });
+        } else {
+          await planRepository.update(plan.id, payload);
+        }
         toast('Plan actualizado con éxito.', 'success');
       } else {
         await planRepository.create(payload);
@@ -112,8 +204,9 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
       onSaved();
     } catch (err: any) {
       console.error('Error guardando el plan:', err);
-      setError(err.message || 'Error al guardar el plan.');
-      toast('Error al guardar el plan.', 'error');
+      const message = mapPlanSaveError(err);
+      setError(message);
+      toast(message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -129,7 +222,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
             <Briefcase size={22} />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-white">{isEditing ? `Editar Plan: ${plan?.name}` : 'Nuevo Plan de Cobertura'}</h3>
+            <h3 className="text-xl font-bold text-white">{isEditing ? `Editar Plan: ${plan?.name}` : draft ? 'Nueva versión de plan' : 'Nuevo Plan de Cobertura'}</h3>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">
               {isEditing ? 'Actualizar parámetros' : 'Definir parámetros del plan'}
             </p>
@@ -139,6 +232,12 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
         {error && (
           <div className="bg-rose-500/15 border border-rose-500/20 text-rose-400 text-xs rounded-2xl p-3.5 mb-6 font-medium leading-relaxed">
             {error}
+          </div>
+        )}
+
+        {lockTerms && (
+          <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-2xl p-3.5 mb-6 font-medium leading-relaxed">
+            Este plan está en uso: para cambiar el precio cree una nueva versión. Solo se pueden editar el nombre y si está ofrecido.
           </div>
         )}
 
@@ -155,6 +254,40 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
               placeholder="Ej. Plan Familiar Medinex"
               className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50"
             />
+          </div>
+
+          <fieldset disabled={lockTerms} className="space-y-5 border-0 p-0 m-0 min-w-0 disabled:opacity-60">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                Tipo de Plan:
+              </label>
+              <select
+                value={planKind}
+                onChange={(e) => setPlanKind(e.target.value)}
+                className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50"
+              >
+                <option value="">Sin tipo</option>
+                {Object.entries(PLAN_KIND_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                Opción de Pago:
+              </label>
+              <select
+                value={paymentOption}
+                onChange={(e) => setPaymentOption(e.target.value)}
+                className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50"
+              >
+                <option value="">Sin opción</option>
+                {Object.entries(PAYMENT_OPTION_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -262,6 +395,39 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, onClose, onSaved })
               placeholder={isUnlimited ? '∞ (ilimitado)' : 'Ej. 6'}
               className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50 disabled:opacity-40 disabled:cursor-not-allowed"
             />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+              Comisión fija del asesor ($):
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              required
+              value={commission}
+              onChange={(e) => setCommission(e.target.value)}
+              placeholder="Ej. 25000"
+              className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50"
+            />
+          </div>
+          </fieldset>
+
+          <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="isOffered"
+              checked={isOffered}
+              onChange={(e) => setIsOffered(e.target.checked)}
+              className="w-4 h-4 text-emerald-500 bg-slate-950 border-white/10 rounded focus:ring-emerald-500/20 cursor-pointer"
+            />
+            <label htmlFor="isOffered" className="text-xs font-semibold text-slate-200 cursor-pointer">
+              Ofrecido a nuevas altas
+              <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
+                Solo puede haber un plan ofrecido por tipo y opción de pago. Retirado = no se vende, pero los afiliados lo conservan.
+              </span>
+            </label>
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t border-white/5 mt-2">

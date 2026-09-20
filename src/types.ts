@@ -160,9 +160,9 @@ export interface Plan {
   /** Free promo duration in months, added on top of paidMonths. DB CHECK: >= 0. */
   bonusMonths: number;
   /** Sellable kind. DB column plan_kind. */
-  planKind?: 'individual' | 'familiar';
+  planKind?: 'individual' | 'familiar' | null;
   /** Payment option this plan row represents (standard, card_debit, prepaid_6, prepaid_12). */
-  paymentOption?: 'standard' | 'card_debit' | 'prepaid_6' | 'prepaid_12';
+  paymentOption?: 'standard' | 'card_debit' | 'prepaid_6' | 'prepaid_12' | null;
   /** True when this row is sellable to new sign-ups right now. */
   isOffered?: boolean;
   /** Fixed advisor commission paid per sale of this plan. */

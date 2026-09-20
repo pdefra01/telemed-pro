@@ -305,4 +305,68 @@ describe('PlanRepository', () => {
       await expect(repository.setDefault('deleted-plan-id')).rejects.toThrow();
     });
   });
+
+  describe('create/update new catalog fields', () => {
+    it('persists kind, payment option, offered flag and advisor commission as snake_case', async () => {
+      const singleMock = vi.fn().mockResolvedValue({ data: { id: 'p', name: 'x' }, error: null });
+      const selectMock = vi.fn().mockReturnValue({ single: singleMock });
+      const insertMock = vi.fn().mockReturnValue({ select: selectMock });
+      vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+      await repository.create({
+        name: 'x', monthlyCost: 1, bonifiedConsultations: 0, isUnlimited: true, maxFamilyMembers: 4,
+        isDefault: false, paidMonths: 1, bonusMonths: 0,
+        planKind: 'familiar', paymentOption: 'standard', isOffered: false, advisorCommissionAmount: 25000,
+      });
+
+      const row = insertMock.mock.calls[0][0][0];
+      expect(row).toMatchObject({
+        plan_kind: 'familiar', payment_option: 'standard', is_offered: false, advisor_commission_amount: 25000,
+      });
+    });
+
+    it('sends null kind/option when a withdrawn plan has none', async () => {
+      const singleMock = vi.fn().mockResolvedValue({ data: { id: 'p' }, error: null });
+      const selectMock = vi.fn().mockReturnValue({ single: singleMock });
+      const eqMock = vi.fn().mockReturnValue({ select: selectMock });
+      const updateMock = vi.fn().mockReturnValue({ eq: eqMock });
+      vi.mocked(supabase.from).mockReturnValue({ update: updateMock } as any);
+
+      await repository.update('p', { planKind: null, paymentOption: null } as any);
+
+      expect(updateMock.mock.calls[0][0]).toEqual({ plan_kind: null, payment_option: null });
+    });
+  });
+
+  describe('isInUse', () => {
+    const mockCounts = (profiles: number, windows: number) => {
+      vi.mocked(supabase.from).mockImplementation(((table: string) => ({
+        select: () => ({
+          eq: () => Promise.resolve({ count: table === 'profiles' ? profiles : windows, error: null }),
+        }),
+      })) as any);
+    };
+
+    it('is true when an affiliate has the plan', async () => {
+      mockCounts(2, 0);
+      expect(await repository.isInUse('p')).toBe(true);
+    });
+
+    it('is true when only a coverage window froze the plan', async () => {
+      mockCounts(0, 1);
+      expect(await repository.isInUse('p')).toBe(true);
+    });
+
+    it('is false when nothing references the plan', async () => {
+      mockCounts(0, 0);
+      expect(await repository.isInUse('p')).toBe(false);
+    });
+
+    it('throws on query error instead of reporting not-in-use', async () => {
+      vi.mocked(supabase.from).mockImplementation((() => ({
+        select: () => ({ eq: () => Promise.resolve({ count: null, error: { message: 'boom' } }) }),
+      })) as any);
+      await expect(repository.isInUse('p')).rejects.toBeTruthy();
+    });
+  });
 });
