@@ -33,6 +33,7 @@ import { appointmentRepository } from '../../repositories/AppointmentRepository'
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
 import { pharmacyRepository } from '../../repositories/PharmacyRepository';
+import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { supabase } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
 import '../../styles/animations.css';
@@ -43,6 +44,13 @@ import {
   decryptPrivateKey,
   signPrescription
 } from '../../utils/crypto';
+
+const WHATSAPP_ERROR_MESSAGES: Record<string, string> = {
+  invalid_phone: 'El paciente no tiene un teléfono válido cargado.',
+  session_not_ready: 'El WhatsApp de la empresa no está conectado.',
+  whatsapp_disabled: 'El envío por WhatsApp no está configurado.',
+};
+const WHATSAPP_GENERIC_ERROR = 'No se pudo enviar el WhatsApp. Podés reintentar.';
 
 const COMMON_MEDS = [
   "Amoxicilina 500mg",
@@ -208,6 +216,14 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   const [appointmentData, setAppointmentData] = useState<any>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [whatsappStatus, setWhatsappStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+  const [whatsappError, setWhatsappError] = useState<string | null>(null);
+  const redirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Never navigate after the doctor has already left this page.
+  useEffect(() => () => {
+    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+  }, []);
 
   const [addPrescription, setAddPrescription] = useState(false);
   const [medications, setMedications] = useState<{ name: string; instructions: string }[]>([]);
@@ -360,16 +376,20 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                     </button>
 
                     <div className="grid grid-cols-2 gap-2">
-                      {/* Botón WhatsApp */}
-                      <a 
-                        href={`https://wa.me/?text=Hola%20${encodeURIComponent(appointmentData?.patientName || '')}!%20Te%20comparto%20la%20receta%20m%C3%A9dica%20generada%20durante%20nuestra%20consulta%20en%20MEDINEX:%20${encodeURIComponent(pdfUrl)}`}
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="py-3 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-2xl transition-all flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer active:scale-95"
+                      {/* Botón WhatsApp (envío desde el número de la empresa) */}
+                      <button
+                        type="button"
+                        onClick={sendPrescriptionWhatsapp}
+                        disabled={whatsappStatus === 'sending' || whatsappStatus === 'sent'}
+                        className="py-3 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-2xl transition-all flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer active:scale-95 disabled:opacity-70 disabled:cursor-default"
                       >
                         <MessageSquare size={14} />
-                        WhatsApp
-                      </a>
+                        {whatsappStatus === 'sending'
+                          ? 'Enviando por WhatsApp…'
+                          : whatsappStatus === 'sent'
+                            ? 'Enviado por WhatsApp'
+                            : 'Reenviar por WhatsApp'}
+                      </button>
 
                       {/* Botón Email */}
                       <a 
@@ -380,6 +400,10 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                         Email
                       </a>
                     </div>
+
+                    {whatsappStatus === 'failed' && whatsappError && (
+                      <p role="alert" className="text-[11px] font-medium text-amber-400 leading-snug">{whatsappError}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -488,6 +512,35 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     setMedications(newMedications);
   };
 
+  // Delivers the prescription to the patient from the company's WhatsApp number
+  // (server-side): the doctor's own number is never used or shown.
+  const sendPrescriptionWhatsapp = async (): Promise<boolean> => {
+    setWhatsappStatus('sending');
+    setWhatsappError(null);
+    try {
+      const prescription = await prescriptionRepository.getPrescriptionByAppointmentId(appointmentData.id);
+      if (!prescription) throw new Error('prescription_not_found');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/prescriptions/${prescription.id}/send-whatsapp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token || ''}` },
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (response.ok || body?.status === 'already_sent') {
+        setWhatsappStatus('sent');
+        return true;
+      }
+      setWhatsappError(WHATSAPP_ERROR_MESSAGES[body?.reason] || WHATSAPP_GENERIC_ERROR);
+    } catch (err) {
+      console.error('Error enviando la receta por WhatsApp:', err);
+      setWhatsappError(WHATSAPP_GENERIC_ERROR);
+    }
+    setWhatsappStatus('failed');
+    return false;
+  };
+
   const submitFinalization = async (sig?: string, pubKey?: string) => {
     setSaving(true);
     setClosureStatus('processing');
@@ -523,17 +576,21 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       // Artificial delay for premium feel of the steps
       await new Promise(resolve => setTimeout(resolve, 2000));
       
+      let whatsappDelivered = true;
       if (data?.pdfUrl) {
         setPdfUrl(data.pdfUrl);
-        console.log("PDF Generated:", data.pdfUrl);
+        whatsappDelivered = await sendPrescriptionWhatsapp();
       }
       
       setClosureStatus('success');
 
-      // Redirección automática al panel después de 3.5s
-      setTimeout(() => {
-        navigate('/doctor', { replace: true });
-      }, 3500);
+      // Redirección automática al panel después de 3.5s, salvo que el envío por
+      // WhatsApp haya fallado: el médico necesita ver el aviso y poder reintentar.
+      if (whatsappDelivered) {
+        redirectTimerRef.current = setTimeout(() => {
+          navigate('/doctor', { replace: true });
+        }, 3500);
+      }
 
     } catch (err: any) {
       console.error('Error saving consultation data:', err);
