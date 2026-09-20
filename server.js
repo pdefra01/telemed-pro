@@ -15,7 +15,7 @@ import {
 import { buildPatientAuthUser, sendActivationEmail } from './server/affiliateActivation.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { resolveSellablePlan, preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
-import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
+import { createAdhesionPreapproval, createAdhesionCheckoutPreference, postAdhesionCheckoutPayment } from './server/adhesionPayments.js';
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
@@ -1271,6 +1271,16 @@ app.post('/api/approve-adhesion', requireAuth, requireAdmin, async (req, res) =>
       .from('adhesion_requests')
       .update({ status: 'approved', approved_profile_id: userId })
       .eq('id', adhesionId);
+
+    // 5a. A Checkout Pro payment that arrived before the approval is posted to
+    // the ledger now (idempotent; a no-op when unpaid or already posted).
+    // Best-effort: never fails the approval; the payment webhook retries it.
+    const ledgerPost = await postAdhesionCheckoutPayment(supabaseAdmin, adhesionId);
+    if (!ledgerPost.ok) {
+      console.error('[approve-adhesion] Ledger posting of the checkout payment failed:', ledgerPost.error);
+    } else if (ledgerPost.posted) {
+      console.log(`[approve-adhesion] Checkout payment posted to the ledger (invoice ${ledgerPost.invoiceId}).`);
+    }
 
     // 5b. Mercado Pago débito-automático link back-fill (design D-F "Link
     // back-fill at approval", steps a-d). Best-effort and NON-BLOCKING: a

@@ -40,6 +40,8 @@ Desde la sección **Mi Perfil**, el afiliado titular puede mantener actualizada 
 | Prepago semestral / anual | Suscripción con cobro recurrente cada 6 / 12 meses |
 | Familiar con efectivo, transferencia, Rapipago o link | Pago único del primer período con Checkout Pro; los períodos siguientes se cobran por factura |
 
+**Primer pago con Checkout Pro:** una vez acreditado y aprobada la solicitud, el pago queda asentado en la cuenta del afiliado (factura del mes pagada, movimiento de cargo y de pago con recibo, plan activo y cobertura abierta si no la tenía). Da igual si el pago llega antes o después de la aprobación. Si se abona más que el importe de la factura, la diferencia queda como saldo a favor. Si el asiento no puede completarse por un motivo de negocio (por ejemplo, el afiliado no tiene plan), la solicitud queda en revisión del administrador; los errores técnicos se reintentan solos.
+
 Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para nuevas adhesiones: cada afiliado conserva el plan y el precio con los que se adhirió.
 
 **Administradores (`Planes`)**: la lista muestra tipo, opción de pago, si está ofrecido, precio, meses, tamaño y comisión del asesor. Un plan en uso es de solo lectura; para cambiar precio o condiciones use **Crear nueva version** (al ofrecer la nueva, la anterior se retira sola).
