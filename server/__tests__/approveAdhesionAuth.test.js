@@ -166,3 +166,19 @@ describe('/api/approve-adhesion auth gate (D7)', () => {
     expect(reachedHandler).toBe(true);
   });
 });
+
+describe('account-creation routes registration (server.js source)', () => {
+  // These routes create auth users with an admin-chosen password, so they
+  // must never be reachable anonymously.
+  const serverSource = readFileSync(resolve(__dirname, '..', '..', 'server.js'), 'utf-8');
+
+  it.each(['/api/create-staff', '/api/create-patient', '/api/create-patient-bulk'])(
+    'registers POST %s with requireAuth and requireAdmin, in that order',
+    (route) => {
+      const pattern = new RegExp(
+        String.raw`app\.post\(\s*['"]${route}['"]\s*,\s*requireAuth\s*,\s*requireAdmin\s*,`
+      );
+      expect(serverSource).toMatch(pattern);
+    }
+  );
+});

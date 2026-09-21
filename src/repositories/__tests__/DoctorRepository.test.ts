@@ -10,6 +10,9 @@ vi.mock('../../services/supabase', () => ({
     eq: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-token' } } }),
+    },
   },
 }));
 
@@ -55,6 +58,24 @@ describe('DoctorRepository (TDD)', () => {
       expect(specialties).toContain('Cardiología');
       expect(specialties).toContain('Pediatría');
       expect(specialties).toHaveLength(2); // Unique values
+    });
+  });
+
+  describe('createDoctor', () => {
+    it('sends the admin session token as a Bearer Authorization header', async () => {
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Token de autorización requerido.' }),
+      } as Response);
+
+      await expect(
+        repository.createDoctor({ email: 'd@test.com', name: 'Dr X', specialty: 'Cardiología', password: 'pw' })
+      ).rejects.toThrow('Token de autorización requerido.');
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/create-staff', expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+      }));
     });
   });
 });

@@ -626,7 +626,7 @@ app.post('/api/livekit-token', async (req, res) => {
  * 
  * Body: { email, password, full_name, role, specialty? }
  */
-app.post('/api/create-staff', async (req, res) => {
+app.post('/api/create-staff', requireAuth, requireAdmin, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(503).json({ error: 'Servicio de administración no configurado.' });
   }
@@ -676,7 +676,7 @@ app.post('/api/create-staff', async (req, res) => {
  * Si el email no se proporciona, autogenera uno basado en el DNI ([DNI]@medinex-paciente.com).
  * El trigger handle_new_user crea automáticamente el perfil en public.profiles.
  */
-app.post('/api/create-patient', async (req, res) => {
+app.post('/api/create-patient', requireAuth, requireAdmin, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(503).json({ error: 'Servicio de administración no configurado.' });
   }
@@ -728,7 +728,7 @@ app.post('/api/create-patient', async (req, res) => {
  * Crea múltiples pacientes en Supabase Auth a partir de un array de JSON.
  * Procesa en lotes secuenciales de a 5 para evitar rate limits de la API de autenticación.
  */
-app.post('/api/create-patient-bulk', async (req, res) => {
+app.post('/api/create-patient-bulk', requireAuth, requireAdmin, async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(503).json({ error: 'Servicio de administración no configurado.' });
   }
