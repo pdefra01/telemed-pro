@@ -8,6 +8,7 @@ import { useToast } from '../../context/ToastContext';
 import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../../repositories/AffiliateRepository';
 import { adhesionRepository, AdhesionRequest } from '../../repositories/AdhesionRepository';
 import { AffiliateLedgerModal } from './AffiliateLedgerModal';
+import { AdhesionEmailEditor } from './AdhesionEmailEditor';
 import { planRepository } from '../../repositories/PlanRepository';
 import { Patient, Plan } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
@@ -282,6 +283,18 @@ const Affiliates: React.FC = () => {
       toast(error.message || "Error al aprobar afiliación", "error");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateRequestEmail = async (id: string, email: string) => {
+    try {
+      const saved = await adhesionRepository.updateApplicationEmail(id, email);
+      setSelectedRequest((prev) => (prev && prev.id === id ? { ...prev, titular_email: saved, email_verified: false } : prev));
+      loadRequests();
+      toast("Email de la solicitud actualizado", "success");
+    } catch (error: any) {
+      toast(error.message || "Error al actualizar el email", "error");
+      throw error;
     }
   };
 
@@ -898,7 +911,11 @@ const Affiliates: React.FC = () => {
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase block">Email</span>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-sm text-white font-semibold break-all">{selectedRequest.titular_email}</span>
+                      <AdhesionEmailEditor
+                        email={selectedRequest.titular_email}
+                        editable={!selectedRequest.status || selectedRequest.status === 'pending'}
+                        onSave={(email) => handleUpdateRequestEmail(selectedRequest.id!, email)}
+                      />
                       {selectedRequest.email_verified ? (
                         <span className="text-[8px] font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1 py-0.5 rounded flex items-center gap-0.5 uppercase tracking-wider">
                           <CheckCircle2 size={8} /> Verified

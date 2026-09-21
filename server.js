@@ -17,6 +17,7 @@ import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp
 import { resolveSellablePlan, preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference, postAdhesionCheckoutPayment } from './server/adhesionPayments.js';
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
+import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
 import { buildRequireAdmin } from './server/auth.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
@@ -1080,6 +1081,9 @@ app.post('/api/email-verification/verify', async (req, res) => {
 });
 
 app.post('/api/adhesion/check-duplicates', checkDuplicatesHandler({ supabaseAdmin }));
+
+// PATCH /api/adhesion-requests/:id/email — admin corrects the email of a pending request.
+app.patch('/api/adhesion-requests/:id/email', requireAuth, requireAdmin, updateAdhesionEmailHandler({ supabaseAdmin }));
 
 /**
  * POST /api/approve-adhesion
