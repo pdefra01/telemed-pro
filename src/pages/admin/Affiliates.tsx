@@ -50,6 +50,8 @@ const Affiliates: React.FC = () => {
   // no deshabilitar el botón "Renovar cobertura" de TODAS las filas mientras
   // se renueva (o edita) una sola.
   const [renewingId, setRenewingId] = useState<string | null>(null);
+  // Fila con un reenvío de mail de activación en curso (deshabilita sólo su botón).
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     lastName: '',
     firstName: '',
@@ -139,6 +141,18 @@ const Affiliates: React.FC = () => {
         })
     );
     setCoverageActiveMap(Object.fromEntries(entries.filter((e): e is readonly [string, boolean] => e !== null)));
+  };
+
+  const handleResendActivation = async (patient: Patient) => {
+    setResendingId(patient.id);
+    try {
+      await adhesionRepository.resendActivationEmail(patient.id);
+      toast(`Mail de activación enviado a ${patient.email}`, "success");
+    } catch (error: any) {
+      toast(error?.message || "Error al reenviar el mail de activación", "error");
+    } finally {
+      setResendingId(null);
+    }
   };
 
   const handleRenewCoverage = async (patient: Patient) => {
@@ -491,6 +505,14 @@ const Affiliates: React.FC = () => {
                           title="Restablecer Contraseña"
                         >
                           <Key size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleResendActivation(patient)}
+                          disabled={resendingId === patient.id}
+                          className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5 disabled:opacity-50"
+                          title="Reenviar mail de activación"
+                        >
+                          {resendingId === patient.id ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
                         </button>
                         <button
                           onClick={() => handleEdit(patient)}

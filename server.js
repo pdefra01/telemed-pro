@@ -18,6 +18,7 @@ import { resolveSellablePlan, preapprovalTerms, computeAdvisorCommissions } from
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference, postAdhesionCheckoutPayment } from './server/adhesionPayments.js';
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
+import { resendActivationHandler } from './server/resendActivation.js';
 import { buildRequireAdmin } from './server/auth.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
@@ -1084,6 +1085,14 @@ app.post('/api/adhesion/check-duplicates', checkDuplicatesHandler({ supabaseAdmi
 
 // PATCH /api/adhesion-requests/:id/email — admin corrects the email of a pending request.
 app.patch('/api/adhesion-requests/:id/email', requireAuth, requireAdmin, updateAdhesionEmailHandler({ supabaseAdmin }));
+
+// Admin: resend the activation email to an approved affiliate without a password.
+app.post(
+  '/api/resend-activation',
+  requireAuth,
+  requireAdmin,
+  resendActivationHandler({ supabaseAdmin, createMailTransporter, fromAddress: FROM_ADDRESS, publicAppUrl: PUBLIC_APP_URL })
+);
 
 /**
  * POST /api/approve-adhesion

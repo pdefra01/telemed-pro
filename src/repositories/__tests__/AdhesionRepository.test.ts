@@ -427,4 +427,30 @@ describe('AdhesionRepository', () => {
       await expect(repository.updateApplicationEmail('a', 'b@test.com')).rejects.toThrow('Error al actualizar el email de la solicitud.');
     });
   });
+
+  describe('resendActivationEmail', () => {
+    beforeEach(() => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: { access_token: 'jwt-1' } } } as any);
+    });
+
+    it('POSTs the profileId with the bearer token', async () => {
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, sent: true }) } as any);
+      await repository.resendActivationEmail('p1');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/resend-activation', expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer jwt-1' }),
+        body: JSON.stringify({ profileId: 'p1' }),
+      }));
+    });
+
+    it('surfaces the server message on error', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Esperá 30 segundos.' }) } as any);
+      await expect(repository.resendActivationEmail('p1')).rejects.toThrow('Esperá 30 segundos.');
+    });
+
+    it('falls back to a generic message when the body is not JSON', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: false, json: async () => { throw new Error('x'); } } as any);
+      await expect(repository.resendActivationEmail('p1')).rejects.toThrow('Error al reenviar el mail de activación.');
+    });
+  });
 });
