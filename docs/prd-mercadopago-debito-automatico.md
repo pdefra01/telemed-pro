@@ -9,7 +9,7 @@
 
 ## 1. Objetivo
 
-Permitir que un paciente pueda adherirse al plan de cobertura médica y autorizar un débito automático mensual a través de Mercado Pago, sin necesidad de ingresar los datos de su tarjeta directamente en la plataforma. Todo alta pasa por un paso obligatorio de Mercado Pago (suscripción o Checkout Pro, ver 2.1). Para los débitos automáticos, el cobro se realiza según el día elegido por el afiliado en la adhesión (**día 1 o día 10 de cada mes**; por defecto día 10).
+Permitir que un paciente pueda adherirse al plan de cobertura médica y autorizar un débito automático mensual a través de Mercado Pago, sin necesidad de ingresar los datos de su tarjeta directamente en la plataforma. Todo alta pasa por un paso obligatorio de Mercado Pago (suscripción o Checkout Pro, ver 2.1). Para los débitos automáticos, el cobro se realiza según el día elegido por el afiliado en la adhesión (dos rangos: **del 1 al 10**, empleados en actividad, que se cobra el día 10; y **del 10 al 20**, jubilados, que se cobra el día 20; por defecto el primero). Los días salen del ajuste `debit_billing_days`.
 
 ---
 
@@ -24,7 +24,7 @@ Permitir que un paciente pueda adherirse al plan de cobertura médica y autoriza
         ↓
 [Paciente] Inicia sesión en MP y autoriza la tarjeta
         ↓
-[MP] Notifica via Webhook al backend en la fecha programada (día 1 o 10 de cada mes)
+[MP] Notifica via Webhook al backend en la fecha programada (día 10 o 20 de cada mes, según el rango elegido)
         ↓
 [Backend] Verifica el pago, registra el movimiento con número de recibo
         ↓
@@ -108,7 +108,7 @@ Recibe notificaciones de Mercado Pago.
 
 ## 5. Ciclo de Cobro Mensual
 
-- **Día del cobro:** siempre el **10 de cada mes**.
+- **Día del cobro:** el **10** (rango 1 al 10, empleados en actividad) o el **20** (rango 10 al 20, jubilados), según lo que eligió el afiliado.
 - **Lógica del `start_date`:**
   - Si el afiliado se adhiere ANTES del día 10 → primer cobro el día 10 del mes actual.
   - Si el afiliado se adhiere el día 10 o DESPUÉS → primer cobro el día 10 del mes siguiente (recibe el resto del mes gratis).

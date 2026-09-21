@@ -10,6 +10,7 @@ import { producerRepository } from '../repositories/ProducerRepository';
 import { planRepository } from '../repositories/PlanRepository';
 import { systemSettingsRepository } from '../repositories/SystemSettingsRepository';
 import { Plan } from '../types';
+import { billingDayLabel, DEFAULT_BILLING_DAYS, RECOMMENDED_BILLING_DAY } from '../utils/billingDays';
 import logoMedinex from '../logo_medinex.jpeg';
 
 // Toggle to suspend email OTP verification without removing the feature.
@@ -205,7 +206,7 @@ export const AdhesionForm: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [availableBillingDays, setAvailableBillingDays] = useState<number[]>([1, 10]);
+  const [availableBillingDays, setAvailableBillingDays] = useState<number[]>(DEFAULT_BILLING_DAYS);
 
   useEffect(() => {
     const fetchBillingDays = async () => {
@@ -220,7 +221,7 @@ export const AdhesionForm: React.FC = () => {
           }));
         }
       } catch (err) {
-        console.warn("Could not load debit_billing_days from settings, using default [1, 10]", err);
+        console.warn("Could not load debit_billing_days from settings, using the default days", err);
       }
     };
     fetchBillingDays();
@@ -240,7 +241,7 @@ export const AdhesionForm: React.FC = () => {
     familiarOption: 'card_debit',
     standardMethod: 'transfer',
     paymentDetail: 'Tarjeta de Crédito Visa',
-    preferredBillingDay: 10, // 1 | 10
+    preferredBillingDay: RECOMMENDED_BILLING_DAY,
   });
 
   // Every price comes from the offered plan rows; nothing is computed client-side
@@ -1168,7 +1169,7 @@ export const AdhesionForm: React.FC = () => {
                       >
                         {availableBillingDays.map(day => (
                           <option key={day} value={day}>
-                            Día {day} de cada mes {day === 10 ? '(Recomendado)' : ''}
+                            {billingDayLabel(day)}
                           </option>
                         ))}
                       </select>
