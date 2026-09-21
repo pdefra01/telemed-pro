@@ -8,6 +8,9 @@ vi.mock('../../services/supabase', () => {
     supabase: {
       from: vi.fn(),
       rpc: vi.fn(),
+      auth: {
+        getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-token' } } }),
+      },
     }
   };
 });
@@ -74,6 +77,7 @@ describe('AffiliateRepository', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/create-patient', expect.objectContaining({
       method: 'POST',
+      headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
       body: JSON.stringify({
         full_name: 'Juan Pérez',
         dni: '35123456',
@@ -456,6 +460,7 @@ describe('AffiliateRepository', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/create-patient-bulk', expect.objectContaining({
       method: 'POST',
+      headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
       body: JSON.stringify([
         { name: 'Patient 1', email: 'p1@test.com', dni: '11111111', password: '11111111' },
         { name: 'Patient 2', email: 'p2@test.com', dni: '22222222', password: '22222222' }

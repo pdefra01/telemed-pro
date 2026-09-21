@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { buildRequireAdmin } from '../auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,22 +36,6 @@ function buildRequireAuth(supabaseAdmin) {
     } catch (err) {
       return res.status(401).json({ error: 'Fallo de autenticación.' });
     }
-  };
-}
-
-function buildRequireAdmin(supabaseAdmin) {
-  return async (req, res, next) => {
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', req.user.id)
-      .single();
-
-    const role = profile?.role || req.user.user_metadata?.role;
-    if (role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
-    }
-    next();
   };
 }
 
@@ -165,4 +150,20 @@ describe('/api/approve-adhesion auth gate (D7)', () => {
     expect(res.statusCode).toBe(200);
     expect(reachedHandler).toBe(true);
   });
+});
+
+describe('account-creation routes registration (server.js source)', () => {
+  // These routes create auth users with an admin-chosen password, so they
+  // must never be reachable anonymously.
+  const serverSource = readFileSync(resolve(__dirname, '..', '..', 'server.js'), 'utf-8');
+
+  it.each(['/api/create-staff', '/api/create-patient', '/api/create-patient-bulk'])(
+    'registers POST %s with requireAuth and requireAdmin, in that order',
+    (route) => {
+      const pattern = new RegExp(
+        String.raw`app\.post\(\s*['"]${route}['"]\s*,\s*requireAuth\s*,\s*requireAdmin\s*,`
+      );
+      expect(serverSource).toMatch(pattern);
+    }
+  );
 });

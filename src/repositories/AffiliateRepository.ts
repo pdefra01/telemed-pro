@@ -145,10 +145,12 @@ export class AffiliateRepository {
    * Crea un nuevo afiliado
    */
   async createAffiliate(data: Partial<Patient>): Promise<Patient> {
+    const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/api/create-patient', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
       },
       body: JSON.stringify({
         full_name: data.name,
@@ -231,10 +233,12 @@ export class AffiliateRepository {
       password: data.dni, // Password por defecto es su DNI
     }));
 
+    const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/api/create-patient-bulk', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
       },
       body: JSON.stringify(patientsPayload),
     });
