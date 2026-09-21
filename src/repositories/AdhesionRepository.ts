@@ -214,6 +214,30 @@ export class AdhesionRepository {
   }
 
   /**
+   * Corrige el email del titular de una solicitud pendiente (solo admin).
+   * Devuelve el email normalizado que guardó el servidor.
+   */
+  async updateApplicationEmail(id: string, email: string): Promise<string> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`/api/adhesion-requests/${encodeURIComponent(id)}/email`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al actualizar el email de la solicitud.');
+    }
+
+    const result = await response.json().catch(() => ({}));
+    return result?.email || email;
+  }
+
+  /**
    * Rechaza una solicitud de adhesión cambiándole el estado
    */
   async rejectApplication(id: string): Promise<void> {

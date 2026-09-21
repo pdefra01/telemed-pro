@@ -384,4 +384,47 @@ describe('AdhesionRepository', () => {
       );
     });
   });
+
+  describe('updateApplicationEmail', () => {
+    it('PATCHes the endpoint with the session Bearer token and returns the saved email', async () => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
+        data: { session: { access_token: 'admin-jwt-9' } }
+      } as any);
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, email: 'new@test.com', changed: true })
+      } as Response);
+
+      const email = await repository.updateApplicationEmail('adhesion-9', 'New@Test.com');
+
+      expect(email).toBe('new@test.com');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion-requests/adhesion-9/email', expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({ 'Authorization': 'Bearer admin-jwt-9' }),
+        body: JSON.stringify({ email: 'New@Test.com' })
+      }));
+    });
+
+    it('surfaces the server error message (409 email in use)', async () => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({ data: { session: { access_token: 'x' } } } as any);
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Ese email ya pertenece a otra cuenta. Ingresá otro email.' })
+      } as Response);
+
+      await expect(repository.updateApplicationEmail('a', 'b@test.com')).rejects.toThrow(
+        'Ese email ya pertenece a otra cuenta. Ingresá otro email.'
+      );
+    });
+
+    it('falls back to a generic message when the error body is not JSON', async () => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({ data: { session: null } } as any);
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        json: async () => { throw new Error('not json'); }
+      } as unknown as Response);
+
+      await expect(repository.updateApplicationEmail('a', 'b@test.com')).rejects.toThrow('Error al actualizar el email de la solicitud.');
+    });
+  });
 });
