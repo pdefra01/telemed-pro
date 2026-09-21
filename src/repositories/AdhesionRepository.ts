@@ -238,6 +238,27 @@ export class AdhesionRepository {
   }
 
   /**
+   * Reenvía el mail de activación a un afiliado ya aprobado (solo admin).
+   * Lanza con el mensaje del servidor si falla (cooldown, SMTP, email placeholder).
+   */
+  async resendActivationEmail(profileId: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch('/api/resend-activation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ profileId }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al reenviar el mail de activación.');
+    }
+  }
+
+  /**
    * Rechaza una solicitud de adhesión cambiándole el estado
    */
   async rejectApplication(id: string): Promise<void> {
