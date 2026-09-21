@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { buildRequireAdmin } from '../auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,22 +36,6 @@ function buildRequireAuth(supabaseAdmin) {
     } catch (err) {
       return res.status(401).json({ error: 'Fallo de autenticación.' });
     }
-  };
-}
-
-function buildRequireAdmin(supabaseAdmin) {
-  return async (req, res, next) => {
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', req.user.id)
-      .single();
-
-    const role = profile?.role || req.user.user_metadata?.role;
-    if (role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
-    }
-    next();
   };
 }
 

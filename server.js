@@ -17,6 +17,7 @@ import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp
 import { resolveSellablePlan, preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference, postAdhesionCheckoutPayment } from './server/adhesionPayments.js';
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
+import { buildRequireAdmin } from './server/auth.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
 
@@ -133,19 +134,7 @@ const requireAuth = async (req, res, next) => {
  * Middleware para exigir rol admin. Debe usarse después de requireAuth
  * (depende de req.user).
  */
-const requireAdmin = async (req, res, next) => {
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('role')
-    .eq('id', req.user.id)
-    .single();
-
-  const role = profile?.role || req.user.user_metadata?.role;
-  if (role !== 'admin') {
-    return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
-  }
-  next();
-};
+const requireAdmin = buildRequireAdmin(supabaseAdmin);
 
 // ═══════════════════════════════════════════════════════════════════════
 // Prescription delivery over WhatsApp (odd/whatsapp-prescription-delivery)
