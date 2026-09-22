@@ -491,25 +491,6 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                     <Clock size={40} />
                                 </div>
                                 <p className="text-slate-500 mb-8 font-medium text-lg italic">"Tu bienestar comienza con la prevención."</p>
-                                <Button 
-                                    variant="outline"
-                                    onClick={async () => {
-                                        try {
-                                            if (quotaStatus?.isOverQuota) {
-                                                toast('⚠️ Atención: Has alcanzado el límite de consultas bonificadas de tu plan. Este turno se registrará como sobre-cupo.', 'warning');
-                                            } else {
-                                                toast('Generando turno demo...', 'info');
-                                            }
-                                            await appointmentRepository.createDemoAppointment(user.id);
-                                            window.location.reload();
-                                        } catch (error: any) {
-                                            toast(error.message || 'Error al generar el turno', 'error');
-                                        }
-                                    }}
-                                    className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 rounded-2xl px-10 py-6 font-bold uppercase tracking-widest text-xs"
-                                >
-                                    Generar Acceso de Prueba
-                                </Button>
                             </div>
                         )}
                     </div>
