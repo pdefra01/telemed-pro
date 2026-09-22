@@ -736,7 +736,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         <h3 className="font-bold text-xl text-white mb-6 tracking-tight">Asistencia Inmediata</h3>
                         <p className="text-xs text-slate-400 font-medium leading-relaxed mb-8">¿Necesitás ayuda técnica o médica urgente?</p>
                         <a
-                            href="https://wa.me/1234567890" target="_blank" rel="noreferrer"
+                            href="https://wa.me/5493874123873" target="_blank" rel="noreferrer"
                             className="p-5 bg-emerald-500 hover:bg-emerald-400 rounded-[1.5rem] transition-all flex items-center justify-center space-x-4 group shadow-[0_10px_30px_rgba(16,185,129,0.3)] h-16"
                         >
                                 <Phone size={22} className="text-white group-hover:scale-110 transition-transform" />
