@@ -16,6 +16,7 @@ import { buildPatientAuthUser, sendActivationEmail } from './server/affiliateAct
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { resolveSellablePlan, preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference, postAdhesionCheckoutPayment } from './server/adhesionPayments.js';
+import { sendAdhesionPaymentLink } from './server/adhesionPaymentLinkDelivery.js';
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
 import { resendActivationHandler } from './server/resendActivation.js';
@@ -298,6 +299,27 @@ app.post('/api/adhesion/checkout-preference', async (req, res) => {
   const { status, body } = await createAdhesionCheckoutPreference(
     { supabaseAdmin, mpFetch, publicAppUrl: PUBLIC_APP_URL },
     { adhesionRequestId: req.body?.adhesionRequestId }
+  );
+  return res.status(status).json(body);
+});
+
+/**
+ * POST /api/adhesion/:id/send-payment-link
+ * Public, mirrors /api/adhesion/preapproval. Re-fetches (or creates) a fresh
+ * MP payment link for the adhesion request (server/adhesionPaymentLinkDelivery.js)
+ * and dispatches it through the requested channel (`whatsapp` | `email`)
+ * instead of only showing it in the browser that completed the form.
+ */
+app.post('/api/adhesion/:id/send-payment-link', async (req, res) => {
+  if (!mercadoPagoEnabled) {
+    return res.status(503).json({ ok: false, error: 'Servicio de pagos no configurado.' });
+  }
+  if (req.body?.channel === 'whatsapp' && !waha) {
+    return res.status(503).json({ ok: false, error: 'Servicio de WhatsApp no configurado.' });
+  }
+  const { status, body } = await sendAdhesionPaymentLink(
+    { supabaseAdmin, mpFetch, publicAppUrl: PUBLIC_APP_URL, nextBillingDate, waha, createMailTransporter, fromAddress: FROM_ADDRESS },
+    { adhesionRequestId: req.params.id, channel: req.body?.channel }
   );
   return res.status(status).json(body);
 });

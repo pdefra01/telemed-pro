@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  User, CreditCard, Users, HeartPulse, FileText, CheckCircle2, 
-  ArrowLeft, ArrowRight, Plus, Trash2, ShieldAlert, Sparkles, Loader2, RefreshCw 
+import {
+  User, CreditCard, Users, HeartPulse, FileText, CheckCircle2,
+  ArrowLeft, ArrowRight, Plus, Trash2, ShieldAlert, Sparkles, Loader2, RefreshCw,
+  MessageCircle, Copy, Mail, AlertCircle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { adhesionRepository, AdhesionRequest } from '../repositories/AdhesionRepository';
@@ -326,6 +327,61 @@ export const AdhesionForm: React.FC = () => {
   const [adhesionCreated, setAdhesionCreated] = useState(false);
   const createdAdhesionId = useRef<string | null>(null);
   const mpInFlight = useRef(false);
+
+  // M5 (odd/adhesion-payment-link-delivery): explicit delivery of the MP
+  // payment link, in addition to the direct link. One status per channel so
+  // a failure on one never blocks the others, and a failure is always
+  // retryable (never permanently disables the button).
+  type DeliveryStatus = 'idle' | 'sending' | 'sent' | 'error';
+  const [whatsappDeliveryStatus, setWhatsappDeliveryStatus] = useState<DeliveryStatus>('idle');
+  const [whatsappDeliveryError, setWhatsappDeliveryError] = useState<string | null>(null);
+  const [emailDeliveryStatus, setEmailDeliveryStatus] = useState<DeliveryStatus>('idle');
+  const [emailDeliveryError, setEmailDeliveryError] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
+
+  const sendPaymentLinkVia = async (channel: 'whatsapp' | 'email') => {
+    const adhesionRequestId = createdAdhesionId.current;
+    const setStatus = channel === 'whatsapp' ? setWhatsappDeliveryStatus : setEmailDeliveryStatus;
+    const setError = channel === 'whatsapp' ? setWhatsappDeliveryError : setEmailDeliveryError;
+    if (!adhesionRequestId) {
+      setError('No se pudo identificar la solicitud. Recargá la página e intentá de nuevo.');
+      setStatus('error');
+      return;
+    }
+    setStatus('sending');
+    setError(null);
+    const genericError = 'No pudimos enviar el enlace. Reintentá en unos minutos.';
+    try {
+      const res = await fetch(`/api/adhesion/${adhesionRequestId}/send-payment-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel })
+      });
+      const result = await res.json().catch(() => ({ ok: false }));
+      if (!res.ok || !result.ok) {
+        setError(result?.error || genericError);
+        setStatus('error');
+        return;
+      }
+      setStatus('sent');
+    } catch (deliveryError) {
+      console.warn(`[AdhesionForm] No se pudo enviar el enlace de pago por ${channel}.`, deliveryError);
+      setError(genericError);
+      setStatus('error');
+    }
+  };
+
+  const copyPaymentLink = async () => {
+    if (!mpInitPoint) return;
+    try {
+      await navigator.clipboard.writeText(mpInitPoint);
+      setCopyStatus('copied');
+      setTimeout(() => setCopyStatus('idle'), 3000);
+    } catch (copyError) {
+      console.warn('[AdhesionForm] No se pudo copiar el enlace de pago.', copyError);
+      toast('No pudimos copiar el enlace. Copialo manualmente desde el botón de Mercado Pago.', 'error');
+    }
+  };
 
   // Countdown timer para el reenvío de OTP
   useEffect(() => {
@@ -1653,7 +1709,99 @@ export const AdhesionForm: React.FC = () => {
               </div>
             )}
 
-            <button 
+            {mpInitPoint && (
+              <div className="mb-8 bg-white/5 border border-white/5 rounded-3xl p-6 text-left space-y-4">
+                <h4 className="font-bold text-white text-sm uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <Sparkles size={16} />
+                  ¿Preferís enviarle el enlace de pago al afiliado?
+                </h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Si estás completando esta solicitud desde tu celular como asesor, enviale el enlace por WhatsApp o email para que pague desde su propio dispositivo.
+                </p>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={whatsappDeliveryStatus === 'sending'}
+                    onClick={() => sendPaymentLinkVia('whatsapp')}
+                    className="w-full py-3 px-4 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-2xl text-sm text-emerald-300 font-bold transition-all active:scale-98 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {whatsappDeliveryStatus === 'sending' ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Enviando...
+                      </>
+                    ) : whatsappDeliveryStatus === 'sent' ? (
+                      <>
+                        <CheckCircle2 size={16} />
+                        Enviado ✓
+                      </>
+                    ) : (
+                      <>
+                        <MessageCircle size={16} />
+                        Enviar por WhatsApp
+                      </>
+                    )}
+                  </button>
+                  {whatsappDeliveryStatus === 'error' && (
+                    <p className="text-red-400 text-xs flex items-center gap-1.5">
+                      <AlertCircle size={14} />
+                      {whatsappDeliveryError}
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={copyPaymentLink}
+                    className="w-full py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-sm text-slate-300 font-bold transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {copyStatus === 'copied' ? (
+                      <>
+                        <CheckCircle2 size={16} className="text-emerald-400" />
+                        Copiado ✓
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={16} />
+                        Copiar link
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={emailDeliveryStatus === 'sending'}
+                    onClick={() => sendPaymentLinkVia('email')}
+                    className="w-full py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-sm text-slate-300 font-bold transition-all active:scale-98 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {emailDeliveryStatus === 'sending' ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Enviando...
+                      </>
+                    ) : emailDeliveryStatus === 'sent' ? (
+                      <>
+                        <CheckCircle2 size={16} className="text-emerald-400" />
+                        Enviado ✓
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={16} />
+                        Enviar por email
+                      </>
+                    )}
+                  </button>
+                  {emailDeliveryStatus === 'error' && (
+                    <p className="text-red-400 text-xs flex items-center gap-1.5">
+                      <AlertCircle size={14} />
+                      {emailDeliveryError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
               onClick={() => {
                 // Clear fields and go back to step 1
                 setStep(1);

@@ -105,7 +105,21 @@ export function createWahaClient({ baseUrl, apiKey, session = 'default', fetchFn
     }
   }
 
-  return { sendFile, isSessionReady };
+  async function sendText({ phone, text }) {
+    const response = await fetchFn(`${root}/api/sendText`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ session, chatId: `${phone}@c.us`, text }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`WAHA ${response.status}: ${detail}`);
+    }
+    return response.json();
+  }
+
+  return { sendFile, sendText, isSessionReady };
 }
 
 // Minimum gap between two successful sends of the same prescription. Protects
@@ -191,6 +205,92 @@ export async function sendPrescriptionViaWhatsApp(
         doctorName: prescription.doctor_name,
       }),
     });
+  } catch (err) {
+    return fail(502, `send_failed: ${err?.message || err}`);
+  }
+
+  await record('sent');
+  return { status: 200, body: { status: 'sent' } };
+}
+
+// Minimum gap between two successful sends of the same payment link over
+// WhatsApp. Independent from the email guard (different channel, own row).
+const PAYMENT_LINK_RESEND_GUARD_MS = 60_000;
+
+/**
+ * Link-carrying message sent alongside the Mercado Pago payment link. Unlike
+ * `buildPrescriptionMessage`, this one legitimately needs the URL in the text
+ * since there is no attached file to carry it instead.
+ */
+export function buildPaymentLinkMessage({ fullName, paymentUrl } = {}) {
+  const greeting = fullName ? `Hola ${fullName},` : 'Hola,';
+  return (
+    `${greeting} este es el link para completar el pago de tu adhesión:\n\n` +
+    `${paymentUrl}\n\n` +
+    'Si tenés alguna consulta, respondé por la plataforma.'
+  );
+}
+
+/**
+ * Sends the Mercado Pago payment link to an adhesion request's titular from
+ * the company's WhatsApp number. `paymentUrl` is provided by the caller (it
+ * already fetched/created it from Mercado Pago); this function only delivers
+ * it. Every outcome (sent or failed) is logged to
+ * `adhesion_payment_link_deliveries` so the flow can be retried. Returns
+ * `{ status, body }` for the HTTP layer.
+ */
+export async function sendPaymentLinkViaWhatsApp(
+  { supabaseAdmin, waha, now = () => new Date() },
+  { adhesionRequestId, paymentUrl }
+) {
+  const { data: adhesion } = await supabaseAdmin
+    .from('adhesion_requests')
+    .select('id, titular_phone, titular_first_name, titular_last_name, titular_name')
+    .eq('id', adhesionRequestId)
+    .maybeSingle();
+
+  if (!adhesion) return { status: 404, body: { error: 'adhesion_request_not_found' } };
+
+  const record = async (status, error = null) => {
+    const { error: insertError } = await supabaseAdmin.from('adhesion_payment_link_deliveries').insert({
+      adhesion_request_id: adhesion.id,
+      channel: 'whatsapp',
+      status,
+      error,
+      requested_by: null,
+    });
+    if (insertError) console.error('[whatsapp] could not log payment link delivery:', insertError.message);
+  };
+  const fail = async (httpStatus, reason) => {
+    await record('failed', reason.slice(0, 500));
+    return { status: httpStatus, body: { status: 'failed', reason } };
+  };
+
+  const { data: lastSent } = await supabaseAdmin
+    .from('adhesion_payment_link_deliveries')
+    .select('created_at')
+    .eq('adhesion_request_id', adhesion.id)
+    .eq('channel', 'whatsapp')
+    .eq('status', 'sent')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastSent && now() - new Date(lastSent.created_at) < PAYMENT_LINK_RESEND_GUARD_MS) {
+    return { status: 409, body: { status: 'already_sent' } };
+  }
+
+  const phone = normalizeArgentinePhone(adhesion.titular_phone);
+  if (!phone) return fail(422, 'invalid_phone');
+
+  if (!(await waha.isSessionReady())) return fail(503, 'session_not_ready');
+
+  const fullName =
+    [adhesion.titular_first_name, adhesion.titular_last_name].filter(Boolean).join(' ').trim() ||
+    adhesion.titular_name ||
+    undefined;
+
+  try {
+    await waha.sendText({ phone, text: buildPaymentLinkMessage({ fullName, paymentUrl }) });
   } catch (err) {
     return fail(502, `send_failed: ${err?.message || err}`);
   }
