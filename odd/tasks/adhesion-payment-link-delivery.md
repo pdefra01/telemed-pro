@@ -237,11 +237,52 @@ follow-ups (do not reopen this review for these — separate later work):
 - `src/pages/__tests__/AdhesionForm.test.tsx`: no test for the missing-id
   no-op case or the `result?.error || genericError` fallback branch.
 
+## Follow-up fixes (2026-09-22)
+All 3 non-blocking review findings addressed:
+- `server/affiliateActivation.js` `sendPaymentLinkEmail`: added an
+  `invalid_email` guard mirroring the WhatsApp sibling's `invalid_phone`
+  guard. Reused `normalizeEmail` from `server/adhesionEmail.js` (trim +
+  lowercase + shape check) purely for validation — the original `email`
+  value is still what gets sent. Placed right after the resend-guard check,
+  same position as `normalizeArgentinePhone` in
+  `sendPaymentLinkViaWhatsApp`. Returns `{ status: 422, body: { status:
+  'failed', reason: 'invalid_email' } }` via the existing `fail()` helper,
+  so it's logged to `adhesion_payment_link_deliveries` like every other
+  failure path, and never calls the transporter.
+- `src/pages/AdhesionForm.tsx` `sendPaymentLinkVia`: the missing-id no-op now
+  sets that channel's status to `'error'` with the Spanish fallback message
+  "No se pudo identificar la solicitud. Recargá la página e intentá de
+  nuevo." instead of silently returning.
+- Tests: added `logs a failure and returns 422 when the email is missing or
+  unusable` (server/__tests__/affiliateActivation.test.js) and `shows the
+  generic fallback error when the send-payment-link response has no error
+  field` (src/pages/__tests__/AdhesionForm.test.tsx).
+  - The `createdAdhesionId.current === null` UI case was NOT covered by a
+    new test: reaching step 6 in this test file's style always goes through
+    `reachStep6()`, which drives a real successful submit that sets the ref
+    right before step 6 renders — there is no public-UI path in this file's
+    existing patterns that reaches the delivery buttons with the ref unset,
+    and manipulating the ref directly would be a brittle, implementation-
+    coupled test the review explicitly asked to avoid. Accepted gap,
+    recorded here per the instruction; the code path itself is fixed
+    (visible error instead of silent no-op), just not exercised by an
+    automated test.
+  TDD: RED confirmed for the email-guard test (200 received, 422 expected,
+  via `git stash` isolating the guard) → GREEN (54/54 across both test
+  files). The fallback-message test passed immediately because that branch
+  (`result?.error || genericError`) already existed from M5 — only the
+  Fix 2 no-op-to-error change and its test coverage were genuinely new
+  behavior.
+  Full suite: 682/689 passing; the same 7 pre-existing unrelated failures as
+  M2–M5 remain untouched (`VideoRoom.test.tsx` x3, `DashboardRepository.test.ts`,
+  `crypto.test.ts`, `MedicalHistory.test.tsx` x2).
+
 ## Next step
-Feature complete, reviewed and approved. M6 (docs) is not needed: this feature
-has no public/PRD-facing documentation surface to update — the change is
-internal UI/UX inside the existing adhesion form flow, already self-
-explanatory in Spanish to its end users (advisors/affiliates), and no
-README, API doc, or onboarding guide references the old single-link
-behavior that would now be stale. Follow-up: address the 3 review findings
-above in a small separate commit, then open the PR.
+Feature complete, reviewed and approved, all 3 non-blocking follow-ups
+addressed above (one test gap explicitly accepted and explained). M6 (docs)
+is not needed: this feature has no public/PRD-facing documentation surface
+to update — the change is internal UI/UX inside the existing adhesion form
+flow, already self-explanatory in Spanish to its end users
+(advisors/affiliates), and no README, API doc, or onboarding guide
+references the old single-link behavior that would now be stale. Ready to
+commit as a work unit and open the PR.

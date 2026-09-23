@@ -244,6 +244,15 @@ describe('sendPaymentLinkEmail', () => {
     expect(inserts).toEqual([]);
   });
 
+  it('logs a failure and returns 422 when the email is missing or unusable', async () => {
+    const { ctx, sendMail, inserts } = setup();
+    const result = await run(ctx, { email: '   ' });
+    expect(result.status).toBe(422);
+    expect(result.body.status).toBe('failed');
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(inserts[0]).toMatchObject({ status: 'failed', error: 'invalid_email', channel: 'email' });
+  });
+
   it('allows a resend once the previous send is older than a minute', async () => {
     const { ctx, sendMail } = setup({ db: { lastSent: { created_at: '2026-09-20T11:58:00Z' } } });
     const result = await run(ctx);

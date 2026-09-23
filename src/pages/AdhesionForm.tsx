@@ -341,9 +341,13 @@ export const AdhesionForm: React.FC = () => {
 
   const sendPaymentLinkVia = async (channel: 'whatsapp' | 'email') => {
     const adhesionRequestId = createdAdhesionId.current;
-    if (!adhesionRequestId) return;
     const setStatus = channel === 'whatsapp' ? setWhatsappDeliveryStatus : setEmailDeliveryStatus;
     const setError = channel === 'whatsapp' ? setWhatsappDeliveryError : setEmailDeliveryError;
+    if (!adhesionRequestId) {
+      setError('No se pudo identificar la solicitud. Recargá la página e intentá de nuevo.');
+      setStatus('error');
+      return;
+    }
     setStatus('sending');
     setError(null);
     const genericError = 'No pudimos enviar el enlace. Reintentá en unos minutos.';

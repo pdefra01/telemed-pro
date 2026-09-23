@@ -647,6 +647,22 @@ describe('AdhesionForm - step 6 payment link delivery (M5)', () => {
     await waitFor(() => expect(screen.getByText(/Enviado/i)).toBeInTheDocument());
   });
 
+  it('shows the generic fallback error when the send-payment-link response has no error field', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((url: any) => {
+      if (String(url).includes('send-payment-link')) {
+        return Promise.resolve({ ok: false, json: async () => ({ ok: false }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    });
+    const { container } = renderForm();
+    await reachStep6(container);
+
+    fireEvent.click(screen.getByRole('button', { name: /Enviar por WhatsApp/i }));
+
+    await waitFor(() => expect(screen.getByText(/No pudimos enviar el enlace\. Reintentá en unos minutos\./i)).toBeInTheDocument());
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
   it('copies the mpInitPoint link to the clipboard and shows a confirmation', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init-copy' }) } as Response);
     const writeText = vi.fn().mockResolvedValue(undefined);

@@ -15,6 +15,8 @@
 // and consumed by `supabase.auth.verifyOtp({ type: 'recovery', token_hash })`
 // on `/activar` (design D2) — forced by the app being a HashRouter.
 
+import { normalizeEmail } from './adhesionEmail.js';
+
 /**
  * Pure builder for the Supabase Auth `createUser` payload. Never includes a
  * `password` key (not even `password: undefined`) — approved affiliates get
@@ -184,6 +186,8 @@ export async function sendPaymentLinkEmail(
   if (lastSent && now() - new Date(lastSent.created_at) < PAYMENT_LINK_RESEND_GUARD_MS) {
     return { status: 409, body: { status: 'already_sent' } };
   }
+
+  if (!normalizeEmail(email)) return fail(422, 'invalid_email');
 
   const { subject, text, html } = buildPaymentLinkEmail({ fullName, paymentUrl });
 
