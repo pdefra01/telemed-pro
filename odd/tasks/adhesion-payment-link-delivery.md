@@ -63,7 +63,7 @@ own phone (Mercado Pago opens logged in as the advisor, not the affiliate).
       (server/affiliateActivation.js or a new module), tests.
 - [x] M4 `POST /api/adhesion/:id/send-payment-link` endpoint wiring both
       channels, tests.
-- [ ] M5 AdhesionForm.tsx step 6: three-channel UI (WhatsApp / Copiar link /
+- [x] M5 AdhesionForm.tsx step 6: three-channel UI (WhatsApp / Copiar link /
       Email) + keep the direct MP link, tests flipped.
 - [ ] M6 Docs (MANUAL, PRD) if needed.
 
@@ -168,6 +168,80 @@ own phone (Mercado Pago opens logged in as the advisor, not the affiliate).
   registrations; no separate mapping needed since M1–M3 already established
   every dependency's shape).
 
+- M5 (2026-09-22): Extended `src/pages/AdhesionForm.tsx` step 6 with a new
+  card, right below the existing "Ir a pagar con Mercado Pago" direct-link
+  block (kept exactly as-is, not removed), always shown whenever
+  `mpInitPoint` is set (no `?promoter=` gating): three stacked buttons —
+  "Enviar por WhatsApp", "Copiar link", "Enviar por email" — inside the
+  existing GlassCard/emerald visual language. Added per-channel
+  `DeliveryStatus` state (`idle | sending | sent | error`) for WhatsApp and
+  email independently (a failure on one channel never blocks the other or
+  disables its own button — always retryable), plus a separate `copyStatus`
+  for the clipboard action. `sendPaymentLinkVia(channel)` POSTs to
+  `/api/adhesion/${createdAdhesionId.current}/send-payment-link` with
+  `{ channel }`, mirroring the existing `completeMercadoPagoStep`
+  fetch/error-handling convention (parse JSON defensively, check
+  `res.ok && result.ok`); on failure it does NOT throw and use
+  `error.message`, because a network-level throw would leak `fetch`'s own
+  message instead of a user-facing one — it distinguishes "non-ok response"
+  (shows `result.error` when present) from "fetch itself threw" (always the
+  generic Spanish fallback). `copyPaymentLink()` wraps
+  `navigator.clipboard.writeText(mpInitPoint)` in try/catch (clipboard
+  access can be denied/unavailable) and falls back to an error toast, never
+  a thrown exception. New lucide-react icons `MessageCircle`, `Copy`,
+  `Mail`, `AlertCircle` added to the file's existing import line (no new
+  import statement). The adhesion request id was already tracked in
+  `createdAdhesionId` (a `useRef`, set right after `submitApplication` in
+  `handleSubmit`), the same ref `completeMercadoPagoStep` already reads for
+  `/api/adhesion/preapproval` / `/api/adhesion/checkout-preference` — reused
+  as-is, no new state needed.
+  Tests: extended `src/pages/__tests__/AdhesionForm.test.tsx` with a new
+  `describe('AdhesionForm - step 6 payment link delivery (M5)')`, mirroring
+  the file's existing `vi.spyOn(window, 'fetch')` mocking style exactly (no
+  new mocking approach introduced). Covers: all three buttons render in step
+  6; WhatsApp success (mocked `ok:true`) shows "Enviado ✓" and posts the
+  exact endpoint/body; WhatsApp failure (mocked `ok:false` response) shows
+  the server's error text and leaves the button enabled, then a retry click
+  succeeds; email success mirrors WhatsApp; email failure via a rejected
+  fetch (network error) shows the generic Spanish fallback and is retryable;
+  copy-link calls `navigator.clipboard.writeText` with the exact
+  `mpInitPoint` value and shows "Copiado ✓" (clipboard mocked via
+  `Object.assign(navigator, { clipboard: { writeText } })`).
+  TDD: RED confirmed (6/6 new tests failing — buttons/text not found,
+  `writeText` not called) → GREEN (33/33 in `AdhesionForm.test.tsx`).
+  One RED→GREEN iteration needed a fix mid-flight: the first
+  implementation attempt used `deliveryError.message` in the catch block,
+  which leaked `fetch`'s own rejection message instead of the intended
+  generic Spanish copy on a network-level failure — split into an explicit
+  non-ok-response branch (uses `result.error` when present) vs a
+  fetch-threw branch (always the generic fallback) to fix it.
+  Full suite: 680/687 passing; the same 7 pre-existing unrelated failures
+  as M2–M4 remain untouched (`VideoRoom.test.tsx` x3,
+  `DashboardRepository.test.ts`, `crypto.test.ts`, `MedicalHistory.test.tsx`
+  x2).
+  Route: direct inline (single cohesive UI addition to one already-mapped
+  file + its existing test file, already-understood pattern mirrored from
+  `completeMercadoPagoStep`; no separate mapping needed since M1–M4 already
+  established the endpoint's exact `{ channel }` request shape and
+  `{ status, body }` response contract).
+
+## Review (RDD, 2026-09-22)
+Both candidates reviewed (review-reliability lens) and approved. Non-blocking
+follow-ups (do not reopen this review for these — separate later work):
+- `server/affiliateActivation.js` `sendPaymentLinkEmail`: no guard on a
+  missing/blank `email` before calling the transporter — collapses into a
+  generic 502 instead of a clear validation error (WhatsApp's sibling path
+  has this guard via `normalizeArgentinePhone`).
+- `src/pages/AdhesionForm.tsx` `sendPaymentLinkVia`: silently no-ops with no
+  user feedback if `createdAdhesionId.current` is null.
+- `src/pages/__tests__/AdhesionForm.test.tsx`: no test for the missing-id
+  no-op case or the `result?.error || genericError` fallback branch.
+
 ## Next step
-M5: AdhesionForm.tsx step 6 three-channel UI (WhatsApp / Copiar link /
-Email), tests flipped.
+Feature complete, reviewed and approved. M6 (docs) is not needed: this feature
+has no public/PRD-facing documentation surface to update — the change is
+internal UI/UX inside the existing adhesion form flow, already self-
+explanatory in Spanish to its end users (advisors/affiliates), and no
+README, API doc, or onboarding guide references the old single-link
+behavior that would now be stale. Follow-up: address the 3 review findings
+above in a small separate commit, then open the PR.

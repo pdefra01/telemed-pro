@@ -510,3 +510,154 @@ describe('AdhesionForm - promoter code validation on mount (Esc.9)', () => {
     expect(producerRepository.getProducerByCode).not.toHaveBeenCalled();
   });
 });
+
+// odd/adhesion-payment-link-delivery, M5 — step 6 lets the person choose how
+// the Mercado Pago link reaches the affiliate (WhatsApp / copy / email),
+// always shown alongside the existing direct MP link.
+describe('AdhesionForm - step 6 payment link delivery (M5)', () => {
+  const reachStep6 = async (container: HTMLElement) => {
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-201' });
+    await advanceToSignatureStep();
+    signAndSubmit(container);
+    await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(planRepository.getOffered).mockResolvedValue(OFFERED_PLANS as any);
+
+    HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
+      strokeStyle: '',
+      lineWidth: 0,
+      lineCap: '',
+      lineJoin: '',
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      clearRect: vi.fn()
+    }) as any;
+    HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/png;base64,xxx') as any;
+  });
+
+  it('renders the direct MP link plus the three delivery actions', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    const { container } = renderForm();
+    await reachStep6(container);
+
+    expect(screen.getByRole('link', { name: /Ir a pagar con Mercado Pago/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enviar por WhatsApp/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copiar link/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enviar por email/i })).toBeInTheDocument();
+  });
+
+  it('sends the payment link via WhatsApp and shows a success confirmation', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((url: any) => {
+      if (String(url).includes('send-payment-link')) {
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    });
+    const { container } = renderForm();
+    await reachStep6(container);
+
+    fireEvent.click(screen.getByRole('button', { name: /Enviar por WhatsApp/i }));
+
+    await waitFor(() => expect(screen.getByText(/Enviado/i)).toBeInTheDocument());
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/adhesion/adhesion-201/send-payment-link',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ channel: 'whatsapp' })
+      })
+    );
+  });
+
+  it('shows an error and allows retrying when the WhatsApp send fails', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((url: any) => {
+      if (String(url).includes('send-payment-link')) {
+        return Promise.resolve({ ok: false, json: async () => ({ ok: false, error: 'no se pudo enviar' }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    });
+    const { container } = renderForm();
+    await reachStep6(container);
+
+    const whatsappButton = screen.getByRole('button', { name: /Enviar por WhatsApp/i });
+    fireEvent.click(whatsappButton);
+
+    await waitFor(() => expect(screen.getByText(/no se pudo enviar/i)).toBeInTheDocument());
+    expect(whatsappButton).not.toBeDisabled();
+
+    fetchSpy.mockImplementation((url: any) => {
+      if (String(url).includes('send-payment-link')) {
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    });
+    fireEvent.click(whatsappButton);
+    await waitFor(() => expect(screen.getByText(/Enviado/i)).toBeInTheDocument());
+  });
+
+  it('sends the payment link via email and shows a success confirmation', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((url: any) => {
+      if (String(url).includes('send-payment-link')) {
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    });
+    const { container } = renderForm();
+    await reachStep6(container);
+
+    fireEvent.click(screen.getByRole('button', { name: /Enviar por email/i }));
+
+    await waitFor(() => expect(screen.getByText(/Enviado/i)).toBeInTheDocument());
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/adhesion/adhesion-201/send-payment-link',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ channel: 'email' })
+      })
+    );
+  });
+
+  it('shows an error and allows retrying when the email send fails (network error)', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((url: any) => {
+      if (String(url).includes('send-payment-link')) {
+        return Promise.reject(new Error('network down'));
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    });
+    const { container } = renderForm();
+    await reachStep6(container);
+
+    const emailButton = screen.getByRole('button', { name: /Enviar por email/i });
+    fireEvent.click(emailButton);
+
+    await waitFor(() => expect(screen.getByText(/No pudimos enviar/i)).toBeInTheDocument());
+    expect(emailButton).not.toBeDisabled();
+
+    fetchSpy.mockImplementation((url: any) => {
+      if (String(url).includes('send-payment-link')) {
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+    });
+    fireEvent.click(emailButton);
+    await waitFor(() => expect(screen.getByText(/Enviado/i)).toBeInTheDocument());
+  });
+
+  it('copies the mpInitPoint link to the clipboard and shows a confirmation', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init-copy' }) } as Response);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const { container } = renderForm();
+    await reachStep6(container);
+
+    fireEvent.click(screen.getByRole('button', { name: /Copiar link/i }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://mp.test/init-copy'));
+    await waitFor(() => expect(screen.getByText(/Copiado/i)).toBeInTheDocument());
+  });
+});
