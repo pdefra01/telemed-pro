@@ -2,8 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   normalizeArgentinePhone,
   buildPrescriptionMessage,
+  buildPaymentLinkMessage,
   createWahaClient,
   sendPrescriptionViaWhatsApp,
+  sendPaymentLinkViaWhatsApp,
 } from '../whatsapp.js';
 
 describe('normalizeArgentinePhone', () => {
@@ -116,6 +118,159 @@ describe('createWahaClient', () => {
   it('treats an unreachable gateway as a session that is not ready', async () => {
     const client = createWahaClient({ ...config, fetchFn: vi.fn().mockRejectedValue(new Error('down')) });
     await expect(client.isSessionReady()).resolves.toBe(false);
+  });
+
+  it('sends a text message with the api key and the chat id', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(okResponse({ id: 'msg-2' }));
+    const client = createWahaClient({ ...config, fetchFn });
+
+    const result = await client.sendText({ phone: '5491112345678', text: 'Hola, tu link' });
+
+    expect(result).toEqual({ id: 'msg-2' });
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('http://waha:3000/api/sendText');
+    expect(init.method).toBe('POST');
+    expect(init.headers['X-Api-Key']).toBe('secret');
+    const body = JSON.parse(init.body);
+    expect(body.session).toBe('default');
+    expect(body.chatId).toBe('5491112345678@c.us');
+    expect(body.text).toBe('Hola, tu link');
+  });
+
+  it('throws a descriptive error when sendText gets an error status', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 422, text: async () => 'session not ready' });
+    const client = createWahaClient({ ...config, fetchFn });
+
+    await expect(client.sendText({ phone: '5491112345678', text: 'x' })).rejects.toThrow(/422.*session not ready/);
+  });
+});
+
+describe('buildPaymentLinkMessage', () => {
+  it('greets the affiliate by name and includes the payment link', () => {
+    const msg = buildPaymentLinkMessage({ fullName: 'Ana Pérez', paymentUrl: 'https://mp.example/pay/123' });
+    expect(msg).toContain('Ana Pérez');
+    expect(msg).toContain('https://mp.example/pay/123');
+  });
+
+  it('falls back to a neutral greeting without a full name', () => {
+    const msg = buildPaymentLinkMessage({ paymentUrl: 'https://mp.example/pay/123' });
+    expect(msg.startsWith('Hola')).toBe(true);
+    expect(msg).not.toContain('undefined');
+    expect(msg).toContain('https://mp.example/pay/123');
+  });
+});
+
+describe('sendPaymentLinkViaWhatsApp', () => {
+  const ADHESION = {
+    id: 'adh-1',
+    titular_phone: '011 15 1234-5678',
+    titular_first_name: 'Ana',
+    titular_last_name: 'Pérez',
+    titular_name: 'Ana Pérez',
+  };
+  const PAYMENT_URL = 'https://mp.example/pay/abc';
+
+  function createSupabaseStub({ adhesion = ADHESION, lastSent = null } = {}) {
+    const inserts = [];
+    const from = (table) => {
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        order: () => chain,
+        limit: () => chain,
+        maybeSingle: async () => {
+          if (table === 'adhesion_requests') return { data: adhesion, error: null };
+          if (table === 'adhesion_payment_link_deliveries') return { data: lastSent, error: null };
+          return { data: null, error: null };
+        },
+        insert: async (row) => {
+          inserts.push(row);
+          return { error: null };
+        },
+      };
+      return chain;
+    };
+    return { client: { from }, inserts };
+  }
+
+  function setup(overrides = {}) {
+    const stub = createSupabaseStub(overrides.db);
+    const waha = {
+      isSessionReady: vi.fn().mockResolvedValue(true),
+      sendText: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+      ...overrides.waha,
+    };
+    const now = overrides.now || (() => new Date('2026-09-20T12:00:00Z'));
+    const ctx = { supabaseAdmin: stub.client, waha, now };
+    return { ctx, waha, inserts: stub.inserts };
+  }
+
+  const run = (ctx, adhesionRequestId = 'adh-1', paymentUrl = PAYMENT_URL) =>
+    sendPaymentLinkViaWhatsApp(ctx, { adhesionRequestId, paymentUrl });
+
+  it('sends the payment link to the normalized titular number and logs success', async () => {
+    const { ctx, waha, inserts } = setup();
+
+    const result = await run(ctx);
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ status: 'sent' });
+    const call = waha.sendText.mock.calls[0][0];
+    expect(call.phone).toBe('5491112345678');
+    expect(call.text).toContain('Ana');
+    expect(call.text).toContain(PAYMENT_URL);
+    expect(inserts).toEqual([
+      expect.objectContaining({ adhesion_request_id: 'adh-1', channel: 'whatsapp', status: 'sent' }),
+    ]);
+  });
+
+  it('returns 404 when the adhesion request does not exist', async () => {
+    const { ctx, waha } = setup({ db: { adhesion: null } });
+    const result = await run(ctx);
+    expect(result.status).toBe(404);
+    expect(waha.sendText).not.toHaveBeenCalled();
+  });
+
+  it('logs a failure and returns 422 when the titular phone is unusable', async () => {
+    const { ctx, waha, inserts } = setup({ db: { adhesion: { ...ADHESION, titular_phone: 'No especificado' } } });
+    const result = await run(ctx);
+    expect(result.status).toBe(422);
+    expect(result.body.status).toBe('failed');
+    expect(waha.sendText).not.toHaveBeenCalled();
+    expect(inserts[0]).toMatchObject({ status: 'failed', error: 'invalid_phone', channel: 'whatsapp' });
+  });
+
+  it('logs a failure and returns 503 when the WhatsApp session is not ready', async () => {
+    const { ctx, waha, inserts } = setup({ waha: { isSessionReady: vi.fn().mockResolvedValue(false) } });
+    const result = await run(ctx);
+    expect(result.status).toBe(503);
+    expect(waha.sendText).not.toHaveBeenCalled();
+    expect(inserts[0]).toMatchObject({ status: 'failed', error: 'session_not_ready' });
+  });
+
+  it('logs a failure and returns 502 when the gateway rejects the send', async () => {
+    const { ctx, inserts } = setup({ waha: { sendText: vi.fn().mockRejectedValue(new Error('WAHA 500: boom')) } });
+    const result = await run(ctx);
+    expect(result.status).toBe(502);
+    expect(result.body.status).toBe('failed');
+    expect(inserts[0]).toMatchObject({ status: 'failed' });
+    expect(inserts[0].error).toContain('boom');
+  });
+
+  it('returns 409 without sending when the link was already sent in the last minute (whatsapp guard)', async () => {
+    const { ctx, waha, inserts } = setup({ db: { lastSent: { created_at: '2026-09-20T11:59:30Z' } } });
+    const result = await run(ctx);
+    expect(result.status).toBe(409);
+    expect(result.body.status).toBe('already_sent');
+    expect(waha.sendText).not.toHaveBeenCalled();
+    expect(inserts).toEqual([]);
+  });
+
+  it('allows a resend once the previous send is older than a minute', async () => {
+    const { ctx, waha } = setup({ db: { lastSent: { created_at: '2026-09-20T11:58:00Z' } } });
+    const result = await run(ctx);
+    expect(result.status).toBe(200);
+    expect(waha.sendText).toHaveBeenCalledTimes(1);
   });
 });
 
