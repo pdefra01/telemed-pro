@@ -58,6 +58,7 @@ serve(async (req) => {
     if (recordError) throw recordError
 
     let pdfUrl = null;
+    let pdfPath: string | null = null;
 
     if (medications.length > 0) {
       // 4a. Generar PDF Premium
@@ -186,15 +187,21 @@ serve(async (req) => {
 
         if (uploadError) throw uploadError
 
-        // 4c. Obtener URL Publica
-        const { data: publicUrlData } = supabase.storage
+        // 4c. Firmar la URL (bucket privado): expira a las 48hs. El "Reenviar"
+        // por WhatsApp vuelve a firmar en el momento del envío, así que nunca
+        // depende de esta URL sobrevivir hasta entonces.
+        const { data: signedUrlData, error: signError } = await supabase.storage
           .from('prescriptions_pdfs')
-          .getPublicUrl(fileName)
-        
-        pdfUrl = publicUrlData.publicUrl
+          .createSignedUrl(fileName, 60 * 60 * 48)
+
+        if (signError) throw signError
+
+        pdfUrl = signedUrlData.signedUrl
+        pdfPath = fileName
       } catch (storageErr) {
         console.warn("⚠️ [Local Dev] El servicio de Storage no está activo o falló al subir. Usando fallback de URL mockeada:", storageErr.message);
         pdfUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+        pdfPath = null;
       }
 
       // 4d. Guardar en DB
@@ -214,7 +221,8 @@ serve(async (req) => {
             quantity: 1
           })),
           notes: `Recetado para: ${diagnosis}`,
-          pdf_url: pdfUrl
+          pdf_url: pdfUrl,
+          pdf_path: pdfPath
         })
 
       if (prescError) throw prescError

@@ -127,12 +127,37 @@ export function createWahaClient({ baseUrl, apiKey, session = 'default', fetchFn
 // of identical messages are the fastest way to get flagged).
 const RESEND_GUARD_MS = 60_000;
 
+const PRESCRIPTIONS_PDFS_BUCKET = 'prescriptions_pdfs';
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 48; // 48h
+
+/**
+ * Extracts the storage object path from a legacy Supabase public-bucket URL,
+ * e.g. `.../storage/v1/object/public/prescriptions_pdfs/<path>` -> `<path>`.
+ * Returns `null` when the URL doesn't contain that bucket's public-URL
+ * prefix (missing/foreign URL, or already-private link).
+ */
+export function extractStoragePathFromPublicUrl(publicUrl, bucket) {
+  if (!publicUrl) return null;
+  const marker = `/object/public/${bucket}/`;
+  const idx = String(publicUrl).indexOf(marker);
+  if (idx === -1) return null;
+  const path = publicUrl.slice(idx + marker.length);
+  return path || null;
+}
+
 /**
  * Sends a prescription PDF to its patient from the company's WhatsApp number.
  *
  * Only the doctor who issued the prescription may trigger it. Every outcome
  * (sent or failed) is written to `prescription_deliveries` so the doctor can
  * see failures and retry. Returns `{ status, body }` for the HTTP layer.
+ *
+ * The bucket is private and every stored link is a 48h-expiring signed URL,
+ * so this always mints a fresh signed URL right before fetching bytes rather
+ * than trusting the (possibly expired) stored `pdf_url` — this is what makes
+ * a late "Reenviar" resend reliable. Fresh rows carry `pdf_path`; legacy rows
+ * (issued before this change) only have the old public `pdf_url`, so the
+ * storage path is derived from it instead.
  */
 export async function sendPrescriptionViaWhatsApp(
   { supabaseAdmin, waha, fetchFn = fetch, now = () => new Date() },
@@ -140,13 +165,16 @@ export async function sendPrescriptionViaWhatsApp(
 ) {
   const { data: prescription } = await supabaseAdmin
     .from('prescriptions')
-    .select('id, doctor_id, patient_id, doctor_name, pdf_url')
+    .select('id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path')
     .eq('id', prescriptionId)
     .maybeSingle();
 
   if (!prescription) return { status: 404, body: { error: 'prescription_not_found' } };
   if (prescription.doctor_id !== requesterId) return { status: 403, body: { error: 'forbidden' } };
-  if (!prescription.pdf_url) return { status: 422, body: { error: 'no_pdf' } };
+
+  const storagePath =
+    prescription.pdf_path || extractStoragePathFromPublicUrl(prescription.pdf_url, PRESCRIPTIONS_PDFS_BUCKET);
+  if (!storagePath) return { status: 422, body: { error: 'no_pdf' } };
 
   const record = async (status, error = null) => {
     const { error: insertError } = await supabaseAdmin.from('prescription_deliveries').insert({
@@ -188,7 +216,12 @@ export async function sendPrescriptionViaWhatsApp(
 
   let bytes;
   try {
-    const response = await fetchFn(prescription.pdf_url);
+    const { data: signedData, error: signError } = await supabaseAdmin.storage
+      .from(PRESCRIPTIONS_PDFS_BUCKET)
+      .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+    if (signError || !signedData?.signedUrl) throw signError || new Error('sign_failed');
+
+    const response = await fetchFn(signedData.signedUrl);
     if (!response.ok) throw new Error(`status ${response.status}`);
     bytes = new Uint8Array(await response.arrayBuffer());
   } catch {

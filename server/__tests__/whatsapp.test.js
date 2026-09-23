@@ -6,6 +6,7 @@ import {
   createWahaClient,
   sendPrescriptionViaWhatsApp,
   sendPaymentLinkViaWhatsApp,
+  extractStoragePathFromPublicUrl,
 } from '../whatsapp.js';
 
 describe('normalizeArgentinePhone', () => {
@@ -280,15 +281,23 @@ describe('sendPrescriptionViaWhatsApp', () => {
     doctor_id: 'doc-1',
     patient_id: 'pat-1',
     doctor_name: 'Sergio Dib Ashur',
-    pdf_url: 'https://storage.example/receta.pdf',
+    pdf_url: 'https://storage.example/signed/receta.pdf?token=old',
+    pdf_path: 'pat-1/rx-1-1690000000000.pdf',
   };
   const PATIENT = { full_name: 'Ana Pérez', phone: '011 15 1234-5678' };
+  const FRESH_SIGNED_URL = 'https://storage.example/object/sign/prescriptions_pdfs/pat-1/rx-1-1690000000000.pdf?token=fresh';
 
   /**
    * Chainable fake of the few Supabase calls the service makes. `inserts`
-   * collects every row written to prescription_deliveries.
+   * collects every row written to prescription_deliveries. `storage` lets
+   * tests control the `createSignedUrl` outcome (default: success).
    */
-  function createSupabaseStub({ prescription = PRESCRIPTION, patient = PATIENT, lastSent = null } = {}) {
+  function createSupabaseStub({
+    prescription = PRESCRIPTION,
+    patient = PATIENT,
+    lastSent = null,
+    createSignedUrl = vi.fn().mockResolvedValue({ data: { signedUrl: FRESH_SIGNED_URL }, error: null }),
+  } = {}) {
     const inserts = [];
     const from = (table) => {
       const chain = {
@@ -309,7 +318,8 @@ describe('sendPrescriptionViaWhatsApp', () => {
       };
       return chain;
     };
-    return { client: { from }, inserts };
+    const storage = { from: () => ({ createSignedUrl }) };
+    return { client: { from, storage }, inserts, createSignedUrl };
   }
 
   const pdfFetch = () =>
@@ -325,19 +335,21 @@ describe('sendPrescriptionViaWhatsApp', () => {
     const fetchFn = overrides.fetchFn || pdfFetch();
     const now = overrides.now || (() => new Date('2026-09-20T12:00:00Z'));
     const ctx = { supabaseAdmin: stub.client, waha, fetchFn, now };
-    return { ctx, waha, fetchFn, inserts: stub.inserts };
+    return { ctx, waha, fetchFn, inserts: stub.inserts, createSignedUrl: stub.createSignedUrl };
   }
 
   const run = (ctx, requesterId = 'doc-1') =>
     sendPrescriptionViaWhatsApp(ctx, { prescriptionId: 'rx-1', requesterId });
 
   it('sends the PDF to the normalized patient number and logs success', async () => {
-    const { ctx, waha, inserts } = setup();
+    const { ctx, waha, inserts, fetchFn, createSignedUrl } = setup();
 
     const result = await run(ctx);
 
     expect(result.status).toBe(200);
     expect(result.body).toEqual({ status: 'sent' });
+    expect(createSignedUrl).toHaveBeenCalledWith(PRESCRIPTION.pdf_path, 60 * 60 * 48);
+    expect(fetchFn).toHaveBeenCalledWith(FRESH_SIGNED_URL);
     const call = waha.sendFile.mock.calls[0][0];
     expect(call.phone).toBe('5491112345678');
     expect(call.filename).toMatch(/\.pdf$/);
@@ -347,6 +359,39 @@ describe('sendPrescriptionViaWhatsApp', () => {
     expect(inserts).toEqual([
       expect.objectContaining({ prescription_id: 'rx-1', status: 'sent', requested_by: 'doc-1' }),
     ]);
+  });
+
+  it('mints a fresh signed URL from a legacy row that only has pdf_url', async () => {
+    const legacyPublicUrl = `https://xyz.supabase.co/storage/v1/object/public/prescriptions_pdfs/${PRESCRIPTION.pdf_path}`;
+    const { ctx, fetchFn, createSignedUrl } = setup({
+      db: { prescription: { ...PRESCRIPTION, pdf_path: null, pdf_url: legacyPublicUrl } },
+    });
+
+    const result = await run(ctx);
+
+    expect(result.status).toBe(200);
+    expect(createSignedUrl).toHaveBeenCalledWith(PRESCRIPTION.pdf_path, 60 * 60 * 48);
+    expect(fetchFn).toHaveBeenCalledWith(FRESH_SIGNED_URL);
+  });
+
+  it('returns 422 no_pdf when there is neither a usable pdf_path nor a parseable legacy pdf_url', async () => {
+    const { ctx, waha } = setup({
+      db: { prescription: { ...PRESCRIPTION, pdf_path: null, pdf_url: 'https://storage.example/not-a-bucket-url.pdf' } },
+    });
+    const result = await run(ctx);
+    expect(result.status).toBe(422);
+    expect(result.body).toEqual({ error: 'no_pdf' });
+    expect(waha.sendFile).not.toHaveBeenCalled();
+  });
+
+  it('logs a failure and returns 502 when minting the signed URL fails', async () => {
+    const { ctx, waha, inserts } = setup({
+      db: { createSignedUrl: vi.fn().mockResolvedValue({ data: null, error: new Error('object not found') }) },
+    });
+    const result = await run(ctx);
+    expect(result.status).toBe(502);
+    expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(inserts[0]).toMatchObject({ status: 'failed', error: 'pdf_unavailable' });
   });
 
   it('returns 404 when the prescription does not exist', async () => {
@@ -415,9 +460,25 @@ describe('sendPrescriptionViaWhatsApp', () => {
   });
 
   it('returns 422 when the prescription has no generated PDF', async () => {
-    const { ctx, waha } = setup({ db: { prescription: { ...PRESCRIPTION, pdf_url: null } } });
+    const { ctx, waha } = setup({ db: { prescription: { ...PRESCRIPTION, pdf_url: null, pdf_path: null } } });
     const result = await run(ctx);
     expect(result.status).toBe(422);
     expect(waha.sendFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('extractStoragePathFromPublicUrl', () => {
+  it('extracts the path from a well-formed public bucket URL', () => {
+    const url = 'https://xyz.supabase.co/storage/v1/object/public/prescriptions_pdfs/pat-1/rx-1-123.pdf';
+    expect(extractStoragePathFromPublicUrl(url, 'prescriptions_pdfs')).toBe('pat-1/rx-1-123.pdf');
+  });
+
+  it('returns null when the URL does not match the expected prefix', () => {
+    expect(extractStoragePathFromPublicUrl('https://example.com/foo.pdf', 'prescriptions_pdfs')).toBeNull();
+  });
+
+  it('returns null on missing input', () => {
+    expect(extractStoragePathFromPublicUrl(null, 'prescriptions_pdfs')).toBeNull();
+    expect(extractStoragePathFromPublicUrl(undefined, 'prescriptions_pdfs')).toBeNull();
   });
 });
