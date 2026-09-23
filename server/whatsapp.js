@@ -141,7 +141,10 @@ export function extractStoragePathFromPublicUrl(publicUrl, bucket) {
   const marker = `/object/public/${bucket}/`;
   const idx = String(publicUrl).indexOf(marker);
   if (idx === -1) return null;
-  const path = publicUrl.slice(idx + marker.length);
+  // Drop a trailing query string or fragment: a bare storage path must not
+  // carry either, or createSignedUrl fails with a confusing "object not
+  // found" instead of a clear parse failure.
+  const path = publicUrl.slice(idx + marker.length).split(/[?#]/)[0];
   return path || null;
 }
 

@@ -142,11 +142,12 @@ reopen this review for these):
   existed for `getPublicUrl` before this change), just carried over — not
   introduced by this diff, but worth tightening (e.g. only use the dummy
   fallback when an explicit "local dev" signal is set).
-- `server/whatsapp.js` `extractStoragePathFromPublicUrl`: doesn't strip a
-  trailing query string from the extracted path, so a legacy URL with `?...`
-  would produce a broken path and fail with a confusing "object not found"
-  from `createSignedUrl` instead of a clear parse failure. Cheap fix: strip
-  everything from `?` onward before returning.
+- ~~`server/whatsapp.js` `extractStoragePathFromPublicUrl`: doesn't strip a
+  trailing query string from the extracted path~~ — **fixed** (2026-09-22):
+  now strips everything from `?` or `#` onward. RED (new test failed:
+  returned `pat-1/rx-1-123.pdf?token=abc&x=1` instead of the bare path) →
+  GREEN (52/52 in `whatsapp.test.js`). Full suite: 689/696, same 7
+  pre-existing unrelated failures.
 
 ## Next step
 Feature complete and approved. Commit as its own work unit, then:

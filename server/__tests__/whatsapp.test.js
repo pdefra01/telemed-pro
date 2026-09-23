@@ -477,6 +477,14 @@ describe('extractStoragePathFromPublicUrl', () => {
     expect(extractStoragePathFromPublicUrl('https://example.com/foo.pdf', 'prescriptions_pdfs')).toBeNull();
   });
 
+  it('strips a trailing query string or fragment from the extracted path', () => {
+    const withQuery = 'https://xyz.supabase.co/storage/v1/object/public/prescriptions_pdfs/pat-1/rx-1-123.pdf?token=abc&x=1';
+    expect(extractStoragePathFromPublicUrl(withQuery, 'prescriptions_pdfs')).toBe('pat-1/rx-1-123.pdf');
+
+    const withFragment = 'https://xyz.supabase.co/storage/v1/object/public/prescriptions_pdfs/pat-1/rx-1-123.pdf#section';
+    expect(extractStoragePathFromPublicUrl(withFragment, 'prescriptions_pdfs')).toBe('pat-1/rx-1-123.pdf');
+  });
+
   it('returns null on missing input', () => {
     expect(extractStoragePathFromPublicUrl(null, 'prescriptions_pdfs')).toBeNull();
     expect(extractStoragePathFromPublicUrl(undefined, 'prescriptions_pdfs')).toBeNull();
