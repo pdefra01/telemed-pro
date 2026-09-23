@@ -132,7 +132,24 @@ and serve every link as a 48h-expiring signed URL instead.
     (VideoRoom, DashboardRepository, crypto, MedicalHistory) — same
     pre-existing unrelated failures noted in the task constraints, untouched.
 
+## Review (RDD, 2026-09-22)
+Reviewed (review-reliability) and approved. Non-blocking follow-ups (do not
+reopen this review for these):
+- `supabase/functions/finalize-consultation/index.ts`: if `createSignedUrl`
+  throws in production (not just local dev, where it's expected), the catch
+  block silently falls back to a hardcoded public W3C dummy PDF, with no
+  error surfaced to the doctor/patient. Pre-existing pattern (same behavior
+  existed for `getPublicUrl` before this change), just carried over — not
+  introduced by this diff, but worth tightening (e.g. only use the dummy
+  fallback when an explicit "local dev" signal is set).
+- `server/whatsapp.js` `extractStoragePathFromPublicUrl`: doesn't strip a
+  trailing query string from the extracted path, so a legacy URL with `?...`
+  would produce a broken path and fail with a confusing "object not found"
+  from `createSignedUrl` instead of a clear parse failure. Cheap fix: strip
+  everything from `?` onward before returning.
+
 ## Next step
-Feature complete pending: (1) user explicit OK + local Docker verification
-before applying T1's migration anywhere, (2) orchestrator commit of this
-work unit.
+Feature complete and approved. Commit as its own work unit, then:
+(1) get user's explicit OK + local Docker verification before applying T1's
+migration anywhere, (2) optionally address the 2 review follow-ups above in
+a small separate commit.
