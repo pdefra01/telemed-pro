@@ -287,7 +287,15 @@ Reviewed boundary is now the T7 documentation commit.
   failures; parent spot check `npx vitest run server/__tests__/whatsapp.test.js`
   75/75.
 
+## T6 status
+- 2026-09-23: migration `20260923000000_prescriptions_external_url.sql` APPLIED
+  to the remote database by the assistant with `supabase db push` after the
+  user's explicit go (it was the only pending migration; additive nullable
+  column).
+- Pending: deploy the `finalize-consultation` edge function, manual check, and
+  the real WhatsApp test. The app itself only reaches production when the
+  branch is merged to master (Coolify), so an end-to-end test needs that.
+
 ## Next step
-T6 (user): apply migration `20260923000000`, deploy the `finalize-consultation`
-edge function, manual check, real WhatsApp test. The server is now safe to
-deploy before the migration. Final PR chain/push is the user's decision.
+Decide with the user: push the branch / open the PR to master, deploy the
+edge function, then the manual and WhatsApp end-to-end checks.
