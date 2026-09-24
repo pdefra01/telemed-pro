@@ -85,9 +85,9 @@ reachable during the video call and finalized in PostConsultation:
       indications; PDF only with medications) + WhatsApp: PDF and/or a second
       text with the prescripcion (edge function, server/whatsapp.js + tests);
       tightened the "no PIN step" test. Commit `956fabb`.
-- [ ] T4 Reconnect VideoRoom "Receta" tab: pass med lines + recommendations to
+- [x] T4 Reconnect VideoRoom "Receta" tab: pass med lines + recommendations to
       PostConsultation via navigate state and prefill (free-text lines coexist
-      with catalog items in `medications`), tests.
+      with catalog items in `medications`), tests. Commit `3af414d`.
 - [ ] T5 Obra social alternative mode: mode selector, link field + validation,
       server handler that sends the link through company WhatsApp, delivery
       log decision (see Design), tests.
@@ -146,6 +146,22 @@ at a time.
   logged and a resend sends the PDF again (duplicate PDF on retry).
   Gap: Deno edge function still untested (manual check in T6).
 
+- T4 (delegated writer, commit `3af414d`): new `prescriptionDraft.ts`
+  (`buildPrescriptionDraft` drops blank-`med` lines and trims; `parsePrescriptionDraft`
+  reads router state defensively). `VideoRoom.tsx` `handleCompleteAppointment`
+  navigates with `{ state: { prescriptionDraft } }` (no state when empty).
+  `PostConsultation.tsx` reads `useLocation().state` once into INITIAL values:
+  lines -> `{ name: med, instructions: dose }` without `productId`,
+  `addPrescription` on when there is at least one line, indications textarea
+  prefilled with the recommendations. RED->GREEN: helper test 12/12;
+  PostConsultation 2 failing prefill tests -> `npx vitest run src/pages/doctor`
+  36/36 (parent spot check same). Writer full suite 722 passed, only the 7 known
+  failures; `tsc` clean on touched files.
+  Limitations: no direct test of the one-line `navigate` call in VideoRoom
+  (its test file is among the known failures; logic covered via the helper);
+  the draft lives only in router state, so a page refresh after navigating
+  loses it and the doctor sees the empty form as before.
+
 ## Review (RDD, 2026-09-23)
 T1+T2 range (`060ceb0..HEAD`, medium risk, 521 lines incl. this doc) reviewed
 with the reliability lens and approved; acknowledgement done (authority
@@ -168,4 +184,5 @@ T1+T2 (commits `85662bd`, `b163e84`, plus the tracking doc). Push and PR
 creation stay the user's decision.
 
 ## Next step
-T4: reconnect the VideoRoom "Receta" tab and prefill PostConsultation.
+T5: obra social alternative mode (after the pending RDD assessment of the
+T3+T4 slice).
