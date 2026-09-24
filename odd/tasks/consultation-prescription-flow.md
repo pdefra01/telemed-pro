@@ -270,13 +270,24 @@ not reopen the review):
   (column only in obra social mode); the server does not.
 Reviewed boundary is now the T7 documentation commit.
 
-- [ ] T8 Fix the two review warnings (server/whatsapp.js + tests): (a) keep the
+- [x] T8 (commit `4d1d66a`) Fix the two review warnings (server/whatsapp.js + tests): (a) keep the
       `partial:pdf_sent` marker on every text failure after the PDF went out,
       test with two consecutive failures; (b) tolerate the missing column: if
       the prescriptions select errors because of `external_prescription_url`,
       retry without that column and treat it as "no external link", so the
       server is safe to deploy before the migration is applied.
 
+- T8 (delegated writer, commit `4d1d66a`, files `server/whatsapp.js` and its
+  test): (a) the failed row carries `partial:pdf_sent` whenever the PDF went out
+  in this or an earlier attempt; test with two text failures and a third
+  attempt: `sendFile` called once in total, text sent. (b) if the prescriptions
+  select errors it retries once without `external_prescription_url` and treats
+  it as no link; both selects failing keeps 404 `prescription_not_found`.
+  RED: 3 new failing tests; GREEN: writer full suite 763 passed / 7 known
+  failures; parent spot check `npx vitest run server/__tests__/whatsapp.test.js`
+  75/75.
+
 ## Next step
-T8, then T6 (user: apply migration `20260923000000`, deploy the edge function,
-real WhatsApp test).
+T6 (user): apply migration `20260923000000`, deploy the `finalize-consultation`
+edge function, manual check, real WhatsApp test. The server is now safe to
+deploy before the migration. Final PR chain/push is the user's decision.
