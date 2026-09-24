@@ -59,6 +59,7 @@ serve(async (req) => {
 
     let pdfUrl = null;
     let pdfPath: string | null = null;
+    const trimmedIndications = typeof indications === 'string' ? indications.trim() : '';
 
     if (medications.length > 0) {
       // 4a. Generar PDF Premium
@@ -177,8 +178,10 @@ serve(async (req) => {
         pdfUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
         pdfPath = null;
       }
+    }
 
-      // 4d. Guardar en DB
+    // 4d. Guardar en DB: hay receta (medicamentos) y/o prescripción (indicaciones)
+    if (medications.length > 0 || trimmedIndications) {
       const { error: prescError } = await supabase
         .from('prescriptions')
         .insert({
@@ -194,13 +197,12 @@ serve(async (req) => {
             instructions: m.instructions,
             quantity: 1
           })),
-          notes: typeof indications === 'string' && indications.trim() ? indications.trim() : null,
+          notes: trimmedIndications || null,
           pdf_url: pdfUrl,
           pdf_path: pdfPath
         })
 
       if (prescError) throw prescError
-
     }
 
     // 4e. Mock WhatsApp API - Envío de receta y recomendaciones estructuradas (siempre se envía al finalizar)

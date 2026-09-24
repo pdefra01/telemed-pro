@@ -157,7 +157,9 @@ describe('PostConsultation Page', () => {
 
       await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
 
-      expect(screen.queryByText(/Firma/i)).toBeNull();
+      expect(document.querySelector('input[type="password"]')).toBeNull();
+      expect(screen.queryByPlaceholderText(/PIN|contraseña/i)).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
       const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
       expect(body.medications).toEqual([expect.objectContaining({ name: 'Ibuprofeno 400mg' })]);
       expect(body).not.toHaveProperty('digitalSignature');
@@ -227,6 +229,59 @@ describe('PostConsultation Page', () => {
       cleanup();
       vi.unstubAllGlobals();
     });
+
+    const finalizeWithoutPdf = async (indications: string) => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      (prescriptionRepository.getPrescriptionByAppointmentId as any).mockResolvedValue({ id: 'rx-2' });
+
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.change(screen.getByLabelText(/Prescripción \/ indicaciones/i), { target: { value: indications } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+    };
+
+    it('sends the indications by WhatsApp even when no PDF was generated', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'sent' }) });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('Reposo 48hs');
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        '/api/prescriptions/rx-2/send-whatsapp',
+        expect.objectContaining({ method: 'POST' })
+      ), { timeout: 6000 });
+      // Let the whole finalization settle so it cannot leak into the next test
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+    }, 15000);
+
+    it('does not call WhatsApp when there is neither a PDF nor indications', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('   ');
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    }, 15000);
+
+    it('shows the failure and a retry for an indications-only send and does not redirect', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 503, json: async () => ({ status: 'failed', reason: 'session_not_ready' }) });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('Reposo 48hs');
+
+      expect(await screen.findByText(/no está conectado/i, undefined, { timeout: 6000 })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Reenviar por WhatsApp/i })).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      expect(mockNavigate).not.toHaveBeenCalledWith('/doctor', expect.anything());
+    }, 20000);
 
     it('sends the prescription automatically from the company number and confirms it', async () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'sent' }) });

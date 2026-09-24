@@ -214,8 +214,13 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   const redirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Never navigate after the doctor has already left this page.
-  useEffect(() => () => {
-    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+  const unmountedRef = React.useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    };
   }, []);
 
   const [addPrescription, setAddPrescription] = useState(false);
@@ -330,6 +335,22 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                       <p role="alert" className="text-[11px] font-medium text-amber-400 leading-snug">{whatsappError}</p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {!pdfUrl && whatsappStatus === 'failed' && (
+                <div className="max-w-sm mx-auto space-y-2">
+                  {whatsappError && (
+                    <p role="alert" className="text-[11px] font-medium text-amber-400 leading-snug">{whatsappError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={sendPrescriptionWhatsapp}
+                    className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-2xl transition-all flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer active:scale-95"
+                  >
+                    <MessageSquare size={14} />
+                    Reenviar por WhatsApp
+                  </button>
                 </div>
               )}
 
@@ -501,8 +522,9 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       let whatsappDelivered = true;
-      if (data?.pdfUrl) {
-        setPdfUrl(data.pdfUrl);
+      if (data?.pdfUrl) setPdfUrl(data.pdfUrl);
+      // Indications alone (no medications, so no PDF) are also delivered by WhatsApp
+      if (data?.pdfUrl || indications.trim()) {
         whatsappDelivered = await sendPrescriptionWhatsapp();
       }
       
@@ -510,7 +532,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
       // Redirección automática al panel después de 3.5s, salvo que el envío por
       // WhatsApp haya fallado: el médico necesita ver el aviso y poder reintentar.
-      if (whatsappDelivered) {
+      if (whatsappDelivered && !unmountedRef.current) {
         redirectTimerRef.current = setTimeout(() => {
           navigate('/doctor', { replace: true });
         }, 3500);

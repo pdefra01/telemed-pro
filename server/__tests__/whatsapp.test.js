@@ -330,6 +330,7 @@ describe('sendPrescriptionViaWhatsApp', () => {
     const waha = {
       isSessionReady: vi.fn().mockResolvedValue(true),
       sendFile: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+      sendText: vi.fn().mockResolvedValue({ id: 'msg-2' }),
       ...overrides.waha,
     };
     const fetchFn = overrides.fetchFn || pdfFetch();
@@ -374,13 +375,13 @@ describe('sendPrescriptionViaWhatsApp', () => {
     expect(fetchFn).toHaveBeenCalledWith(FRESH_SIGNED_URL);
   });
 
-  it('returns 422 no_pdf when there is neither a usable pdf_path nor a parseable legacy pdf_url', async () => {
+  it('returns 422 no_content when there is neither a usable pdf_path nor a parseable legacy pdf_url and no indications', async () => {
     const { ctx, waha } = setup({
       db: { prescription: { ...PRESCRIPTION, pdf_path: null, pdf_url: 'https://storage.example/not-a-bucket-url.pdf' } },
     });
     const result = await run(ctx);
     expect(result.status).toBe(422);
-    expect(result.body).toEqual({ error: 'no_pdf' });
+    expect(result.body).toEqual({ error: 'no_content' });
     expect(waha.sendFile).not.toHaveBeenCalled();
   });
 
@@ -459,11 +460,93 @@ describe('sendPrescriptionViaWhatsApp', () => {
     expect(waha.sendFile).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 422 when the prescription has no generated PDF', async () => {
+  it('returns 422 no_content when there is no PDF and no indications', async () => {
     const { ctx, waha } = setup({ db: { prescription: { ...PRESCRIPTION, pdf_url: null, pdf_path: null } } });
     const result = await run(ctx);
     expect(result.status).toBe(422);
+    expect(result.body).toEqual({ error: 'no_content' });
     expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(waha.sendText).not.toHaveBeenCalled();
+  });
+
+  describe('indications text', () => {
+    const NO_PDF = { pdf_url: null, pdf_path: null };
+
+    it('sends the PDF and then a text message with the indications', async () => {
+      const { ctx, waha, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, notes: 'Reposo 48 horas' } },
+      });
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      const text = waha.sendText.mock.calls[0][0];
+      expect(text.phone).toBe('5491112345678');
+      expect(text.text).toContain('Dr. Sergio Dib Ashur');
+      expect(text.text).toContain('Reposo 48 horas');
+      expect(text.text).not.toMatch(/\d{8,}/);
+      expect(waha.sendFile.mock.invocationCallOrder[0]).toBeLessThan(waha.sendText.mock.invocationCallOrder[0]);
+      expect(inserts).toEqual([expect.objectContaining({ status: 'sent' })]);
+    });
+
+    it('sends only the text when there is no PDF', async () => {
+      const { ctx, waha, createSignedUrl } = setup({
+        db: { prescription: { ...PRESCRIPTION, ...NO_PDF, notes: 'Dieta blanda' } },
+      });
+      const result = await run(ctx);
+
+      expect(result.status).toBe(200);
+      expect(waha.sendFile).not.toHaveBeenCalled();
+      expect(createSignedUrl).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      expect(waha.sendText.mock.calls[0][0].text).toContain('Dieta blanda');
+    });
+
+    it.each([['Recetado para: Faringitis'], ['   '], [null]])(
+      'does not treat legacy or blank notes (%s) as indications',
+      async (notes) => {
+        const { ctx, waha } = setup({ db: { prescription: { ...PRESCRIPTION, notes } } });
+        const result = await run(ctx);
+        expect(result.status).toBe(200);
+        expect(waha.sendFile).toHaveBeenCalledTimes(1);
+        expect(waha.sendText).not.toHaveBeenCalled();
+      }
+    );
+
+    it('returns 422 no_content for a PDF-less prescription with only legacy notes', async () => {
+      const { ctx, waha } = setup({
+        db: { prescription: { ...PRESCRIPTION, ...NO_PDF, notes: 'Recetado para: Faringitis' } },
+      });
+      const result = await run(ctx);
+      expect(result.status).toBe(422);
+      expect(result.body).toEqual({ error: 'no_content' });
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
+
+    it('logs a failure and returns 502 when the text message fails after the PDF was sent', async () => {
+      const { ctx, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, notes: 'Reposo' } },
+        waha: { sendText: vi.fn().mockRejectedValue(new Error('WAHA 500: text boom')) },
+      });
+      const result = await run(ctx);
+
+      expect(result.status).toBe(502);
+      expect(result.body.status).toBe('failed');
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0]).toMatchObject({ status: 'failed' });
+      expect(inserts[0].error).toContain('text boom');
+    });
+
+    it('logs a failure when the text-only send fails', async () => {
+      const { ctx, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, ...NO_PDF, notes: 'Reposo' } },
+        waha: { sendText: vi.fn().mockRejectedValue(new Error('WAHA 500: boom')) },
+      });
+      const result = await run(ctx);
+      expect(result.status).toBe(502);
+      expect(inserts[0]).toMatchObject({ status: 'failed' });
+    });
   });
 });
 
