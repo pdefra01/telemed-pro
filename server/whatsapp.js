@@ -167,6 +167,21 @@ export function buildIndicationsMessage({ doctorName, indications } = {}) {
 ${indications}`;
 }
 
+/** Text message carrying the insurer (obra social) prescription download link. */
+export function buildExternalPrescriptionMessage({ patientName, doctorName, url } = {}) {
+  const greeting = patientName ? `Hola ${patientName},` : 'Hola,';
+  const doctor = doctorName ? `el Dr. ${doctorName}` : 'tu médico';
+  return (
+    `${greeting} te enviamos la receta de tu obra social de tu consulta con ${doctor}.
+
+` +
+    `Podés descargarla acá: ${url}
+
+` +
+    'Si tenés alguna consulta, respondé por la plataforma.'
+  );
+}
+
 /**
  * Sends a prescription PDF to its patient from the company's WhatsApp number.
  *
@@ -187,17 +202,21 @@ export async function sendPrescriptionViaWhatsApp(
 ) {
   const { data: prescription } = await supabaseAdmin
     .from('prescriptions')
-    .select('id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path, notes')
+    .select('id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path, notes, external_prescription_url')
     .eq('id', prescriptionId)
     .maybeSingle();
 
   if (!prescription) return { status: 404, body: { error: 'prescription_not_found' } };
   if (prescription.doctor_id !== requesterId) return { status: 403, body: { error: 'forbidden' } };
 
-  const storagePath =
-    prescription.pdf_path || extractStoragePathFromPublicUrl(prescription.pdf_url, PRESCRIPTIONS_PDFS_BUCKET);
+  // Obra social mode: the link replaces the internal PDF entirely.
+  const externalUrl =
+    typeof prescription.external_prescription_url === 'string' ? prescription.external_prescription_url.trim() : '';
+  const storagePath = externalUrl
+    ? null
+    : prescription.pdf_path || extractStoragePathFromPublicUrl(prescription.pdf_url, PRESCRIPTIONS_PDFS_BUCKET);
   const indications = extractUsableIndications(prescription.notes);
-  if (!storagePath && !indications) return { status: 422, body: { error: 'no_content' } };
+  if (!storagePath && !externalUrl && !indications) return { status: 422, body: { error: 'no_content' } };
 
   const record = async (status, error = null) => {
     const { error: insertError } = await supabaseAdmin.from('prescription_deliveries').insert({
@@ -254,6 +273,16 @@ export async function sendPrescriptionViaWhatsApp(
   }
 
   try {
+    if (externalUrl) {
+      await waha.sendText({
+        phone,
+        text: buildExternalPrescriptionMessage({
+          patientName: patient?.full_name,
+          doctorName: prescription.doctor_name,
+          url: externalUrl,
+        }),
+      });
+    }
     if (bytes) {
       await waha.sendFile({
         phone,

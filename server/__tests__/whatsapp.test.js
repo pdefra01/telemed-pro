@@ -548,6 +548,69 @@ describe('sendPrescriptionViaWhatsApp', () => {
       expect(inserts[0]).toMatchObject({ status: 'failed' });
     });
   });
+
+  describe('obra social external link', () => {
+    const LINK = 'https://obrasocial.example/receta/abc123';
+    const EXTERNAL = { ...PRESCRIPTION, pdf_url: null, pdf_path: null, external_prescription_url: LINK };
+
+    it('sends a text with the link (no PDF) and logs success', async () => {
+      const { ctx, waha, createSignedUrl, fetchFn, inserts } = setup({ db: { prescription: EXTERNAL } });
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(waha.sendFile).not.toHaveBeenCalled();
+      expect(createSignedUrl).not.toHaveBeenCalled();
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      const sent = waha.sendText.mock.calls[0][0];
+      expect(sent.phone).toBe('5491112345678');
+      expect(sent.text).toContain(LINK);
+      expect(sent.text).toContain('obra social');
+      expect(sent.text).toContain('Ana Pérez');
+      expect(sent.text).toContain('Dr. Sergio Dib Ashur');
+      expect(sent.text).not.toMatch(/\d{8,}/);
+      expect(inserts).toEqual([expect.objectContaining({ prescription_id: 'rx-1', status: 'sent' })]);
+    });
+
+    it('sends the indications as a second text after the link', async () => {
+      const { ctx, waha } = setup({ db: { prescription: { ...EXTERNAL, notes: 'Reposo 48 horas' } } });
+      const result = await run(ctx);
+
+      expect(result.status).toBe(200);
+      expect(waha.sendText).toHaveBeenCalledTimes(2);
+      expect(waha.sendText.mock.calls[0][0].text).toContain(LINK);
+      expect(waha.sendText.mock.calls[1][0].text).toContain('Reposo 48 horas');
+      expect(waha.sendText.mock.invocationCallOrder[0]).toBeLessThan(waha.sendText.mock.invocationCallOrder[1]);
+    });
+
+    it('sends only the link when the notes are blank or legacy', async () => {
+      const { ctx, waha } = setup({ db: { prescription: { ...EXTERNAL, notes: 'Recetado para: Faringitis' } } });
+      await run(ctx);
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs a failure and returns 502 when the link message fails', async () => {
+      const { ctx, inserts } = setup({
+        db: { prescription: EXTERNAL },
+        waha: { sendText: vi.fn().mockRejectedValue(new Error('WAHA 500: link boom')) },
+      });
+      const result = await run(ctx);
+
+      expect(result.status).toBe(502);
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0]).toMatchObject({ status: 'failed' });
+      expect(inserts[0].error).toContain('link boom');
+    });
+
+    it('still honours the resend guard', async () => {
+      const { ctx, waha } = setup({
+        db: { prescription: EXTERNAL, lastSent: { created_at: '2026-09-20T11:59:30Z' } },
+      });
+      const result = await run(ctx);
+      expect(result).toEqual({ status: 409, body: { status: 'already_sent' } });
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('extractStoragePathFromPublicUrl', () => {
