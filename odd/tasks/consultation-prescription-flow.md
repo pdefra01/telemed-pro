@@ -255,7 +255,28 @@ folded into T7 (do not reopen the review):
 Reviewed boundary is now the T4 documentation commit; the next assessment uses
 that commit as `--base-ref`.
 
+## Review 3 (RDD, 2026-09-23)
+T5+T7 slice (base `e83066b`, medium, 583 lines) reviewed with the reliability
+lens and approved; acknowledged. Non-blocking follow-ups, folded into T8 (do
+not reopen the review):
+- WARNING (deterministic) `server/whatsapp.js:327`: only the attempt that sends
+  the PDF writes the `partial:pdf_sent` marker; if the retry's text fails again
+  the new failed row has no marker and the next retry resends the PDF. No test
+  covers two consecutive text failures.
+- WARNING `server/whatsapp.js:208`: the prescriptions select always asks for
+  `external_prescription_url` and ignores the error; if the server ships before
+  the migration is applied, every WhatsApp send (including normal PDF sends)
+  returns 404 `prescription_not_found`. The edge function already guards this
+  (column only in obra social mode); the server does not.
+Reviewed boundary is now the T7 documentation commit.
+
+- [ ] T8 Fix the two review warnings (server/whatsapp.js + tests): (a) keep the
+      `partial:pdf_sent` marker on every text failure after the PDF went out,
+      test with two consecutive failures; (b) tolerate the missing column: if
+      the prescriptions select errors because of `external_prescription_url`,
+      retry without that column and treat it as "no external link", so the
+      server is safe to deploy before the migration is applied.
+
 ## Next step
-RDD review of the T5+T7 slice (base = commit `6b5d50f`), then T6 (user: apply
-migration `20260923000000`, deploy the edge function, real WhatsApp test).
-All code tasks (T1-T5, T7) are done.
+T8, then T6 (user: apply migration `20260923000000`, deploy the edge function,
+real WhatsApp test).
