@@ -88,7 +88,7 @@ reachable during the video call and finalized in PostConsultation:
 - [x] T4 Reconnect VideoRoom "Receta" tab: pass med lines + recommendations to
       PostConsultation via navigate state and prefill (free-text lines coexist
       with catalog items in `medications`), tests. Commit `3af414d`.
-- [ ] T5 Obra social alternative mode: mode selector, link field + validation,
+- [x] T5 (commits `751c16b`, `862bd40`) Obra social alternative mode: mode selector, link field + validation,
       server handler that sends the link through company WhatsApp, delivery
       log decision (see Design), tests. DECISION (assistant, user may veto):
       written-only additive migration `prescriptions.external_prescription_url
@@ -176,6 +176,26 @@ at a time.
   the draft lives only in router state, so a page refresh after navigating
   loses it and the doctor sees the empty form as before.
 
+- T5 (delegated writer, commits `751c16b` server, `862bd40` migration + edge
+  function + client + helper): written-only migration
+  `20260923000000_prescriptions_external_url.sql` (`external_prescription_url
+  TEXT`), NOT applied. Client: mode selector; obra social mode hides the
+  medications editor, requires an https link (helper
+  `src/utils/externalPrescriptionUrl.ts`), sends `externalPrescriptionUrl` and
+  `medications: []`, skips stock deduction, keeps indications, WhatsApp
+  trigger/retry as in T3. Edge function: 400 on non-https / >2000 chars /
+  whitespace links; minimal prescriptions row without PDF; the new column is
+  only included in the insert in obra social mode, so other flows keep working
+  before the migration is applied. Server: link sent as its own text, then the
+  indications text when usable. RED->GREEN: whatsapp.test.js 5 failing -> 65/65;
+  helper 10/10; PostConsultation obra social tests 5 failing -> `src/pages/doctor`
+  42/42; writer full suite 743 passed / 7 failed (only the known ones). Parent
+  spot check of the focused run: only the known `crypto.test.ts` failure.
+  Consumers (PatientDashboard, MedicalHistory, PharmacyCatalog,
+  PrescriptionRepository, DoctorDashboard) tolerate `medications: []` and no PDF
+  (patient sees "0 Medicamentos", no link to the obra social prescription:
+  cosmetic, left alone). Gap: Deno edge function untested (T6 manual check).
+
 ## Review (RDD, 2026-09-23)
 T1+T2 range (`060ceb0..HEAD`, medium risk, 521 lines incl. this doc) reviewed
 with the reliability lens and approved; acknowledgement done (authority
@@ -217,4 +237,5 @@ Reviewed boundary is now the T4 documentation commit; the next assessment uses
 that commit as `--base-ref`.
 
 ## Next step
-T5 (obra social alternative), then T7 (hardening), then T6 (user deploy/test).
+RDD assessment/review of the T5 slice, then T7 (hardening), then T6 (user:
+apply migration `20260923000000`, deploy the edge function, real WhatsApp test).
