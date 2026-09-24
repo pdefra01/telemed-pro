@@ -91,8 +91,10 @@ Las recetas se envían al paciente **desde el número de la empresa**, nunca des
 
 1. En el mismo proyecto/entorno que la app: **+ Add Resource → Docker Image** con `devlikeapro/waha`.
 2. Variables de entorno del servicio:
-   - `WHATSAPP_API_KEY` = la misma cadena que pondrás en `WHATSAPP_GATEWAY_API_KEY` de la app.
-   - `WHATSAPP_START_SESSION` = `default` (inicia la sesión al arrancar).
+   - `WAHA_API_KEY` = la misma cadena que pondrás en `WHATSAPP_GATEWAY_API_KEY` de la app. Es la variable que lee esta versión de WAHA: con otro nombre WAHA genera una clave aleatoria en cada reinicio y todo responde 401.
+   - `WHATSAPP_DEFAULT_ENGINE` = `GOWS`. Es el motor que logró vincular el número; `WEBJS` falló al escanear y `NOWEB` fue inestable.
+   - `WAHA_DASHBOARD_USERNAME` y `WAHA_DASHBOARD_PASSWORD` = usuario y clave del panel. Si no se definen, WAHA genera una clave aleatoria que imprime **una sola vez** en los logs del primer arranque.
+   - `WHATSAPP_START_SESSION` = `default` (inicia la sesión al arrancar). El nombre debe ser exactamente `default` (o el valor de `WHATSAPP_GATEWAY_SESSION`).
 3. **Persistencia**: montar un volumen en `/app/.sessions`. Sin él, la vinculación se pierde en cada redeploy y hay que volver a escanear el QR.
 4. **No publicar el puerto ni asignarle dominio público.** El gateway debe ser alcanzable solo por la red interna de Coolify.
 5. En la app, cargar `WHATSAPP_GATEWAY_URL` con la URL interna que Coolify muestra para ese servicio (ej. `http://waha:3000`) y las otras dos variables de la sección 1.B. Redeploy de la app.
@@ -100,15 +102,35 @@ Las recetas se envían al paciente **desde el número de la empresa**, nunca des
 > [!NOTE]
 > Los nombres de variables y rutas de WAHA pueden cambiar entre versiones. Confirmalos en la documentación de la versión que instales antes de desplegar.
 
+> [!IMPORTANT]
+> En Coolify, un cambio de variables de entorno solo se aplica con **Redeploy**; **Restart** reinicia el contenedor con la configuración vieja. Para confirmar qué valor tiene realmente el contenedor, abrí su pestaña **Terminal** y corré `env | grep -i key`.
+
 ### B) Vincular el celular de la empresa (una sola vez)
 
-1. Abrir el panel de WAHA **desde la red interna** (por ejemplo con un túnel temporal) y mostrar el QR de la sesión `default`.
-2. En el celular de la empresa: WhatsApp → **Dispositivos vinculados → Vincular un dispositivo** y escanear el QR.
-3. Verificar que la sesión figure en estado **WORKING**.
+Antes de empezar: el celular de la empresa debe tener **internet (datos o wifi) y WhatsApp/WhatsApp Business actualizado**. Sin conexión en el celular, WhatsApp muestra "No se pudo vincular el dispositivo" al instante, aunque todo lo demás esté bien.
+
+1. Asignar un **dominio temporal** al servicio del gateway (Coolify → servicio → **Domains** → *Generate Domain*, guardar y **Redeploy**). Es el único momento en que el gateway queda público.
+2. Entrar a `<dominio>/dashboard` con `WAHA_DASHBOARD_USERNAME` / `WAHA_DASHBOARD_PASSWORD`.
+3. En **Workers** → editar el worker y cargar la API key completa (`WAHA_API_KEY`). El campo recorta visualmente los valores largos: verificá el valor real con `env | grep -i key` en la Terminal del contenedor.
+4. En **Sessions**, iniciar la sesión `default` (debe pasar a `SCAN_QR_CODE`).
+5. Vincular con **código** (más confiable que el QR, que rota cada ~20 segundos). Dejá el celular en WhatsApp → **Dispositivos vinculados → Vincular un dispositivo → Vincular con número de teléfono** con el teclado listo, y pedí el código:
+   ```
+   POST <dominio>/api/default/auth/request-code
+   X-Api-Key: <WAHA_API_KEY>
+   {"phoneNumber": "549XXXXXXXXXX"}
+   ```
+   (número en formato internacional, sin `+` ni espacios). Ingresá el código de inmediato: vence en pocos segundos.
+6. Verificar que la sesión figure en estado **WORKING**.
+7. **Quitar el dominio temporal** (dejar el campo *Domains* vacío, guardar) y hacer **Redeploy**: el gateway debe volver a ser solo interno.
+
+Si falla: evitá reintentar en ráfaga (WhatsApp puede bloquear el número); revisá primero la conexión del celular. Si la sesión pasó a `FAILED`, reiniciala (`POST /api/sessions/default/restart`) antes de pedir otro código.
 
 ### C) Migración de base de datos
 
-Aplicar la migración `20260920010000_prescription_deliveries.sql` (registro de envíos) con `supabase db push`.
+Aplicar con `supabase db push` las migraciones de los registros de envío y de la receta de obra social:
+- `20260920010000_prescription_deliveries.sql` (recetas)
+- `20260922000000_adhesion_payment_link_deliveries.sql` (link de pago de la adhesión)
+- `20260923000000_prescriptions_external_url.sql` (link de receta de obra social)
 
 ### D) Mantenimiento y cuidados
 
