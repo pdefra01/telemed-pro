@@ -153,6 +153,9 @@ export function extractStoragePathFromPublicUrl(publicUrl, bucket) {
 // the doctor wrote for the patient, so it must never be resent.
 const LEGACY_NOTES_PREFIX = 'Recetado para:';
 
+// Prefix of the error logged when the PDF went out but a later message failed.
+const PARTIAL_PDF_SENT_MARKER = 'partial:pdf_sent';
+
 function extractUsableIndications(notes) {
   const text = typeof notes === 'string' ? notes.trim() : '';
   if (!text || text.startsWith(LEGACY_NOTES_PREFIX)) return null;
@@ -202,7 +205,7 @@ export async function sendPrescriptionViaWhatsApp(
 ) {
   const { data: prescription } = await supabaseAdmin
     .from('prescriptions')
-    .select('id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path, notes, external_prescription_url')
+    .select('id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path, notes, medications, external_prescription_url')
     .eq('id', prescriptionId)
     .maybeSingle();
 
@@ -217,6 +220,10 @@ export async function sendPrescriptionViaWhatsApp(
     : prescription.pdf_path || extractStoragePathFromPublicUrl(prescription.pdf_url, PRESCRIPTIONS_PDFS_BUCKET);
   const indications = extractUsableIndications(prescription.notes);
   if (!storagePath && !externalUrl && !indications) return { status: 422, body: { error: 'no_content' } };
+  // Only an indications-only prescription may go without a PDF; otherwise the
+  // patient would never receive the medications while the doctor sees success.
+  const hasMedications = Array.isArray(prescription.medications) && prescription.medications.length > 0;
+  if (hasMedications && !externalUrl && !storagePath) return { status: 422, body: { error: 'no_pdf' } };
 
   const record = async (status, error = null) => {
     const { error: insertError } = await supabaseAdmin.from('prescription_deliveries').insert({
@@ -245,6 +252,20 @@ export async function sendPrescriptionViaWhatsApp(
     return { status: 409, body: { status: 'already_sent' } };
   }
 
+  // A previous attempt that delivered the PDF but failed on the text is marked
+  // in its failed row; the retry must not send the PDF again.
+  const { data: lastDelivery } = await supabaseAdmin
+    .from('prescription_deliveries')
+    .select('status, error')
+    .eq('prescription_id', prescription.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const pdfAlreadySent =
+    lastDelivery?.status === 'failed' &&
+    typeof lastDelivery.error === 'string' &&
+    lastDelivery.error.startsWith(PARTIAL_PDF_SENT_MARKER);
+
   const { data: patient } = await supabaseAdmin
     .from('profiles')
     .select('full_name, phone')
@@ -257,7 +278,7 @@ export async function sendPrescriptionViaWhatsApp(
   if (!(await waha.isSessionReady())) return fail(503, 'session_not_ready');
 
   let bytes = null;
-  if (storagePath) {
+  if (storagePath && !pdfAlreadySent) {
     try {
       const { data: signedData, error: signError } = await supabaseAdmin.storage
         .from(PRESCRIPTIONS_PDFS_BUCKET)
@@ -272,6 +293,7 @@ export async function sendPrescriptionViaWhatsApp(
     }
   }
 
+  let pdfSent = false;
   try {
     if (externalUrl) {
       await waha.sendText({
@@ -293,6 +315,7 @@ export async function sendPrescriptionViaWhatsApp(
           doctorName: prescription.doctor_name,
         }),
       });
+      pdfSent = true;
     }
     if (indications) {
       await waha.sendText({
@@ -301,7 +324,7 @@ export async function sendPrescriptionViaWhatsApp(
       });
     }
   } catch (err) {
-    return fail(502, `send_failed: ${err?.message || err}`);
+    return fail(502, `${pdfSent ? PARTIAL_PDF_SENT_MARKER + ' ' : ''}send_failed: ${err?.message || err}`);
   }
 
   await record('sent');
