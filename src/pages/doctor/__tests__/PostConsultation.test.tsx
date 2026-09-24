@@ -259,6 +259,15 @@ describe('PostConsultation Page', () => {
       await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
     }, 15000);
 
+    it('does not call WhatsApp for indications the server ignores (legacy "Recetado para:" prefix)', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('Recetado para: Faringitis');
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+      expect(fetchMock).not.toHaveBeenCalled();
+    }, 15000);
+
     it('does not call WhatsApp when there is neither a PDF nor indications', async () => {
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);

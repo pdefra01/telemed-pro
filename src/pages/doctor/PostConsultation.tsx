@@ -1,3 +1,4 @@
+import { hasUsableIndications } from '../../utils/usableIndications';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { parsePrescriptionDraft } from './prescriptionDraft';
@@ -536,7 +537,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       let whatsappDelivered = true;
       if (data?.pdfUrl) setPdfUrl(data.pdfUrl);
       // Indications alone (no medications, so no PDF) are also delivered by WhatsApp
-      if (data?.pdfUrl || isObraSocial || indications.trim()) {
+      if (data?.pdfUrl || isObraSocial || hasUsableIndications(indications)) {
         whatsappDelivered = await sendPrescriptionWhatsapp();
       }
       

@@ -8,10 +8,14 @@ export function buildPrescriptionDraft(
   prescription: { med: string; dose: string }[],
   recommendations: string
 ): PrescriptionDraft | null {
-  const medications = prescription
-    .filter((item) => item.med.trim())
-    .map((item) => ({ med: item.med.trim(), dose: item.dose.trim() }));
-  const text = recommendations.trim();
+  // Never throws: it runs after the appointment is already completed.
+  const medications: PrescriptionDraft['medications'] = [];
+  for (const item of Array.isArray(prescription) ? prescription : []) {
+    const med = typeof item?.med === 'string' ? item.med.trim() : '';
+    if (!med) continue;
+    medications.push({ med, dose: typeof item.dose === 'string' ? item.dose.trim() : '' });
+  }
+  const text = typeof recommendations === 'string' ? recommendations.trim() : '';
   if (medications.length === 0 && !text) return null;
   return { medications, recommendations: text };
 }

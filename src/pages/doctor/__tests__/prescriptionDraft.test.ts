@@ -56,3 +56,28 @@ describe('parsePrescriptionDraft', () => {
     expect(parsePrescriptionDraft({ prescriptionDraft: { medications: 'x', recommendations: '' } })).toBeNull();
   });
 });
+
+describe('buildPrescriptionDraft with malformed input', () => {
+  it('never throws on non-string fields and keeps only valid items', () => {
+    const bad = [
+      { med: 'Ibuprofeno', dose: 400 },
+      { med: null, dose: 'x' },
+      null,
+      { med: 123, dose: 'y' },
+      { med: ' Amoxicilina ' },
+    ] as unknown as { med: string; dose: string }[];
+
+    expect(() => buildPrescriptionDraft(bad, undefined as unknown as string)).not.toThrow();
+    expect(buildPrescriptionDraft(bad, undefined as unknown as string)).toEqual({
+      medications: [
+        { med: 'Ibuprofeno', dose: '' },
+        { med: 'Amoxicilina', dose: '' },
+      ],
+      recommendations: '',
+    });
+  });
+
+  it('returns null for non-array input without throwing', () => {
+    expect(buildPrescriptionDraft(undefined as unknown as [], null as unknown as string)).toBeNull();
+  });
+});
