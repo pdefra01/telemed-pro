@@ -90,7 +90,21 @@ reachable during the video call and finalized in PostConsultation:
       with catalog items in `medications`), tests. Commit `3af414d`.
 - [ ] T5 Obra social alternative mode: mode selector, link field + validation,
       server handler that sends the link through company WhatsApp, delivery
-      log decision (see Design), tests.
+      log decision (see Design), tests. DECISION (assistant, user may veto):
+      written-only additive migration `prescriptions.external_prescription_url
+      TEXT NULL`; the edge function creates a minimal prescriptions row
+      (`medications: []`, no PDF, `external_prescription_url` = the link) and
+      `sendPrescriptionViaWhatsApp` sends a text with the link (logged in
+      `prescription_deliveries`). The migration is NOT applied by the writer;
+      the user applies it (T6) before deploying the edge function.
+- [ ] T7 Hardening from the T3+T4 review (WhatsApp reliability): (a) restore a
+      failure when a prescription has medications but its PDF cannot be
+      resolved, instead of sending only the indications text and reporting
+      success; (b) avoid resending the PDF on retry when only the text failed
+      (record partial state); (c) make the client indications check consistent
+      with the server "Recetado para:" legacy rule; (d) build the VideoRoom
+      draft defensively so a malformed item cannot block the redirect after
+      `completeAppointment`, and test the navigate call.
 - [ ] T6 (user step, not code) Deploy `finalize-consultation` edge function and
       run the end-to-end WhatsApp test with the real number.
 
@@ -183,6 +197,24 @@ goes to master, so production never deploys a half-built feature. Slice 1 =
 T1+T2 (commits `85662bd`, `b163e84`, plus the tracking doc). Push and PR
 creation stay the user's decision.
 
+## Review 2 (RDD, 2026-09-23)
+T3+T4 slice (base `398fa4c` tree, medium, 472 lines) reviewed with the
+reliability lens and approved; acknowledged. Non-blocking follow-ups, all
+folded into T7 (do not reopen the review):
+- WARNING `server/whatsapp.js:199-200`: medications + unresolvable PDF +
+  indications now sends only the text and reports success (base returned 422
+  `no_pdf`); the edge function's existing fallback can store a dummy external
+  `pdf_url` with `pdf_path` null.
+- WARNING `server/whatsapp.js:268-273`: PDF ok + text failed logs one `failed`
+  row without the PDF state; retry resends the PDF (duplicates); the partial
+  test does not assert `sendFile` was called.
+- SUGGESTION `PostConsultation.tsx:533`: client/server mismatch when
+  indications start with "Recetado para:".
+- SUGGESTION `VideoRoom.tsx:1012-1013`: navigate call untested; the draft is
+  built after `completeAppointment` inside the same try, so a malformed item
+  would show an error without redirecting.
+Reviewed boundary is now the T4 documentation commit; the next assessment uses
+that commit as `--base-ref`.
+
 ## Next step
-T5: obra social alternative mode (after the pending RDD assessment of the
-T3+T4 slice).
+T5 (obra social alternative), then T7 (hardening), then T6 (user deploy/test).
