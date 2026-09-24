@@ -125,6 +125,27 @@ at a time.
   user deploys it (T6).
 - Route: T1+T2 delegated writer (PostConsultation.tsx, its test, edge function).
 
+## Review (RDD, 2026-09-23)
+T1+T2 range (`060ceb0..HEAD`, medium risk, 521 lines incl. this doc) reviewed
+with the reliability lens and approved; acknowledgement done (authority
+burned). Non-blocking follow-ups (do not reopen the review):
+- WARNING `finalize-consultation/index.ts:197`: `indications` is stored only
+  when the prescriptions row is inserted, which happens only with medications;
+  the client shows the indications field regardless of the "Receta Electronica"
+  toggle, so indications written without medications are silently dropped.
+  DECISION: handled inside T3 (create the row when there are medications OR
+  indications; PDF only when there are medications; WhatsApp then sends the PDF
+  and/or the indications text).
+- SUGGESTION: no test for the edge-function changes (known gap, see T6);
+  optionally move the notes rule into a small pure helper.
+- SUGGESTION: the "no PIN step" test asserts absence of text matching "Firma";
+  tighten it (assert no PIN/password input) when T3 touches that test file.
+Delivery: running count (521) passed ~400; user chose `feature-branch-chain`
+(2026-09-23): slices are PRs into the feature branch and only the final PR
+goes to master, so production never deploys a half-built feature. Slice 1 =
+T1+T2 (commits `85662bd`, `b163e84`, plus the tracking doc). Push and PR
+creation stay the user's decision.
+
 ## Next step
-T3: send the prescripcion as a second WhatsApp text after the PDF
-(server/whatsapp.js + tests).
+T3: prescripcion-only support + second WhatsApp text message (edge function,
+server/whatsapp.js + tests).
