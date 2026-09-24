@@ -19,7 +19,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     const body = await req.json()
-    const { appointmentId, diagnosis, notes, prescription } = body
+    const { appointmentId, diagnosis, notes, prescription, indications } = body
     const medications = body.medications || prescription?.medications || [];
 
     // 1. Get Appointment Info
@@ -194,7 +194,7 @@ serve(async (req) => {
             instructions: m.instructions,
             quantity: 1
           })),
-          notes: `Recetado para: ${diagnosis}`,
+          notes: typeof indications === 'string' && indications.trim() ? indications.trim() : null,
           pdf_url: pdfUrl,
           pdf_path: pdfPath
         })

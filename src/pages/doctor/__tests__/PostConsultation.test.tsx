@@ -165,6 +165,42 @@ describe('PostConsultation Page', () => {
     }, 10000);
   });
 
+  describe('prescription indications', () => {
+    afterEach(() => cleanup());
+
+    const renderAndFill = async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+    };
+
+    it('sends the trimmed indications in the finalize payload', async () => {
+      await renderAndFill();
+      fireEvent.change(screen.getByLabelText(/Prescripción \/ indicaciones/i), {
+        target: { value: '  Reposo 48hs y dieta blanda  ' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.indications).toBe('Reposo 48hs y dieta blanda');
+    }, 10000);
+
+    it('is optional: a blank field is sent as an empty value', async () => {
+      await renderAndFill();
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.indications).toBe('');
+    }, 10000);
+  });
+
   describe('WhatsApp delivery of the prescription', () => {
     const PDF_URL = 'https://storage.example/receta.pdf';
 

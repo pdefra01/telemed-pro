@@ -201,6 +201,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   
   const [notes, setNotes] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
+  const [indications, setIndications] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [closureStatus, setClosureStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
@@ -477,7 +478,8 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
           appointmentId: appointmentData.id,
           diagnosis,
           notes,
-          medications: addPrescription ? medications : []
+          medications: addPrescription ? medications : [],
+          indications: indications.trim()
         }
       });
 
@@ -789,6 +791,28 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                   </div>
                 )}
               </div>
+            </section>
+
+            {/* Indications Card (non-medication: rest, diet, studies) */}
+            <section className="group bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl transition-all hover:border-amber-500/30">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
+                  <ClipboardList className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Prescripción / indicaciones</h2>
+                  <p className="text-sm text-slate-500 font-medium">Opcional: reposo, dieta, estudios u otras indicaciones</p>
+                </div>
+              </div>
+              <textarea
+                id="indications"
+                aria-label="Prescripción / indicaciones"
+                value={indications}
+                onChange={(e) => setIndications(e.target.value)}
+                rows={4}
+                className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all leading-relaxed shadow-inner placeholder:text-slate-600"
+                placeholder="Ej. Reposo 48hs, dieta blanda, hemograma de control..."
+              />
             </section>
 
             {/* Prescription Section */}
