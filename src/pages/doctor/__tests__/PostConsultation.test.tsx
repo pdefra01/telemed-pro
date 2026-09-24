@@ -137,6 +137,34 @@ describe('PostConsultation Page', () => {
     }, { timeout: 6000 });
   }, 10000);
 
+  describe('prescription without digital signature', () => {
+    afterEach(() => cleanup());
+
+    it('finalizes a prescription directly without a PIN step or signature fields', async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.click(screen.getByText(/Receta Electrónica/i));
+      fireEvent.change(screen.getByPlaceholderText(/Ej\. Amoxicilina/i), { target: { value: 'Ibuprofeno 400mg' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+
+      expect(screen.queryByText(/Firma/i)).toBeNull();
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.medications).toEqual([expect.objectContaining({ name: 'Ibuprofeno 400mg' })]);
+      expect(body).not.toHaveProperty('digitalSignature');
+      expect(body).not.toHaveProperty('signaturePublicKey');
+    }, 10000);
+  });
+
   describe('WhatsApp delivery of the prescription', () => {
     const PDF_URL = 'https://storage.example/receta.pdf';
 

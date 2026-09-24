@@ -19,7 +19,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     const body = await req.json()
-    const { appointmentId, diagnosis, notes, prescription, digitalSignature, signaturePublicKey } = body
+    const { appointmentId, diagnosis, notes, prescription } = body
     const medications = body.medications || prescription?.medications || [];
 
     // 1. Get Appointment Info
@@ -145,32 +145,6 @@ serve(async (req) => {
       currentY -= 20
       page.drawText(`Dx: ${diagnosis}`, { x: 40, y: currentY, size: 9, font: helveticaFont, color: rgb(0.5, 0.5, 0.5) })
 
-      // Footer / Signature area
-      const signature = digitalSignature || `AUTH-${appointment.doctor_id.substring(0, 8)}-${Date.now()}`
-      
-      // Line for signature
-      page.drawLine({
-        start: { x: width - 200, y: 150 },
-        end: { x: width - 40, y: 150 },
-        thickness: 0.5,
-        color: rgb(0.5, 0.5, 0.5)
-      })
-      page.drawText('Firma y Sello Digital', { x: width - 150, y: 135, size: 8, font: helveticaFont, color: rgb(0.5, 0.5, 0.5) })
-      
-      // Digital ID
-      page.drawRectangle({
-        x: 40,
-        y: 40,
-        width: width - 80,
-        height: 40,
-        color: lightGray,
-      })
-      // Footer validation block — uses first 20 chars of the ECDSA signature as auth code
-      const authCode = digitalSignature
-        ? `ECDSA-${digitalSignature.substring(0, 20).toUpperCase()}` 
-        : `AUTH-${appointment.doctor_id.substring(0, 8)}-${Date.now()}`
-      page.drawText('Documento validado digitalmente por MEDINEX. La autenticidad puede verificarse mediante el código ID.', { x: 55, y: 65, size: 7, font: helveticaFont, color: rgb(0.5, 0.5, 0.5) })
-      page.drawText(`CÓDIGO DE AUTENTICIDAD CRIPTOGRÁFICA: ${authCode}`, { x: 55, y: 53, size: 8, font: helveticaBold, color: primaryColor })
 
       const pdfBytes = await pdfDoc.save()
 
@@ -213,8 +187,8 @@ serve(async (req) => {
           doctor_id: appointment.doctor_id,
           doctor_name: doctor.full_name,
           expiration_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          digital_signature: signature,
-          signature_public_key: signaturePublicKey || null,
+          // NOT NULL column: prescriptions are no longer signed
+          digital_signature: '',
           medications: medications.map((m: any) => ({
             name: m.name,
             instructions: m.instructions,
@@ -237,7 +211,7 @@ serve(async (req) => {
     
     if (medications.length > 0) {
       messageBody += `💊 Receta Digital:\n` + medications.map((m: any) => `- ${m.name}: ${m.instructions}`).join('\n') + `\n\n` +
-        `📄 Podés descargar tu receta firmada aquí: ${pdfUrl}`;
+        `📄 Podés descargar tu receta aquí: ${pdfUrl}`;
     } else {
       messageBody += `No se recetaron medicamentos en esta consulta.`;
     }
