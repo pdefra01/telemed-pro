@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import PostConsultation from '../PostConsultation';
 import { supabase } from '../../../services/supabase';
 import { appointmentRepository } from '../../../repositories/AppointmentRepository';
@@ -137,6 +137,72 @@ describe('PostConsultation Page', () => {
     }, { timeout: 6000 });
   }, 10000);
 
+  describe('prescription without digital signature', () => {
+    afterEach(() => cleanup());
+
+    it('finalizes a prescription directly without a PIN step or signature fields', async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.click(screen.getByText(/Receta Electrónica/i));
+      fireEvent.change(screen.getByPlaceholderText(/Ej\. Amoxicilina/i), { target: { value: 'Ibuprofeno 400mg' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+
+      expect(document.querySelector('input[type="password"]')).toBeNull();
+      expect(screen.queryByPlaceholderText(/PIN|contraseña/i)).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.medications).toEqual([expect.objectContaining({ name: 'Ibuprofeno 400mg' })]);
+      expect(body).not.toHaveProperty('digitalSignature');
+      expect(body).not.toHaveProperty('signaturePublicKey');
+    }, 10000);
+  });
+
+  describe('prescription indications', () => {
+    afterEach(() => cleanup());
+
+    const renderAndFill = async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+    };
+
+    it('sends the trimmed indications in the finalize payload', async () => {
+      await renderAndFill();
+      fireEvent.change(screen.getByLabelText(/Prescripción \/ indicaciones/i), {
+        target: { value: '  Reposo 48hs y dieta blanda  ' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.indications).toBe('Reposo 48hs y dieta blanda');
+    }, 10000);
+
+    it('is optional: a blank field is sent as an empty value', async () => {
+      await renderAndFill();
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.indications).toBe('');
+    }, 10000);
+  });
+
   describe('WhatsApp delivery of the prescription', () => {
     const PDF_URL = 'https://storage.example/receta.pdf';
 
@@ -163,6 +229,68 @@ describe('PostConsultation Page', () => {
       cleanup();
       vi.unstubAllGlobals();
     });
+
+    const finalizeWithoutPdf = async (indications: string) => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      (prescriptionRepository.getPrescriptionByAppointmentId as any).mockResolvedValue({ id: 'rx-2' });
+
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.change(screen.getByLabelText(/Prescripción \/ indicaciones/i), { target: { value: indications } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+    };
+
+    it('sends the indications by WhatsApp even when no PDF was generated', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'sent' }) });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('Reposo 48hs');
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        '/api/prescriptions/rx-2/send-whatsapp',
+        expect.objectContaining({ method: 'POST' })
+      ), { timeout: 6000 });
+      // Let the whole finalization settle so it cannot leak into the next test
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+    }, 15000);
+
+    it('does not call WhatsApp for indications the server ignores (legacy "Recetado para:" prefix)', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('Recetado para: Faringitis');
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+      expect(fetchMock).not.toHaveBeenCalled();
+    }, 15000);
+
+    it('does not call WhatsApp when there is neither a PDF nor indications', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('   ');
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    }, 15000);
+
+    it('shows the failure and a retry for an indications-only send and does not redirect', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 503, json: async () => ({ status: 'failed', reason: 'session_not_ready' }) });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await finalizeWithoutPdf('Reposo 48hs');
+
+      expect(await screen.findByText(/no está conectado/i, undefined, { timeout: 6000 })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Reenviar por WhatsApp/i })).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      expect(mockNavigate).not.toHaveBeenCalledWith('/doctor', expect.anything());
+    }, 20000);
 
     it('sends the prescription automatically from the company number and confirms it', async () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'sent' }) });
@@ -215,5 +343,148 @@ describe('PostConsultation Page', () => {
 
       expect(mockNavigate).not.toHaveBeenCalledWith('/doctor', expect.anything());
     }, 20000);
+  });
+
+  describe('obra social alternative mode', () => {
+    const LINK = 'https://obrasocial.example/receta/abc123';
+
+    beforeEach(() => mockNavigate.mockClear());
+    afterEach(() => {
+      cleanup();
+      vi.unstubAllGlobals();
+    });
+
+    const openObraSocial = async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      (prescriptionRepository.getPrescriptionByAppointmentId as any).mockResolvedValue({ id: 'rx-os' });
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.click(screen.getByText(/Receta Electrónica/i));
+      fireEvent.click(screen.getByLabelText(/Receta de obra social/i));
+    };
+
+    it('shows the link field instead of the medications editor', async () => {
+      await openObraSocial();
+      expect(screen.getByLabelText(/Link de descarga/i)).toBeDefined();
+      expect(screen.queryByPlaceholderText(/Ej\. Amoxicilina/i)).toBeNull();
+    });
+
+    it('blocks the submit and explains the error when the link is not a valid https URL', async () => {
+      await openObraSocial();
+      fireEvent.change(screen.getByLabelText(/Link de descarga/i), { target: { value: 'http://insecure.example/r' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      expect((await screen.findAllByText(/https:\/\//i)).length).toBeGreaterThan(0);
+      expect(supabase.functions.invoke).not.toHaveBeenCalled();
+    });
+
+    it('blocks the submit when the link is empty', async () => {
+      await openObraSocial();
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      expect(await screen.findByText(/Ingresá el link/i)).toBeDefined();
+      expect(supabase.functions.invoke).not.toHaveBeenCalled();
+    });
+
+    it('sends the link with no medications, keeps the indications and triggers the WhatsApp send', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'sent' }) });
+      vi.stubGlobal('fetch', fetchMock);
+      await openObraSocial();
+      fireEvent.change(screen.getByLabelText(/Link de descarga/i), { target: { value: `  ${LINK}  ` } });
+      fireEvent.change(screen.getByLabelText(/Prescripción \/ indicaciones/i), { target: { value: 'Reposo' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        '/api/prescriptions/rx-os/send-whatsapp',
+        expect.objectContaining({ method: 'POST' })
+      ), { timeout: 6000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.externalPrescriptionUrl).toBe(LINK);
+      expect(body.medications).toEqual([]);
+      expect(body.indications).toBe('Reposo');
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+    }, 15000);
+
+    it('sends the link even without indications, and offers a retry without redirecting when WhatsApp fails', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 503, json: async () => ({ status: 'failed', reason: 'session_not_ready' }) });
+      vi.stubGlobal('fetch', fetchMock);
+      await openObraSocial();
+      fireEvent.change(screen.getByLabelText(/Link de descarga/i), { target: { value: LINK } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      expect(await screen.findByText(/no está conectado/i, undefined, { timeout: 6000 })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Reenviar por WhatsApp/i })).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      expect(mockNavigate).not.toHaveBeenCalledWith('/doctor', expect.anything());
+    }, 20000);
+
+    it('does not send externalPrescriptionUrl in the default Medinex mode', async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.click(screen.getByText(/Receta Electrónica/i));
+      fireEvent.change(screen.getByPlaceholderText(/Ej\. Amoxicilina/i), { target: { value: 'Ibuprofeno' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body).not.toHaveProperty('externalPrescriptionUrl');
+    }, 10000);
+  });
+
+  describe('video-call prescription draft', () => {
+    afterEach(() => cleanup());
+
+    const renderWithState = (state: unknown) =>
+      render(
+        <MemoryRouter initialEntries={[{ pathname: '/doctor/post-consultation/x', state }]}>
+          <PostConsultation user={mockDoctor as any} />
+        </MemoryRouter>
+      );
+
+    it('prefills medications, the receta toggle and the indications from navigate state', async () => {
+      renderWithState({
+        prescriptionDraft: {
+          medications: [{ med: 'Amoxicilina 500mg', dose: '1 cada 8hs' }],
+          recommendations: 'Reposo 48hs',
+        },
+      });
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+      expect(screen.getByDisplayValue('Amoxicilina 500mg')).toBeDefined();
+      expect(screen.getByDisplayValue('1 cada 8hs')).toBeDefined();
+      expect((screen.getByLabelText(/Prescripción \/ indicaciones/i) as HTMLTextAreaElement).value).toBe('Reposo 48hs');
+    });
+
+    it('prefills only the indications when there are no medication lines', async () => {
+      renderWithState({ prescriptionDraft: { medications: [], recommendations: 'Dieta blanda' } });
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+      expect((screen.getByLabelText(/Prescripción \/ indicaciones/i) as HTMLTextAreaElement).value).toBe('Dieta blanda');
+      expect(screen.queryByText(/Medicamento #1/i)).toBeNull();
+    });
+
+    it.each([undefined, null, 'garbage', { prescriptionDraft: 'x' }, { prescriptionDraft: { medications: 5 } }])(
+      'behaves as before with missing or malformed state %#',
+      async (state) => {
+        renderWithState(state);
+        await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+        expect((screen.getByLabelText(/Prescripción \/ indicaciones/i) as HTMLTextAreaElement).value).toBe('');
+        expect(screen.queryByText(/Medicamento #1/i)).toBeNull();
+      }
+    );
   });
 });

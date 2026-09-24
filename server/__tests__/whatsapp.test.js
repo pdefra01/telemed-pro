@@ -296,19 +296,40 @@ describe('sendPrescriptionViaWhatsApp', () => {
     prescription = PRESCRIPTION,
     patient = PATIENT,
     lastSent = null,
+    lastDelivery = null,
+    followInserts = false,
+    prescriptionSelectFailures = 0,
     createSignedUrl = vi.fn().mockResolvedValue({ data: { signedUrl: FRESH_SIGNED_URL }, error: null }),
   } = {}) {
     const inserts = [];
+    const prescriptionSelects = [];
+    let failuresLeft = prescriptionSelectFailures;
     const from = (table) => {
+      let onlySent = false;
       const chain = {
-        select: () => chain,
-        eq: () => chain,
+        select: (columns) => {
+          if (table === 'prescriptions') prescriptionSelects.push(columns);
+          return chain;
+        },
+        eq: (column) => {
+          if (column === 'status') onlySent = true;
+          return chain;
+        },
         order: () => chain,
         limit: () => chain,
         maybeSingle: async () => {
-          if (table === 'prescriptions') return { data: prescription, error: null };
+          if (table === 'prescriptions') {
+            if (failuresLeft > 0) {
+              failuresLeft -= 1;
+              return { data: null, error: { message: 'column prescriptions.external_prescription_url does not exist' } };
+            }
+            return { data: prescription, error: null };
+          }
           if (table === 'profiles') return { data: patient, error: null };
-          if (table === 'prescription_deliveries') return { data: lastSent, error: null };
+          if (table === 'prescription_deliveries') {
+            const latest = followInserts && inserts.length ? inserts[inserts.length - 1] : lastDelivery;
+            return { data: onlySent ? lastSent : latest, error: null };
+          }
           return { data: null, error: null };
         },
         insert: async (row) => {
@@ -319,7 +340,7 @@ describe('sendPrescriptionViaWhatsApp', () => {
       return chain;
     };
     const storage = { from: () => ({ createSignedUrl }) };
-    return { client: { from, storage }, inserts, createSignedUrl };
+    return { client: { from, storage }, inserts, createSignedUrl, prescriptionSelects };
   }
 
   const pdfFetch = () =>
@@ -330,12 +351,20 @@ describe('sendPrescriptionViaWhatsApp', () => {
     const waha = {
       isSessionReady: vi.fn().mockResolvedValue(true),
       sendFile: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+      sendText: vi.fn().mockResolvedValue({ id: 'msg-2' }),
       ...overrides.waha,
     };
     const fetchFn = overrides.fetchFn || pdfFetch();
     const now = overrides.now || (() => new Date('2026-09-20T12:00:00Z'));
     const ctx = { supabaseAdmin: stub.client, waha, fetchFn, now };
-    return { ctx, waha, fetchFn, inserts: stub.inserts, createSignedUrl: stub.createSignedUrl };
+    return {
+      ctx,
+      waha,
+      fetchFn,
+      inserts: stub.inserts,
+      createSignedUrl: stub.createSignedUrl,
+      prescriptionSelects: stub.prescriptionSelects,
+    };
   }
 
   const run = (ctx, requesterId = 'doc-1') =>
@@ -374,13 +403,13 @@ describe('sendPrescriptionViaWhatsApp', () => {
     expect(fetchFn).toHaveBeenCalledWith(FRESH_SIGNED_URL);
   });
 
-  it('returns 422 no_pdf when there is neither a usable pdf_path nor a parseable legacy pdf_url', async () => {
+  it('returns 422 no_content when there is neither a usable pdf_path nor a parseable legacy pdf_url and no indications', async () => {
     const { ctx, waha } = setup({
       db: { prescription: { ...PRESCRIPTION, pdf_path: null, pdf_url: 'https://storage.example/not-a-bucket-url.pdf' } },
     });
     const result = await run(ctx);
     expect(result.status).toBe(422);
-    expect(result.body).toEqual({ error: 'no_pdf' });
+    expect(result.body).toEqual({ error: 'no_content' });
     expect(waha.sendFile).not.toHaveBeenCalled();
   });
 
@@ -459,11 +488,286 @@ describe('sendPrescriptionViaWhatsApp', () => {
     expect(waha.sendFile).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 422 when the prescription has no generated PDF', async () => {
+  it('returns 422 no_content when there is no PDF and no indications', async () => {
     const { ctx, waha } = setup({ db: { prescription: { ...PRESCRIPTION, pdf_url: null, pdf_path: null } } });
     const result = await run(ctx);
     expect(result.status).toBe(422);
+    expect(result.body).toEqual({ error: 'no_content' });
     expect(waha.sendFile).not.toHaveBeenCalled();
+    expect(waha.sendText).not.toHaveBeenCalled();
+  });
+
+  describe('indications text', () => {
+    const NO_PDF = { pdf_url: null, pdf_path: null };
+
+    it('sends the PDF and then a text message with the indications', async () => {
+      const { ctx, waha, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, notes: 'Reposo 48 horas' } },
+      });
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      const text = waha.sendText.mock.calls[0][0];
+      expect(text.phone).toBe('5491112345678');
+      expect(text.text).toContain('Dr. Sergio Dib Ashur');
+      expect(text.text).toContain('Reposo 48 horas');
+      expect(text.text).not.toMatch(/\d{8,}/);
+      expect(waha.sendFile.mock.invocationCallOrder[0]).toBeLessThan(waha.sendText.mock.invocationCallOrder[0]);
+      expect(inserts).toEqual([expect.objectContaining({ status: 'sent' })]);
+    });
+
+    it('sends only the text when there is no PDF', async () => {
+      const { ctx, waha, createSignedUrl } = setup({
+        db: { prescription: { ...PRESCRIPTION, ...NO_PDF, notes: 'Dieta blanda' } },
+      });
+      const result = await run(ctx);
+
+      expect(result.status).toBe(200);
+      expect(waha.sendFile).not.toHaveBeenCalled();
+      expect(createSignedUrl).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      expect(waha.sendText.mock.calls[0][0].text).toContain('Dieta blanda');
+    });
+
+    it.each([['Recetado para: Faringitis'], ['   '], [null]])(
+      'does not treat legacy or blank notes (%s) as indications',
+      async (notes) => {
+        const { ctx, waha } = setup({ db: { prescription: { ...PRESCRIPTION, notes } } });
+        const result = await run(ctx);
+        expect(result.status).toBe(200);
+        expect(waha.sendFile).toHaveBeenCalledTimes(1);
+        expect(waha.sendText).not.toHaveBeenCalled();
+      }
+    );
+
+    it('returns 422 no_content for a PDF-less prescription with only legacy notes', async () => {
+      const { ctx, waha } = setup({
+        db: { prescription: { ...PRESCRIPTION, ...NO_PDF, notes: 'Recetado para: Faringitis' } },
+      });
+      const result = await run(ctx);
+      expect(result.status).toBe(422);
+      expect(result.body).toEqual({ error: 'no_content' });
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
+
+    it('logs a partial failure marker when the text fails after the PDF was sent', async () => {
+      const { ctx, waha, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, notes: 'Reposo' } },
+        waha: { sendText: vi.fn().mockRejectedValue(new Error('WAHA 500: text boom')) },
+      });
+      const result = await run(ctx);
+
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+      expect(result.status).toBe(502);
+      expect(result.body.status).toBe('failed');
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0]).toMatchObject({ status: 'failed' });
+      expect(inserts[0].error).toMatch(/^partial:pdf_sent/);
+      expect(inserts[0].error).toContain('text boom');
+    });
+
+    it('retry after a partial failure sends only the text, not the PDF again', async () => {
+      const { ctx, waha, fetchFn, inserts } = setup({
+        db: {
+          prescription: { ...PRESCRIPTION, notes: 'Reposo' },
+          lastDelivery: { status: 'failed', error: 'partial:pdf_sent send_failed: text boom', created_at: '2026-09-20T11:50:00Z' },
+        },
+      });
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(waha.sendFile).not.toHaveBeenCalled();
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      expect(waha.sendText.mock.calls[0][0].text).toContain('Reposo');
+      expect(inserts).toEqual([expect.objectContaining({ status: 'sent' })]);
+    });
+
+    it('keeps the partial marker across repeated text failures so the PDF is sent only once', async () => {
+      const sendText = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('text boom 1'))
+        .mockRejectedValueOnce(new Error('text boom 2'))
+        .mockResolvedValue({ id: 'msg-2' });
+      const { ctx, waha, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, notes: 'Reposo' }, followInserts: true },
+        waha: { sendText },
+      });
+
+      await run(ctx);
+      await run(ctx);
+      const third = await run(ctx);
+
+      expect(inserts[1]).toMatchObject({ status: 'failed' });
+      expect(inserts[1].error).toMatch(/^partial:pdf_sent/);
+      expect(third).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+      expect(sendText).toHaveBeenCalledTimes(3);
+    });
+
+    it('resends the PDF when the latest failed row is not a partial failure', async () => {
+      const { ctx, waha } = setup({
+        db: {
+          prescription: { ...PRESCRIPTION, notes: 'Reposo' },
+          lastDelivery: { status: 'failed', error: 'pdf_unavailable', created_at: '2026-09-20T11:50:00Z' },
+        },
+      });
+      await run(ctx);
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('resends the PDF when the latest row is a sent one, even if it carries the marker', async () => {
+      const { ctx, waha } = setup({
+        db: {
+          prescription: { ...PRESCRIPTION, notes: 'Reposo' },
+          lastDelivery: { status: 'sent', error: 'partial:pdf_sent', created_at: '2026-09-20T11:50:00Z' },
+        },
+      });
+      await run(ctx);
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('a partial failure retry still respects the 60s resend guard for a previous sent row', async () => {
+      const { ctx, waha } = setup({
+        db: {
+          prescription: { ...PRESCRIPTION, notes: 'Reposo' },
+          lastSent: { created_at: '2026-09-20T11:59:30Z' },
+          lastDelivery: { status: 'failed', error: 'partial:pdf_sent x', created_at: '2026-09-20T11:59:40Z' },
+        },
+      });
+      const result = await run(ctx);
+      expect(result.status).toBe(409);
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
+
+    describe('medications without a resolvable PDF', () => {
+      const MEDS = [{ name: 'Ibuprofeno', instructions: '400 mg' }];
+      const DUMMY_EXTERNAL = { pdf_path: null, pdf_url: 'https://storage.example/not-a-bucket-url.pdf' };
+
+      it.each([
+        ['no pdf fields', { pdf_url: null, pdf_path: null }],
+        ['dummy external pdf_url', DUMMY_EXTERNAL],
+      ])('fails with 422 no_pdf and sends nothing (%s), even with indications', async (_label, pdf) => {
+        const { ctx, waha, inserts } = setup({
+          db: { prescription: { ...PRESCRIPTION, ...pdf, medications: MEDS, notes: 'Reposo' } },
+        });
+        const result = await run(ctx);
+
+        expect(result.status).toBe(422);
+        expect(result.body).toEqual({ error: 'no_pdf' });
+        expect(waha.sendText).not.toHaveBeenCalled();
+        expect(waha.sendFile).not.toHaveBeenCalled();
+        expect(inserts).toEqual([]);
+      });
+
+      it('still allows an indications-only prescription (empty medications) without a PDF', async () => {
+        const { ctx, waha } = setup({
+          db: { prescription: { ...PRESCRIPTION, pdf_url: null, pdf_path: null, medications: [], notes: 'Reposo' } },
+        });
+        const result = await run(ctx);
+        expect(result.status).toBe(200);
+        expect(waha.sendText).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('logs a failure when the text-only send fails', async () => {
+      const { ctx, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, ...NO_PDF, notes: 'Reposo' } },
+        waha: { sendText: vi.fn().mockRejectedValue(new Error('WAHA 500: boom')) },
+      });
+      const result = await run(ctx);
+      expect(result.status).toBe(502);
+      expect(inserts[0]).toMatchObject({ status: 'failed' });
+    });
+  });
+
+  describe('prescriptions select before the external-url migration is applied', () => {
+    it('retries without external_prescription_url and sends the PDF normally', async () => {
+      const { ctx, waha, prescriptionSelects } = setup({ db: { prescriptionSelectFailures: 1 } });
+
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(prescriptionSelects).toHaveLength(2);
+      expect(prescriptionSelects[0]).toContain('external_prescription_url');
+      expect(prescriptionSelects[1]).not.toContain('external_prescription_url');
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 404 when the retry fails too', async () => {
+      const { ctx, waha, prescriptionSelects } = setup({ db: { prescriptionSelectFailures: 2 } });
+
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 404, body: { error: 'prescription_not_found' } });
+      expect(prescriptionSelects).toHaveLength(2);
+      expect(waha.sendFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('obra social external link', () => {
+    const LINK = 'https://obrasocial.example/receta/abc123';
+    const EXTERNAL = { ...PRESCRIPTION, pdf_url: null, pdf_path: null, external_prescription_url: LINK };
+
+    it('sends a text with the link (no PDF) and logs success', async () => {
+      const { ctx, waha, createSignedUrl, fetchFn, inserts } = setup({ db: { prescription: EXTERNAL } });
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(waha.sendFile).not.toHaveBeenCalled();
+      expect(createSignedUrl).not.toHaveBeenCalled();
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      const sent = waha.sendText.mock.calls[0][0];
+      expect(sent.phone).toBe('5491112345678');
+      expect(sent.text).toContain(LINK);
+      expect(sent.text).toContain('obra social');
+      expect(sent.text).toContain('Ana Pérez');
+      expect(sent.text).toContain('Dr. Sergio Dib Ashur');
+      expect(sent.text).not.toMatch(/\d{8,}/);
+      expect(inserts).toEqual([expect.objectContaining({ prescription_id: 'rx-1', status: 'sent' })]);
+    });
+
+    it('sends the indications as a second text after the link', async () => {
+      const { ctx, waha } = setup({ db: { prescription: { ...EXTERNAL, notes: 'Reposo 48 horas' } } });
+      const result = await run(ctx);
+
+      expect(result.status).toBe(200);
+      expect(waha.sendText).toHaveBeenCalledTimes(2);
+      expect(waha.sendText.mock.calls[0][0].text).toContain(LINK);
+      expect(waha.sendText.mock.calls[1][0].text).toContain('Reposo 48 horas');
+      expect(waha.sendText.mock.invocationCallOrder[0]).toBeLessThan(waha.sendText.mock.invocationCallOrder[1]);
+    });
+
+    it('sends only the link when the notes are blank or legacy', async () => {
+      const { ctx, waha } = setup({ db: { prescription: { ...EXTERNAL, notes: 'Recetado para: Faringitis' } } });
+      await run(ctx);
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs a failure and returns 502 when the link message fails', async () => {
+      const { ctx, inserts } = setup({
+        db: { prescription: EXTERNAL },
+        waha: { sendText: vi.fn().mockRejectedValue(new Error('WAHA 500: link boom')) },
+      });
+      const result = await run(ctx);
+
+      expect(result.status).toBe(502);
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0]).toMatchObject({ status: 'failed' });
+      expect(inserts[0].error).toContain('link boom');
+    });
+
+    it('still honours the resend guard', async () => {
+      const { ctx, waha } = setup({
+        db: { prescription: EXTERNAL, lastSent: { created_at: '2026-09-20T11:59:30Z' } },
+      });
+      const result = await run(ctx);
+      expect(result).toEqual({ status: 409, body: { status: 'already_sent' } });
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
   });
 });
 

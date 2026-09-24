@@ -1,5 +1,7 @@
+import { hasUsableIndications } from '../../utils/usableIndications';
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { parsePrescriptionDraft } from './prescriptionDraft';
 import { 
   ClipboardList, 
   Stethoscope, 
@@ -36,15 +38,8 @@ import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { supabase } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
+import { validateExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 import '../../styles/animations.css';
-import {
-  generateKeyPair,
-  exportPublicKey,
-  encryptPrivateKey,
-  decryptPrivateKey,
-  signPrescription
-} from '../../utils/crypto';
-
 const WHATSAPP_ERROR_MESSAGES: Record<string, string> = {
   invalid_phone: 'El paciente no tiene un teléfono válido cargado.',
   session_not_ready: 'El WhatsApp de la empresa no está conectado.',
@@ -206,9 +201,13 @@ interface PostConsultationProps {
 const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   const { appointmentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Draft from the video-call "Receta" tab; only seeds the initial state.
+  const [draft] = useState(() => parsePrescriptionDraft(location.state));
   
   const [notes, setNotes] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
+  const [indications, setIndications] = useState(draft?.recommendations ?? '');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [closureStatus, setClosureStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
@@ -221,83 +220,26 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   const redirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Never navigate after the doctor has already left this page.
-  useEffect(() => () => {
-    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+  const unmountedRef = React.useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    };
   }, []);
 
-  const [addPrescription, setAddPrescription] = useState(false);
-  const [medications, setMedications] = useState<{ name: string; instructions: string }[]>([]);
+  const [addPrescription, setAddPrescription] = useState(!!draft && draft.medications.length > 0);
+  const [recetaMode, setRecetaMode] = useState<'medinex' | 'obra_social'>('medinex');
+  const [externalUrl, setExternalUrl] = useState('');
+  const isObraSocial = addPrescription && recetaMode === 'obra_social';
+  const externalUrlError = isObraSocial ? validateExternalPrescriptionUrl(externalUrl) : null;
+  const [medications, setMedications] = useState<MedicationItem[]>(
+    () => draft?.medications.map((m) => ({ name: m.med, instructions: m.dose })) ?? []
+  );
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-
-  // PIN & Cryptographic Signatures State
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [pin, setPin] = useState('');
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [isCryptedSigning, setIsCryptedSigning] = useState(false);
-  const [hasDigitalSignature, setHasDigitalSignature] = useState(false);
-  const [digitalSigValue, setDigitalSigValue] = useState('');
-  const [sigPublicKeyVal, setSigPublicKeyVal] = useState('');
-  
-  const pinInputsRef = React.useRef<(HTMLInputElement | null)[]>([]);
-
-  const handlePinChange = (index: number, value: string) => {
-    const numValue = value.replace(/\D/g, '');
-    const char = numValue[numValue.length - 1] || '';
-
-    const pinArray = pin.split('');
-    while (pinArray.length < 6) pinArray.push('');
-    pinArray[index] = char;
-    
-    const newPin = pinArray.slice(0, 6).join('');
-    setPin(newPin);
-
-    // Mover al siguiente input si hay un carácter tipeado
-    if (char && index < 5) {
-      pinInputsRef.current[index + 1]?.focus();
-    }
-  };
-
-  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      const pinArray = pin.split('');
-      while (pinArray.length < 6) pinArray.push('');
-      
-      if (!pinArray[index] && index > 0) {
-        // Borrar el anterior y enfocarlo
-        pinArray[index - 1] = '';
-        setPin(pinArray.slice(0, 6).join(''));
-        pinInputsRef.current[index - 1]?.focus();
-      } else {
-        // Borrar el actual
-        pinArray[index] = '';
-        setPin(pinArray.slice(0, 6).join(''));
-      }
-    }
-  };
-
-  const handlePinPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pasteData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    setPin(pasteData);
-    
-    // Enfocar el último input correspondiente al largo del pegado
-    const nextFocusIndex = Math.min(pasteData.length, 5);
-    pinInputsRef.current[nextFocusIndex]?.focus();
-  };
-
-  useEffect(() => {
-    if (showPinModal) {
-      setTimeout(() => {
-        pinInputsRef.current[0]?.focus();
-      }, 150);
-    }
-  }, [showPinModal]);
-  
-  // Local cache of user's key status so it updates immediately in UI
-  const [localUserPublicKey, setLocalUserPublicKey] = useState<string | undefined>(user.digitalPublicKey);
-  const [localUserEncryptedPrivateKey, setLocalUserEncryptedPrivateKey] = useState<string | undefined>(user.encryptedPrivateKey);
 
   // History Sidebar State
   const [patientRecords, setPatientRecords] = useState<MedicalRecord[]>([]);
@@ -405,6 +347,22 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                       <p role="alert" className="text-[11px] font-medium text-amber-400 leading-snug">{whatsappError}</p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {!pdfUrl && whatsappStatus === 'failed' && (
+                <div className="max-w-sm mx-auto space-y-2">
+                  {whatsappError && (
+                    <p role="alert" className="text-[11px] font-medium text-amber-400 leading-snug">{whatsappError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={sendPrescriptionWhatsapp}
+                    className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-2xl transition-all flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer active:scale-95"
+                  >
+                    <MessageSquare size={14} />
+                    Reenviar por WhatsApp
+                  </button>
                 </div>
               )}
 
@@ -541,7 +499,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     return false;
   };
 
-  const submitFinalization = async (sig?: string, pubKey?: string) => {
+  const submitFinalization = async () => {
     setSaving(true);
     setClosureStatus('processing');
     setError(null);
@@ -553,16 +511,16 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
           appointmentId: appointmentData.id,
           diagnosis,
           notes,
-          medications: addPrescription ? medications : [],
-          digitalSignature: sig || null,
-          signaturePublicKey: pubKey || null
+          medications: addPrescription && !isObraSocial ? medications : [],
+          indications: indications.trim(),
+          ...(isObraSocial ? { externalPrescriptionUrl: externalUrl.trim() } : {})
         }
       });
 
       if (functionError) throw functionError;
 
       // 2. Tras la emisión exitosa, descontar stock de los medicamentos seleccionados del catálogo
-      if (addPrescription && medications.length > 0) {
+      if (addPrescription && !isObraSocial && medications.length > 0) {
         for (const med of medications) {
           if (med.productId) {
             const success = await pharmacyRepository.deductStock(med.productId, 1);
@@ -577,8 +535,9 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       let whatsappDelivered = true;
-      if (data?.pdfUrl) {
-        setPdfUrl(data.pdfUrl);
+      if (data?.pdfUrl) setPdfUrl(data.pdfUrl);
+      // Indications alone (no medications, so no PDF) are also delivered by WhatsApp
+      if (data?.pdfUrl || isObraSocial || hasUsableIndications(indications)) {
         whatsappDelivered = await sendPrescriptionWhatsapp();
       }
       
@@ -586,7 +545,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
       // Redirección automática al panel después de 3.5s, salvo que el envío por
       // WhatsApp haya fallado: el médico necesita ver el aviso y poder reintentar.
-      if (whatsappDelivered) {
+      if (whatsappDelivered && !unmountedRef.current) {
         redirectTimerRef.current = setTimeout(() => {
           navigate('/doctor', { replace: true });
         }, 3500);
@@ -600,91 +559,6 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     }
   };
 
-  const handleVerifyPinAndSign = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setPinError(null);
-
-    if (pin.length !== 6 || !/^\d+$/.test(pin)) {
-      setPinError('El PIN debe tener exactamente 6 dígitos numéricos.');
-      return;
-    }
-
-    setIsCryptedSigning(true);
-    try {
-      let finalSignature = '';
-      let finalPublicKey = '';
-
-      if (!localUserPublicKey || !localUserEncryptedPrivateKey) {
-        // Primera vez: Generar par de claves y cifrar con el PIN
-        const keyPair = await generateKeyPair();
-        const exportedPub = await exportPublicKey(keyPair.publicKey);
-        const encryptedPriv = await encryptPrivateKey(keyPair.privateKey, pin, user.id);
-
-        // Guardar en Supabase profiles
-        const { error: updateProfileError } = await supabase
-          .from('profiles')
-          .update({
-            digital_public_key: exportedPub,
-            encrypted_private_key: encryptedPriv
-          })
-          .eq('id', user.id);
-
-        if (updateProfileError) {
-          throw new Error('Error al inicializar tus claves digitales de firma: ' + updateProfileError.message);
-        }
-
-        // Actualizar caché local de claves
-        setLocalUserPublicKey(exportedPub);
-        setLocalUserEncryptedPrivateKey(encryptedPriv);
-
-        finalPublicKey = exportedPub;
-        
-        // Firmar
-        finalSignature = await signPrescription(
-          appointmentData.id,
-          appointmentData.patientId,
-          medications,
-          notes,
-          keyPair.privateKey
-        );
-      } else {
-        // Médico recurrente: Descifrar clave privada usando el PIN
-        let privKey;
-        try {
-          privKey = await decryptPrivateKey(localUserEncryptedPrivateKey, pin);
-        } catch (decryptionErr) {
-          throw new Error('PIN incorrecto. No se pudo descifrar la clave de firma.');
-        }
-
-        finalPublicKey = localUserPublicKey;
-
-        // Firmar
-        finalSignature = await signPrescription(
-          appointmentData.id,
-          appointmentData.patientId,
-          medications,
-          notes,
-          privKey
-        );
-      }
-
-      // Guardar firma generada temporalmente y cerrar el modal del PIN
-      setDigitalSigValue(finalSignature);
-      setSigPublicKeyVal(finalPublicKey);
-      setHasDigitalSignature(true);
-      setShowPinModal(false);
-      
-      // Lanzar directamente la finalización con la firma criptográfica activa
-      await submitFinalization(finalSignature, finalPublicKey);
-
-    } catch (err: any) {
-      console.error('[Signature Error]:', err);
-      setPinError(err.message || 'Error al procesar la firma digital.');
-    } finally {
-      setIsCryptedSigning(false);
-    }
-  };
-
   const handleSaveAndFinish = async () => {
     setIsSubmitted(true);
     setError(null);
@@ -694,12 +568,17 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       return;
     }
     
-    if (addPrescription && medications.length === 0) {
+    if (isObraSocial && externalUrlError) {
+      setError('Revisá el link de la receta de obra social');
+      return;
+    }
+
+    if (addPrescription && !isObraSocial && medications.length === 0) {
       setError('Debe agregar al menos un medicamento si la receta electrónica está activa');
       return;
     }
 
-    if (addPrescription && medications.some(m => !m.name.trim())) {
+    if (addPrescription && !isObraSocial && medications.some(m => !m.name.trim())) {
       setError('Todos los medicamentos deben tener un nombre');
       return;
     }
@@ -709,16 +588,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       return;
     }
 
-    // Si tiene receta y todavía no se firmó digitalmente con el PIN, abrimos el modal
-    if (addPrescription && !hasDigitalSignature) {
-      setPin('');
-      setPinError(null);
-      setShowPinModal(true);
-      return;
-    }
-
-    // De lo contrario, procedemos con el cierre
-    await submitFinalization(digitalSigValue, sigPublicKeyVal);
+    await submitFinalization();
   };
 
   const handleAICompose = async () => {
@@ -963,6 +833,28 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
               </div>
             </section>
 
+            {/* Indications Card (non-medication: rest, diet, studies) */}
+            <section className="group bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl transition-all hover:border-amber-500/30">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
+                  <ClipboardList className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Prescripción / indicaciones</h2>
+                  <p className="text-sm text-slate-500 font-medium">Opcional: reposo, dieta, estudios u otras indicaciones</p>
+                </div>
+              </div>
+              <textarea
+                id="indications"
+                aria-label="Prescripción / indicaciones"
+                value={indications}
+                onChange={(e) => setIndications(e.target.value)}
+                rows={4}
+                className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all leading-relaxed shadow-inner placeholder:text-slate-600"
+                placeholder="Ej. Reposo 48hs, dieta blanda, hemograma de control..."
+              />
+            </section>
+
             {/* Prescription Section */}
             <section className={`transition-all duration-500 ${addPrescription ? 'opacity-100 scale-100' : 'opacity-90 scale-[0.98]'}`}>
               <div className={`bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl overflow-hidden shadow-2xl transition-all ${addPrescription ? 'border-blue-500/30 ring-1 ring-blue-500/20' : ''}`}>
@@ -994,6 +886,52 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                   <div className="px-8 pb-8 space-y-6 animate-in slide-in-from-top duration-300">
                     <div className="h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent mb-6"></div>
                     
+                    <div role="radiogroup" aria-label="Tipo de receta" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {([
+                        ['medinex', 'Receta Medinex (PDF)'],
+                        ['obra_social', 'Receta de obra social (link)'],
+                      ] as const).map(([mode, label]) => (
+                        <label
+                          key={mode}
+                          className={`flex items-center gap-3 p-4 rounded-2xl border cursor-pointer text-sm font-bold transition-all ${
+                            recetaMode === mode ? 'border-blue-500/50 bg-blue-500/10 text-white' : 'border-slate-800 text-slate-400 hover:border-blue-500/30'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="receta-mode"
+                            checked={recetaMode === mode}
+                            onChange={() => setRecetaMode(mode)}
+                            className="accent-blue-500"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+
+                    {isObraSocial && (
+                      <div className="space-y-2">
+                        <label htmlFor="external-prescription-url" className="block text-xs font-bold text-slate-400 uppercase tracking-widest">
+                          Link de descarga de la receta
+                        </label>
+                        <input
+                          id="external-prescription-url"
+                          type="url"
+                          value={externalUrl}
+                          onChange={(e) => setExternalUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        />
+                        <p className="text-[11px] text-slate-500 leading-snug">
+                          Generá la receta en la app de la obra social y pegá acá el link de descarga. Se enviará al afiliado por WhatsApp.
+                        </p>
+                        {isSubmitted && externalUrlError && (
+                          <p role="alert" className="text-[11px] font-medium text-red-400">{externalUrlError}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {!isObraSocial && (
                     <div className="grid grid-cols-1 gap-4">
                       {medications.map((med, index) => (
                         <MedicationCard 
@@ -1027,6 +965,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                         {medications.length === 0 ? 'Iniciar Receta' : 'Agregar Medicamento'}
                       </button>
                     </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1202,97 +1141,6 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
           )}
         </div>
       </div>
-      {/* PIN Signature Modal */}
-      {showPinModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[#020617]/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0f172a] border border-white/10 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-teal-500 to-blue-500"></div>
-            
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 bg-teal-500/10 text-teal-400 rounded-2xl border border-teal-500/20">
-                <ShieldCheck className="w-6 h-6 animate-pulse" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white tracking-tight">
-                  {!localUserPublicKey ? 'Configurar Firma Digital' : 'Firma de Receta Digital'}
-                </h3>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Firma Electrónica Avanzada</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleVerifyPinAndSign} className="space-y-6">
-              {!localUserPublicKey ? (
-                <div className="p-4 rounded-2xl bg-teal-500/5 border border-teal-500/20 text-xs text-slate-300 leading-relaxed">
-                  Es tu primera firma en MEDINEX. Generaremos un par de **claves asimétricas ECDSA (P-256)** exclusivas para vos. 
-                  Por favor, elegí un **PIN numérico de 6 dígitos**. Este PIN se usará de forma local para cifrar tu clave de firma.
-                </div>
-              ) : (
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Por favor, ingresá tu **PIN numérico de 6 dígitos** para autorizar y firmar criptográficamente esta receta.
-                </p>
-              )}
-
-              <div className="space-y-4">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
-                  {!localUserPublicKey ? 'Establecer PIN (6 dígitos)' : 'Ingresar PIN de Firma'}
-                </label>
-                <div className="flex justify-center gap-3 max-w-sm mx-auto" onPaste={handlePinPaste}>
-                  {[0, 1, 2, 3, 4, 5].map((idx) => (
-                    <input
-                      key={idx}
-                      ref={(el) => {
-                        pinInputsRef.current[idx] = el;
-                      }}
-                      type="password"
-                      pattern="[0-9]*"
-                      inputMode="numeric"
-                      maxLength={1}
-                      disabled={isCryptedSigning}
-                      className="w-12 h-16 bg-slate-950/80 border border-white/10 rounded-2xl text-center font-mono text-2xl text-white focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all outline-none"
-                      value={pin[idx] || ''}
-                      onChange={(e) => handlePinChange(idx, e.target.value)}
-                      onKeyDown={(e) => handlePinKeyDown(idx, e)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {pinError && (
-                <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs animate-in fade-in zoom-in duration-200">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <p className="font-semibold">{pinError}</p>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-4 pt-2">
-                <button
-                  type="button"
-                  disabled={isCryptedSigning}
-                  onClick={() => setShowPinModal(false)}
-                  className="px-6 py-3.5 text-slate-400 font-bold hover:text-white transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCryptedSigning || pin.length !== 6}
-                  className="px-8 py-3.5 bg-teal-500 hover:bg-teal-400 text-[#020617] rounded-2xl font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isCryptedSigning ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-slate-950/20 border-t-slate-950 rounded-full animate-spin"></div>
-                      <span>Procesando...</span>
-                    </>
-                  ) : (
-                    <span>{!localUserPublicKey ? 'Configurar y Firmar' : 'Confirmar Firma'}</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       <CompletionOverlay />
     </div>
   );

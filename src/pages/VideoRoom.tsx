@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { buildPrescriptionDraft } from './doctor/prescriptionDraft';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -1008,12 +1009,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
       if (notes.trim()) await appointmentRepository.saveAppointmentNotes(appointmentId, notes);
       await appointmentRepository.completeAppointment(appointmentId);
       toast('Consulta finalizada con éxito', 'success');
-      navigate(`/doctor/post-consultation/${appointmentId}`);
+      const prescriptionDraft = buildPrescriptionDraft(prescription, recommendations);
+      navigate(`/doctor/post-consultation/${appointmentId}`, prescriptionDraft ? { state: { prescriptionDraft } } : undefined);
     } catch (err: any) {
       toast('Error al finalizar', 'error');
       setIsCompleting(false);
     }
-  }, [appointmentId, notes, navigate, toast]);
+  }, [appointmentId, notes, prescription, recommendations, navigate, toast]);
 
   const handleHandshakeReady = useCallback(() => {
     setIsHandshakeComplete(true);
