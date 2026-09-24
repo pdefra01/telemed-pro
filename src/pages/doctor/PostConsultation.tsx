@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { parsePrescriptionDraft } from './prescriptionDraft';
 import { 
   ClipboardList, 
   Stethoscope, 
@@ -198,10 +199,13 @@ interface PostConsultationProps {
 const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   const { appointmentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Draft from the video-call "Receta" tab; only seeds the initial state.
+  const [draft] = useState(() => parsePrescriptionDraft(location.state));
   
   const [notes, setNotes] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
-  const [indications, setIndications] = useState('');
+  const [indications, setIndications] = useState(draft?.recommendations ?? '');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [closureStatus, setClosureStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
@@ -223,8 +227,10 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
     };
   }, []);
 
-  const [addPrescription, setAddPrescription] = useState(false);
-  const [medications, setMedications] = useState<{ name: string; instructions: string }[]>([]);
+  const [addPrescription, setAddPrescription] = useState(!!draft && draft.medications.length > 0);
+  const [medications, setMedications] = useState<MedicationItem[]>(
+    () => draft?.medications.map((m) => ({ name: m.med, instructions: m.dose })) ?? []
+  );
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);

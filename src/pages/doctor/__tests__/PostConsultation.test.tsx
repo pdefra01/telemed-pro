@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import PostConsultation from '../PostConsultation';
 import { supabase } from '../../../services/supabase';
 import { appointmentRepository } from '../../../repositories/AppointmentRepository';
@@ -334,5 +334,49 @@ describe('PostConsultation Page', () => {
 
       expect(mockNavigate).not.toHaveBeenCalledWith('/doctor', expect.anything());
     }, 20000);
+  });
+
+  describe('video-call prescription draft', () => {
+    afterEach(() => cleanup());
+
+    const renderWithState = (state: unknown) =>
+      render(
+        <MemoryRouter initialEntries={[{ pathname: '/doctor/post-consultation/x', state }]}>
+          <PostConsultation user={mockDoctor as any} />
+        </MemoryRouter>
+      );
+
+    it('prefills medications, the receta toggle and the indications from navigate state', async () => {
+      renderWithState({
+        prescriptionDraft: {
+          medications: [{ med: 'Amoxicilina 500mg', dose: '1 cada 8hs' }],
+          recommendations: 'Reposo 48hs',
+        },
+      });
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+      expect(screen.getByDisplayValue('Amoxicilina 500mg')).toBeDefined();
+      expect(screen.getByDisplayValue('1 cada 8hs')).toBeDefined();
+      expect((screen.getByLabelText(/Prescripción \/ indicaciones/i) as HTMLTextAreaElement).value).toBe('Reposo 48hs');
+    });
+
+    it('prefills only the indications when there are no medication lines', async () => {
+      renderWithState({ prescriptionDraft: { medications: [], recommendations: 'Dieta blanda' } });
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+      expect((screen.getByLabelText(/Prescripción \/ indicaciones/i) as HTMLTextAreaElement).value).toBe('Dieta blanda');
+      expect(screen.queryByText(/Medicamento #1/i)).toBeNull();
+    });
+
+    it.each([undefined, null, 'garbage', { prescriptionDraft: 'x' }, { prescriptionDraft: { medications: 5 } }])(
+      'behaves as before with missing or malformed state %#',
+      async (state) => {
+        renderWithState(state);
+        await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+
+        expect((screen.getByLabelText(/Prescripción \/ indicaciones/i) as HTMLTextAreaElement).value).toBe('');
+        expect(screen.queryByText(/Medicamento #1/i)).toBeNull();
+      }
+    );
   });
 });
