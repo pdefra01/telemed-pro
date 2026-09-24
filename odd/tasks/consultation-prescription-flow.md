@@ -81,8 +81,10 @@ reachable during the video call and finalized in PostConsultation:
       and PDF, `digital_signature` stored as empty string), tests.
 - [x] T2 Prescripcion field in PostConsultation (payload -> `notes`), PDF
       unchanged except no signature; tests.
-- [ ] T3 WhatsApp delivery: PDF then a text message with the prescripcion
-      (server/whatsapp.js + tests).
+- [x] T3 Prescripcion-only support (row created with medications OR
+      indications; PDF only with medications) + WhatsApp: PDF and/or a second
+      text with the prescripcion (edge function, server/whatsapp.js + tests);
+      tightened the "no PIN step" test. Commit `956fabb`.
 - [ ] T4 Reconnect VideoRoom "Receta" tab: pass med lines + recommendations to
       PostConsultation via navigate state and prefill (free-text lines coexist
       with catalog items in `medications`), tests.
@@ -125,6 +127,25 @@ at a time.
   user deploys it (T6).
 - Route: T1+T2 delegated writer (PostConsultation.tsx, its test, edge function).
 
+- T3 (delegated writer, commit `956fabb`): edge function now inserts the
+  prescriptions row when there are medications OR non-blank indications (PDF
+  only with medications; no constraint blocked an indications-only row, no
+  migration); client fires the WhatsApp send also for indications-only;
+  `sendPrescriptionViaWhatsApp` sends PDF and/or a second text with the
+  indications, ignores blank/legacy "Recetado para:" notes, returns 422
+  `no_content` when there is nothing to send, and a failed text send returns
+  502 with one `failed` log row. "No PIN" test now asserts no password/PIN
+  input. RED->GREEN: whatsapp.test.js 7 failing -> 60/60; PostConsultation
+  tests 2 failing -> 13/13. Parent spot check: `npx vitest run
+  server/__tests__/whatsapp.test.js src/pages/doctor` 77/77; writer full suite
+  703 passed, only the 7 known failures.
+  Deviations accepted: (1) added a failure alert + "Reenviar por WhatsApp"
+  button for the indications-only case (no PDF card to host it), tested;
+  (2) `unmountedRef` guard so the redirect timer cannot fire after unmount.
+  Known caveat: if the PDF sends but the text fails, one `failed` row is
+  logged and a resend sends the PDF again (duplicate PDF on retry).
+  Gap: Deno edge function still untested (manual check in T6).
+
 ## Review (RDD, 2026-09-23)
 T1+T2 range (`060ceb0..HEAD`, medium risk, 521 lines incl. this doc) reviewed
 with the reliability lens and approved; acknowledgement done (authority
@@ -147,5 +168,4 @@ T1+T2 (commits `85662bd`, `b163e84`, plus the tracking doc). Push and PR
 creation stay the user's decision.
 
 ## Next step
-T3: prescripcion-only support + second WhatsApp text message (edge function,
-server/whatsapp.js + tests).
+T4: reconnect the VideoRoom "Receta" tab and prefill PostConsultation.
