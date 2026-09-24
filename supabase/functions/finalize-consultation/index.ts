@@ -19,8 +19,23 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     const body = await req.json()
-    const { appointmentId, diagnosis, notes, prescription, indications } = body
-    const medications = body.medications || prescription?.medications || [];
+    const { appointmentId, diagnosis, notes, prescription, indications, externalPrescriptionUrl } = body
+
+    // Obra social mode: an insurer-issued prescription link replaces the internal PDF.
+    let externalUrl: string | null = null
+    if (externalPrescriptionUrl !== undefined && externalPrescriptionUrl !== null && externalPrescriptionUrl !== '') {
+      const candidate = typeof externalPrescriptionUrl === 'string' ? externalPrescriptionUrl.trim() : ''
+      let isHttps = false
+      try { isHttps = new URL(candidate).protocol === 'https:' } catch { /* invalid URL */ }
+      if (!isHttps || candidate.length > 2000 || /\s/.test(candidate)) {
+        return new Response(
+          JSON.stringify({ error: 'El link de la receta de obra social debe ser una URL https válida (máximo 2000 caracteres)' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        )
+      }
+      externalUrl = candidate
+    }
+    const medications = externalUrl ? [] : (body.medications || prescription?.medications || []);
 
     // 1. Get Appointment Info
     const { data: appointment, error: apptError } = await supabase
@@ -181,7 +196,7 @@ serve(async (req) => {
     }
 
     // 4d. Guardar en DB: hay receta (medicamentos) y/o prescripción (indicaciones)
-    if (medications.length > 0 || trimmedIndications) {
+    if (medications.length > 0 || trimmedIndications || externalUrl) {
       const { error: prescError } = await supabase
         .from('prescriptions')
         .insert({
@@ -199,7 +214,9 @@ serve(async (req) => {
           })),
           notes: trimmedIndications || null,
           pdf_url: pdfUrl,
-          pdf_path: pdfPath
+          pdf_path: pdfPath,
+          // Only set in obra social mode so other flows never depend on the new column
+          ...(externalUrl ? { external_prescription_url: externalUrl } : {})
         })
 
       if (prescError) throw prescError

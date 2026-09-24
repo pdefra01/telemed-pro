@@ -37,6 +37,7 @@ import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { supabase } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
+import { validateExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 import '../../styles/animations.css';
 const WHATSAPP_ERROR_MESSAGES: Record<string, string> = {
   invalid_phone: 'El paciente no tiene un teléfono válido cargado.',
@@ -228,6 +229,10 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   }, []);
 
   const [addPrescription, setAddPrescription] = useState(!!draft && draft.medications.length > 0);
+  const [recetaMode, setRecetaMode] = useState<'medinex' | 'obra_social'>('medinex');
+  const [externalUrl, setExternalUrl] = useState('');
+  const isObraSocial = addPrescription && recetaMode === 'obra_social';
+  const externalUrlError = isObraSocial ? validateExternalPrescriptionUrl(externalUrl) : null;
   const [medications, setMedications] = useState<MedicationItem[]>(
     () => draft?.medications.map((m) => ({ name: m.med, instructions: m.dose })) ?? []
   );
@@ -505,15 +510,16 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
           appointmentId: appointmentData.id,
           diagnosis,
           notes,
-          medications: addPrescription ? medications : [],
-          indications: indications.trim()
+          medications: addPrescription && !isObraSocial ? medications : [],
+          indications: indications.trim(),
+          ...(isObraSocial ? { externalPrescriptionUrl: externalUrl.trim() } : {})
         }
       });
 
       if (functionError) throw functionError;
 
       // 2. Tras la emisión exitosa, descontar stock de los medicamentos seleccionados del catálogo
-      if (addPrescription && medications.length > 0) {
+      if (addPrescription && !isObraSocial && medications.length > 0) {
         for (const med of medications) {
           if (med.productId) {
             const success = await pharmacyRepository.deductStock(med.productId, 1);
@@ -530,7 +536,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       let whatsappDelivered = true;
       if (data?.pdfUrl) setPdfUrl(data.pdfUrl);
       // Indications alone (no medications, so no PDF) are also delivered by WhatsApp
-      if (data?.pdfUrl || indications.trim()) {
+      if (data?.pdfUrl || isObraSocial || indications.trim()) {
         whatsappDelivered = await sendPrescriptionWhatsapp();
       }
       
@@ -561,12 +567,17 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       return;
     }
     
-    if (addPrescription && medications.length === 0) {
+    if (isObraSocial && externalUrlError) {
+      setError('Revisá el link de la receta de obra social');
+      return;
+    }
+
+    if (addPrescription && !isObraSocial && medications.length === 0) {
       setError('Debe agregar al menos un medicamento si la receta electrónica está activa');
       return;
     }
 
-    if (addPrescription && medications.some(m => !m.name.trim())) {
+    if (addPrescription && !isObraSocial && medications.some(m => !m.name.trim())) {
       setError('Todos los medicamentos deben tener un nombre');
       return;
     }
@@ -874,6 +885,52 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                   <div className="px-8 pb-8 space-y-6 animate-in slide-in-from-top duration-300">
                     <div className="h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent mb-6"></div>
                     
+                    <div role="radiogroup" aria-label="Tipo de receta" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {([
+                        ['medinex', 'Receta Medinex (PDF)'],
+                        ['obra_social', 'Receta de obra social (link)'],
+                      ] as const).map(([mode, label]) => (
+                        <label
+                          key={mode}
+                          className={`flex items-center gap-3 p-4 rounded-2xl border cursor-pointer text-sm font-bold transition-all ${
+                            recetaMode === mode ? 'border-blue-500/50 bg-blue-500/10 text-white' : 'border-slate-800 text-slate-400 hover:border-blue-500/30'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="receta-mode"
+                            checked={recetaMode === mode}
+                            onChange={() => setRecetaMode(mode)}
+                            className="accent-blue-500"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+
+                    {isObraSocial && (
+                      <div className="space-y-2">
+                        <label htmlFor="external-prescription-url" className="block text-xs font-bold text-slate-400 uppercase tracking-widest">
+                          Link de descarga de la receta
+                        </label>
+                        <input
+                          id="external-prescription-url"
+                          type="url"
+                          value={externalUrl}
+                          onChange={(e) => setExternalUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        />
+                        <p className="text-[11px] text-slate-500 leading-snug">
+                          Generá la receta en la app de la obra social y pegá acá el link de descarga. Se enviará al afiliado por WhatsApp.
+                        </p>
+                        {isSubmitted && externalUrlError && (
+                          <p role="alert" className="text-[11px] font-medium text-red-400">{externalUrlError}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {!isObraSocial && (
                     <div className="grid grid-cols-1 gap-4">
                       {medications.map((med, index) => (
                         <MedicationCard 
@@ -907,6 +964,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                         {medications.length === 0 ? 'Iniciar Receta' : 'Agregar Medicamento'}
                       </button>
                     </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -336,6 +336,105 @@ describe('PostConsultation Page', () => {
     }, 20000);
   });
 
+  describe('obra social alternative mode', () => {
+    const LINK = 'https://obrasocial.example/receta/abc123';
+
+    beforeEach(() => mockNavigate.mockClear());
+    afterEach(() => {
+      cleanup();
+      vi.unstubAllGlobals();
+    });
+
+    const openObraSocial = async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      (prescriptionRepository.getPrescriptionByAppointmentId as any).mockResolvedValue({ id: 'rx-os' });
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.click(screen.getByText(/Receta Electrónica/i));
+      fireEvent.click(screen.getByLabelText(/Receta de obra social/i));
+    };
+
+    it('shows the link field instead of the medications editor', async () => {
+      await openObraSocial();
+      expect(screen.getByLabelText(/Link de descarga/i)).toBeDefined();
+      expect(screen.queryByPlaceholderText(/Ej\. Amoxicilina/i)).toBeNull();
+    });
+
+    it('blocks the submit and explains the error when the link is not a valid https URL', async () => {
+      await openObraSocial();
+      fireEvent.change(screen.getByLabelText(/Link de descarga/i), { target: { value: 'http://insecure.example/r' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      expect((await screen.findAllByText(/https:\/\//i)).length).toBeGreaterThan(0);
+      expect(supabase.functions.invoke).not.toHaveBeenCalled();
+    });
+
+    it('blocks the submit when the link is empty', async () => {
+      await openObraSocial();
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      expect(await screen.findByText(/Ingresá el link/i)).toBeDefined();
+      expect(supabase.functions.invoke).not.toHaveBeenCalled();
+    });
+
+    it('sends the link with no medications, keeps the indications and triggers the WhatsApp send', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'sent' }) });
+      vi.stubGlobal('fetch', fetchMock);
+      await openObraSocial();
+      fireEvent.change(screen.getByLabelText(/Link de descarga/i), { target: { value: `  ${LINK}  ` } });
+      fireEvent.change(screen.getByLabelText(/Prescripción \/ indicaciones/i), { target: { value: 'Reposo' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        '/api/prescriptions/rx-os/send-whatsapp',
+        expect.objectContaining({ method: 'POST' })
+      ), { timeout: 6000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.externalPrescriptionUrl).toBe(LINK);
+      expect(body.medications).toEqual([]);
+      expect(body.indications).toBe('Reposo');
+      await screen.findByText(/Consulta Finalizada/i, undefined, { timeout: 6000 });
+    }, 15000);
+
+    it('sends the link even without indications, and offers a retry without redirecting when WhatsApp fails', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 503, json: async () => ({ status: 'failed', reason: 'session_not_ready' }) });
+      vi.stubGlobal('fetch', fetchMock);
+      await openObraSocial();
+      fireEvent.change(screen.getByLabelText(/Link de descarga/i), { target: { value: LINK } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      expect(await screen.findByText(/no está conectado/i, undefined, { timeout: 6000 })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Reenviar por WhatsApp/i })).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      expect(mockNavigate).not.toHaveBeenCalledWith('/doctor', expect.anything());
+    }, 20000);
+
+    it('does not send externalPrescriptionUrl in the default Medinex mode', async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.click(screen.getByText(/Receta Electrónica/i));
+      fireEvent.change(screen.getByPlaceholderText(/Ej\. Amoxicilina/i), { target: { value: 'Ibuprofeno' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body).not.toHaveProperty('externalPrescriptionUrl');
+    }, 10000);
+  });
+
   describe('video-call prescription draft', () => {
     afterEach(() => cleanup());
 
