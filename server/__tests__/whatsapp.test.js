@@ -297,13 +297,20 @@ describe('sendPrescriptionViaWhatsApp', () => {
     patient = PATIENT,
     lastSent = null,
     lastDelivery = null,
+    followInserts = false,
+    prescriptionSelectFailures = 0,
     createSignedUrl = vi.fn().mockResolvedValue({ data: { signedUrl: FRESH_SIGNED_URL }, error: null }),
   } = {}) {
     const inserts = [];
+    const prescriptionSelects = [];
+    let failuresLeft = prescriptionSelectFailures;
     const from = (table) => {
       let onlySent = false;
       const chain = {
-        select: () => chain,
+        select: (columns) => {
+          if (table === 'prescriptions') prescriptionSelects.push(columns);
+          return chain;
+        },
         eq: (column) => {
           if (column === 'status') onlySent = true;
           return chain;
@@ -311,9 +318,18 @@ describe('sendPrescriptionViaWhatsApp', () => {
         order: () => chain,
         limit: () => chain,
         maybeSingle: async () => {
-          if (table === 'prescriptions') return { data: prescription, error: null };
+          if (table === 'prescriptions') {
+            if (failuresLeft > 0) {
+              failuresLeft -= 1;
+              return { data: null, error: { message: 'column prescriptions.external_prescription_url does not exist' } };
+            }
+            return { data: prescription, error: null };
+          }
           if (table === 'profiles') return { data: patient, error: null };
-          if (table === 'prescription_deliveries') return { data: onlySent ? lastSent : lastDelivery, error: null };
+          if (table === 'prescription_deliveries') {
+            const latest = followInserts && inserts.length ? inserts[inserts.length - 1] : lastDelivery;
+            return { data: onlySent ? lastSent : latest, error: null };
+          }
           return { data: null, error: null };
         },
         insert: async (row) => {
@@ -324,7 +340,7 @@ describe('sendPrescriptionViaWhatsApp', () => {
       return chain;
     };
     const storage = { from: () => ({ createSignedUrl }) };
-    return { client: { from, storage }, inserts, createSignedUrl };
+    return { client: { from, storage }, inserts, createSignedUrl, prescriptionSelects };
   }
 
   const pdfFetch = () =>
@@ -341,7 +357,14 @@ describe('sendPrescriptionViaWhatsApp', () => {
     const fetchFn = overrides.fetchFn || pdfFetch();
     const now = overrides.now || (() => new Date('2026-09-20T12:00:00Z'));
     const ctx = { supabaseAdmin: stub.client, waha, fetchFn, now };
-    return { ctx, waha, fetchFn, inserts: stub.inserts, createSignedUrl: stub.createSignedUrl };
+    return {
+      ctx,
+      waha,
+      fetchFn,
+      inserts: stub.inserts,
+      createSignedUrl: stub.createSignedUrl,
+      prescriptionSelects: stub.prescriptionSelects,
+    };
   }
 
   const run = (ctx, requesterId = 'doc-1') =>
@@ -562,6 +585,28 @@ describe('sendPrescriptionViaWhatsApp', () => {
       expect(inserts).toEqual([expect.objectContaining({ status: 'sent' })]);
     });
 
+    it('keeps the partial marker across repeated text failures so the PDF is sent only once', async () => {
+      const sendText = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('text boom 1'))
+        .mockRejectedValueOnce(new Error('text boom 2'))
+        .mockResolvedValue({ id: 'msg-2' });
+      const { ctx, waha, inserts } = setup({
+        db: { prescription: { ...PRESCRIPTION, notes: 'Reposo' }, followInserts: true },
+        waha: { sendText },
+      });
+
+      await run(ctx);
+      await run(ctx);
+      const third = await run(ctx);
+
+      expect(inserts[1]).toMatchObject({ status: 'failed' });
+      expect(inserts[1].error).toMatch(/^partial:pdf_sent/);
+      expect(third).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+      expect(sendText).toHaveBeenCalledTimes(3);
+    });
+
     it('resends the PDF when the latest failed row is not a partial failure', async () => {
       const { ctx, waha } = setup({
         db: {
@@ -635,6 +680,30 @@ describe('sendPrescriptionViaWhatsApp', () => {
       const result = await run(ctx);
       expect(result.status).toBe(502);
       expect(inserts[0]).toMatchObject({ status: 'failed' });
+    });
+  });
+
+  describe('prescriptions select before the external-url migration is applied', () => {
+    it('retries without external_prescription_url and sends the PDF normally', async () => {
+      const { ctx, waha, prescriptionSelects } = setup({ db: { prescriptionSelectFailures: 1 } });
+
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+      expect(prescriptionSelects).toHaveLength(2);
+      expect(prescriptionSelects[0]).toContain('external_prescription_url');
+      expect(prescriptionSelects[1]).not.toContain('external_prescription_url');
+      expect(waha.sendFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 404 when the retry fails too', async () => {
+      const { ctx, waha, prescriptionSelects } = setup({ db: { prescriptionSelectFailures: 2 } });
+
+      const result = await run(ctx);
+
+      expect(result).toEqual({ status: 404, body: { error: 'prescription_not_found' } });
+      expect(prescriptionSelects).toHaveLength(2);
+      expect(waha.sendFile).not.toHaveBeenCalled();
     });
   });
 

@@ -203,11 +203,14 @@ export async function sendPrescriptionViaWhatsApp(
   { supabaseAdmin, waha, fetchFn = fetch, now = () => new Date() },
   { prescriptionId, requesterId }
 ) {
-  const { data: prescription } = await supabaseAdmin
-    .from('prescriptions')
-    .select('id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path, notes, medications, external_prescription_url')
-    .eq('id', prescriptionId)
-    .maybeSingle();
+  const baseColumns = 'id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path, notes, medications';
+  const selectPrescription = (columns) =>
+    supabaseAdmin.from('prescriptions').select(columns).eq('id', prescriptionId).maybeSingle();
+  let { data: prescription, error: selectError } = await selectPrescription(
+    `${baseColumns}, external_prescription_url`
+  );
+  // Deployed before the external-url migration: PostgREST rejects the unknown column.
+  if (selectError) ({ data: prescription } = await selectPrescription(baseColumns));
 
   if (!prescription) return { status: 404, body: { error: 'prescription_not_found' } };
   if (prescription.doctor_id !== requesterId) return { status: 403, body: { error: 'forbidden' } };
@@ -324,7 +327,7 @@ export async function sendPrescriptionViaWhatsApp(
       });
     }
   } catch (err) {
-    return fail(502, `${pdfSent ? PARTIAL_PDF_SENT_MARKER + ' ' : ''}send_failed: ${err?.message || err}`);
+    return fail(502, `${pdfSent || pdfAlreadySent ? PARTIAL_PDF_SENT_MARKER + ' ' : ''}send_failed: ${err?.message || err}`);
   }
 
   await record('sent');
