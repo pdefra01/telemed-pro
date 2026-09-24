@@ -97,7 +97,7 @@ reachable during the video call and finalized in PostConsultation:
       `sendPrescriptionViaWhatsApp` sends a text with the link (logged in
       `prescription_deliveries`). The migration is NOT applied by the writer;
       the user applies it (T6) before deploying the edge function.
-- [ ] T7 Hardening from the T3+T4 review (WhatsApp reliability): (a) restore a
+- [x] T7 (commits `04d6856`, `bf33005`) Hardening from the T3+T4 review (WhatsApp reliability): (a) restore a
       failure when a prescription has medications but its PDF cannot be
       resolved, instead of sending only the indications text and reporting
       success; (b) avoid resending the PDF on retry when only the text failed
@@ -196,6 +196,25 @@ at a time.
   (patient sees "0 Medicamentos", no link to the obra social prescription:
   cosmetic, left alone). Gap: Deno edge function untested (T6 manual check).
 
+- T7 (delegated writer, commits `04d6856` server, `bf33005` client): (a)
+  medications + unresolvable PDF (including the edge function's dummy external
+  `pdf_url` with `pdf_path` null) returns 422 `no_pdf` again; indications-only
+  still sends without a PDF. (b) a failed send after the PDF is logged as
+  `partial:pdf_sent send_failed: ...`; the next attempt, when the latest row
+  carries that marker, skips `sendFile` and the PDF download and sends only the
+  text; the 60s `sent` guard still runs first. (c) `hasUsableIndications`
+  (`src/utils/usableIndications.ts`) mirrors the server rule and gates the
+  client trigger. (d) `buildPrescriptionDraft` never throws on non-string
+  fields, null items or non-array input. RED->GREEN: whatsapp.test.js 4 failing
+  -> 72/72; helper/draft tests red -> green; PostConsultation `-t legacy`
+  red -> green. Parent spot check: `npx vitest run server/__tests__/whatsapp.test.js
+  src/pages/doctor src/utils` 150/151 (only the known `crypto.test.ts`);
+  writer full suite 760 passed / 7 failed (known only).
+  Trade-offs: indications starting with the exact prefix "Recetado para:" are
+  not sent; after a partial failure, a retry where the PDF would also fail again
+  does not resend the PDF (download skipped). Not done: a test of the
+  `navigate` call in VideoRoom (its test file is among the known failures).
+
 ## Review (RDD, 2026-09-23)
 T1+T2 range (`060ceb0..HEAD`, medium risk, 521 lines incl. this doc) reviewed
 with the reliability lens and approved; acknowledgement done (authority
@@ -237,5 +256,6 @@ Reviewed boundary is now the T4 documentation commit; the next assessment uses
 that commit as `--base-ref`.
 
 ## Next step
-RDD assessment/review of the T5 slice, then T7 (hardening), then T6 (user:
-apply migration `20260923000000`, deploy the edge function, real WhatsApp test).
+RDD review of the T5+T7 slice (base = commit `6b5d50f`), then T6 (user: apply
+migration `20260923000000`, deploy the edge function, real WhatsApp test).
+All code tasks (T1-T5, T7) are done.
