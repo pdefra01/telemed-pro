@@ -133,6 +133,7 @@ export interface Prescription {
   signaturePublicKey?: string;
   expirationDate: string;
   pdfUrl?: string;
+  externalPrescriptionUrl?: string;
   notes?: string;
 }
 

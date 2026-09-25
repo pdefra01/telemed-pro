@@ -15,6 +15,7 @@ vi.mock('../services/supabase', () => ({
     single: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockReturnThis(),
+    order: vi.fn(),
   },
 }));
 
@@ -95,5 +96,55 @@ describe('PrescriptionRepository', () => {
     expect(prescription).toBeDefined();
     expect(prescription?.appointmentId).toBe(appointmentId);
     expect(prescription?.medications[0].name).toBe('Amoxicillin');
+  });
+
+  describe('externalPrescriptionUrl mapping', () => {
+    const OS_URL = 'https://obrasocial.example/receta/abc';
+    const baseRow = {
+      id: 'pr-os',
+      appointment_id: VALID_APPOINTMENT_UUID,
+      patient_id: VALID_PATIENT_UUID,
+      doctor_id: VALID_DOCTOR_UUID,
+      doctor_name: 'Dr. House',
+      medications: [],
+      expiration_date: '2024-05-31',
+      digital_signature: 'SIG-1',
+      status: 'active',
+      pdf_url: null,
+    };
+
+    it('maps external_prescription_url on getPrescriptionByAppointmentId', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.maybeSingle.mockResolvedValue({ data: { ...baseRow, external_prescription_url: OS_URL }, error: null });
+      const result = await prescriptionRepository.getPrescriptionByAppointmentId(VALID_APPOINTMENT_UUID);
+      expect(result?.externalPrescriptionUrl).toBe(OS_URL);
+    });
+
+    it('maps external_prescription_url on getPrescriptionsByPatientId and null to undefined', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.order.mockResolvedValue({
+        data: [
+          { ...baseRow, external_prescription_url: OS_URL },
+          { ...baseRow, id: 'pr-none', external_prescription_url: null },
+        ],
+        error: null,
+      });
+      const result = await prescriptionRepository.getPrescriptionsByPatientId(VALID_PATIENT_UUID);
+      expect(result[0].externalPrescriptionUrl).toBe(OS_URL);
+      expect(result[1].externalPrescriptionUrl).toBeUndefined();
+    });
+
+    it('maps external_prescription_url on createPrescription result', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.select.mockReturnThis();
+      supabaseMock.single.mockResolvedValue({ data: { ...baseRow, external_prescription_url: OS_URL }, error: null });
+      const result = await prescriptionRepository.createPrescription({
+        patientId: VALID_PATIENT_UUID,
+        doctorName: 'Dr. House',
+        medications: [],
+        digitalSignature: 'SIG-1',
+      });
+      expect(result.externalPrescriptionUrl).toBe(OS_URL);
+    });
   });
 });

@@ -68,5 +68,24 @@ describe('MedicalHistory Component', () => {
     });
 
   });
-});
 
+  it('shows a link to the obra social prescription when there is no PDF', async () => {
+    vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValue([]);
+    vi.mocked(medicalDocumentRepository.getDocumentsByPatientId).mockResolvedValue([]);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([
+      {
+        id: 'rx-12345678', patientId: 'p1', doctorName: 'Dr. House', medications: [],
+        date: '2024-01-01', status: 'active', digitalSignature: 'SIG', expirationDate: '2024-02-01',
+        externalPrescriptionUrl: 'https://obrasocial.example/receta/abc',
+      },
+    ] as any);
+
+    render(<MedicalHistory user={MOCK_PATIENT} />);
+    screen.getByText('Recetas').click();
+
+    const link = await screen.findByRole('link', { name: /Ver receta de obra social/i });
+    expect(link.getAttribute('href')).toBe('https://obrasocial.example/receta/abc');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+});

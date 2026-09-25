@@ -352,6 +352,17 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                         <ExternalLink size={18} className="sm:w-5 sm:h-5" />
                                                     </a>
                                                 )}
+                                                {!presc.pdfUrl && presc.externalPrescriptionUrl && (
+                                                    <a
+                                                        href={presc.externalPrescriptionUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="px-4 flex items-center justify-center gap-2 bg-emerald-600 text-white rounded-xl sm:rounded-2xl hover:bg-emerald-500 transition shadow-xl shadow-emerald-500/20 flex-shrink-0 font-bold text-[10px] sm:text-xs uppercase tracking-widest"
+                                                    >
+                                                        <ExternalLink size={14} />
+                                                        Ver receta de obra social
+                                                    </a>
+                                                )}
                                             </div>
                                             
                                             {/* Signature verification badge */}

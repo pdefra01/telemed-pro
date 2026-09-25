@@ -39,6 +39,7 @@ export class PrescriptionRepository {
       expirationDate: data.expiration_date,
       medications: data.medications,
       pdfUrl: data.pdf_url,
+      externalPrescriptionUrl: data.external_prescription_url ?? undefined,
       notes: data.notes
     };
   }
@@ -65,6 +66,7 @@ export class PrescriptionRepository {
       expirationDate: item.expiration_date,
       medications: item.medications,
       pdfUrl: item.pdf_url,
+      externalPrescriptionUrl: item.external_prescription_url ?? undefined,
       notes: item.notes
     }));
   }
@@ -92,6 +94,7 @@ export class PrescriptionRepository {
       expirationDate: data.expiration_date,
       medications: data.medications,
       pdfUrl: data.pdf_url,
+      externalPrescriptionUrl: data.external_prescription_url ?? undefined,
       notes: data.notes
     };
   }
