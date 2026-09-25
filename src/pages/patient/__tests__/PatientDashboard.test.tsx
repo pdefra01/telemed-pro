@@ -215,4 +215,28 @@ describe('PatientDashboard obra social prescription link', () => {
     expect(await screen.findByText('N/A')).toBeDefined();
     expect(screen.queryByRole('link', { name: /Ver receta de obra social/i })).toBeNull();
   });
+
+  it('shows only the PDF link when both a PDF and an obra social link exist', async () => {
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([
+      { ...baseRx, pdfUrl: 'https://files.example/rx.pdf', externalPrescriptionUrl: 'https://obrasocial.example/receta/abc' },
+    ] as any);
+
+    renderWithRouter(<PatientDashboard user={MOCK_PATIENT} />);
+
+    const pdf = await screen.findByRole('link', { name: /PDF/i });
+    expect(pdf.getAttribute('href')).toBe('https://files.example/rx.pdf');
+    expect(screen.queryByRole('link', { name: /Ver receta de obra social/i })).toBeNull();
+  });
+
+  it('renders no link and keeps N/A when the obra social URL is not https', async () => {
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([
+      { ...baseRx, externalPrescriptionUrl: 'javascript:alert(1)' },
+    ] as any);
+
+    renderWithRouter(<PatientDashboard user={MOCK_PATIENT} />);
+
+    expect(await screen.findByText('N/A')).toBeDefined();
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+    expect(screen.queryByRole('link', { name: /Ver receta de obra social/i })).toBeNull();
+  });
 });

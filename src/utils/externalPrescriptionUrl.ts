@@ -12,3 +12,8 @@ export function validateExternalPrescriptionUrl(value: string): string | null {
   }
   return 'El link debe ser una dirección válida que empiece con https://';
 }
+
+/** True only for a stored link that is safe to render as an anchor href. */
+export function isSafeExternalPrescriptionUrl(value?: string): boolean {
+  return !!value && !/\s/.test(value) && validateExternalPrescriptionUrl(value) === null;
+}

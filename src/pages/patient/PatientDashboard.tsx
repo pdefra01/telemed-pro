@@ -16,6 +16,7 @@ import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { NotificationListener } from '../../components/dashboard/NotificationListener';
 import { notificationRepository } from '../../repositories/NotificationRepository';
 import { getBranding } from '../../config/branding';
+import { isSafeExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 
 interface Props {
     user: Patient;
@@ -568,7 +569,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                         <Download size={20} />
                                                         <span className="text-[8px] font-bold mt-1 uppercase">PDF</span>
                                                     </a>
-                                                ) : prescription.externalPrescriptionUrl ? (
+                                                ) : isSafeExternalPrescriptionUrl(prescription.externalPrescriptionUrl) ? (
                                                     <a
                                                         href={prescription.externalPrescriptionUrl}
                                                         target="_blank"

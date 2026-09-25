@@ -14,6 +14,7 @@ import { prescriptionRepository } from '../../repositories/PrescriptionRepositor
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
 import { familyMemberRepository } from '../../repositories/FamilyMemberRepository';
 import { verifyPrescription } from '../../utils/crypto';
+import { isSafeExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 
 interface Props {
     user: Patient;
@@ -352,7 +353,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                         <ExternalLink size={18} className="sm:w-5 sm:h-5" />
                                                     </a>
                                                 )}
-                                                {!presc.pdfUrl && presc.externalPrescriptionUrl && (
+                                                {!presc.pdfUrl && isSafeExternalPrescriptionUrl(presc.externalPrescriptionUrl) && (
                                                     <a
                                                         href={presc.externalPrescriptionUrl}
                                                         target="_blank"
