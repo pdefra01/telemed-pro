@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Patient, Appointment, Doctor, Prescription } from '../../types';
 import { MOCK_RECORDS } from '../../constants';
-import { Calendar, Video, FileText, Plus, Clock, ChevronRight, Upload, Phone, User as UserIcon, X, Check, Search, Download, Shield, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Calendar, Video, FileText, Plus, Clock, ChevronRight, Upload, Phone, User as UserIcon, X, Check, Search, Download, Shield, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { doctorRepository } from '../../repositories/DoctorRepository';
@@ -16,6 +16,7 @@ import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { NotificationListener } from '../../components/dashboard/NotificationListener';
 import { notificationRepository } from '../../repositories/NotificationRepository';
 import { getBranding } from '../../config/branding';
+import { isSafeExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 
 interface Props {
     user: Patient;
@@ -567,6 +568,18 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     >
                                                         <Download size={20} />
                                                         <span className="text-[8px] font-bold mt-1 uppercase">PDF</span>
+                                                    </a>
+                                                ) : isSafeExternalPrescriptionUrl(prescription.externalPrescriptionUrl) ? (
+                                                    <a
+                                                        href={prescription.externalPrescriptionUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="w-14 h-14 bg-emerald-500/10 text-emerald-400 rounded-2xl hover:bg-emerald-500/20 border border-emerald-500/20 transition-all flex flex-col items-center justify-center group-hover:scale-110 active:scale-95"
+                                                        title="Ver receta de obra social"
+                                                        aria-label="Ver receta de obra social"
+                                                    >
+                                                        <ExternalLink size={20} />
+                                                        <span className="text-[8px] font-bold mt-1 uppercase text-center leading-tight">Ver receta</span>
                                                     </a>
                                                 ) : (
                                                     <span className="text-[9px] text-slate-700 italic font-bold uppercase tracking-tighter">N/A</span>
