@@ -26,6 +26,13 @@ vi.mock('../../../repositories/MedicalDocumentRepository', () => ({
   },
 }));
 
+vi.mock('../../../repositories/FamilyMemberRepository', () => ({
+  familyMemberRepository: {
+    ensureFamilyGroup: vi.fn().mockResolvedValue('group-1'),
+    getByFamilyGroup: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 // Mock Contexts
 vi.mock('../../../context/ToastContext', () => ({
   useToast: () => ({ toast: vi.fn() }),
