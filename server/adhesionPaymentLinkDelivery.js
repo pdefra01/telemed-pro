@@ -23,6 +23,33 @@ const CHANNELS = ['whatsapp', 'email'];
 
 const fail = (status, error) => ({ status, body: { ok: false, error } });
 
+const GENERIC_DELIVERY_ERROR = 'No pudimos enviar el enlace. Reintentá en unos minutos.';
+
+const DELIVERY_ERRORS = {
+  session_not_ready: 'El servicio de WhatsApp no está disponible en este momento. Probá con otro medio o reintentá más tarde.',
+  invalid_phone: 'El teléfono del titular no es válido para WhatsApp. Revisalo o usá otro medio.',
+  invalid_email: 'El email del titular no es válido. Revisalo o usá otro medio.',
+};
+
+/**
+ * The channel functions answer `{ status: 'sent' | 'failed' | 'already_sent', reason? }`,
+ * shared with the prescription delivery. The adhesion form reads `{ ok, error }`, so the
+ * channel outcome is translated here instead of leaking the internal reason codes.
+ */
+function toClientResult({ status, body }) {
+  if (body?.status === 'sent') return { status, body: { ok: true, status: 'sent' } };
+  if (body?.status === 'already_sent') {
+    return {
+      status,
+      body: { ok: false, status: 'already_sent', error: 'El enlace ya se envió hace instantes. Esperá un minuto antes de reenviarlo.' },
+    };
+  }
+  return {
+    status,
+    body: { ok: false, status: 'failed', error: DELIVERY_ERRORS[body?.reason] || GENERIC_DELIVERY_ERROR },
+  };
+}
+
 /** Same fallback chain used by sendPaymentLinkViaWhatsApp's WhatsApp text. */
 function titularFullName(request) {
   return (
@@ -75,16 +102,18 @@ export async function sendAdhesionPaymentLink(ctx, { adhesionRequestId, channel 
   const paymentUrl = mpResult.body.initPoint;
 
   if (channel === 'whatsapp') {
-    return sendPaymentLinkViaWhatsApp({ supabaseAdmin, waha }, { adhesionRequestId, paymentUrl });
+    return toClientResult(await sendPaymentLinkViaWhatsApp({ supabaseAdmin, waha }, { adhesionRequestId, paymentUrl }));
   }
 
-  return sendPaymentLinkEmail(
-    { supabaseAdmin, createMailTransporter, fromAddress },
-    {
-      adhesionRequestId,
-      email: request.titular_email,
-      fullName: titularFullName(request),
-      paymentUrl,
-    }
+  return toClientResult(
+    await sendPaymentLinkEmail(
+      { supabaseAdmin, createMailTransporter, fromAddress },
+      {
+        adhesionRequestId,
+        email: request.titular_email,
+        fullName: titularFullName(request),
+        paymentUrl,
+      }
+    )
   );
 }

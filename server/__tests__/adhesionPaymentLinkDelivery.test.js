@@ -110,7 +110,7 @@ describe('sendAdhesionPaymentLink', () => {
       expect.objectContaining({ waha: expect.anything() }),
       { adhesionRequestId: 'adh-1', paymentUrl: PAYMENT_URL }
     );
-    expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+    expect(result).toEqual({ status: 200, body: { ok: true, status: 'sent' } });
   });
 
   it('creates a checkout preference and dispatches via email when checkout is required', async () => {
@@ -126,7 +126,7 @@ describe('sendAdhesionPaymentLink', () => {
       expect.objectContaining({ createMailTransporter: expect.any(Function), fromAddress: 'no-reply@medinex.com' }),
       { adhesionRequestId: 'adh-1', email: 'juan@test.com', fullName: 'Juan Pérez', paymentUrl: PAYMENT_URL }
     );
-    expect(result).toEqual({ status: 200, body: { status: 'sent' } });
+    expect(result).toEqual({ status: 200, body: { ok: true, status: 'sent' } });
   });
 
   it('propagates the status when the MP link creation fails', async () => {
@@ -134,5 +134,26 @@ describe('sendAdhesionPaymentLink', () => {
     const result = await sendAdhesionPaymentLink(baseCtx(), { adhesionRequestId: 'adh-1', channel: 'whatsapp' });
     expect(result).toEqual({ status: 502, body: { ok: false, error: 'boom' } });
     expect(sendPaymentLinkViaWhatsApp).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['whatsapp', 503, 'session_not_ready', 'El servicio de WhatsApp no está disponible en este momento. Probá con otro medio o reintentá más tarde.'],
+    ['whatsapp', 422, 'invalid_phone', 'El teléfono del titular no es válido para WhatsApp. Revisalo o usá otro medio.'],
+    ['email', 422, 'invalid_email', 'El email del titular no es válido. Revisalo o usá otro medio.'],
+    ['whatsapp', 502, 'send_failed: WAHA 500: boom', 'No pudimos enviar el enlace. Reintentá en unos minutos.'],
+  ])('translates a %s delivery failure (%s %s) into the client contract', async (channel, status, reason, error) => {
+    const send = channel === 'whatsapp' ? sendPaymentLinkViaWhatsApp : sendPaymentLinkEmail;
+    send.mockResolvedValue({ status, body: { status: 'failed', reason } });
+    const result = await sendAdhesionPaymentLink(baseCtx(), { adhesionRequestId: 'adh-1', channel });
+    expect(result).toEqual({ status, body: { ok: false, status: 'failed', error } });
+  });
+
+  it('tells the client the link was already sent instead of a generic error', async () => {
+    sendPaymentLinkViaWhatsApp.mockResolvedValue({ status: 409, body: { status: 'already_sent' } });
+    const result = await sendAdhesionPaymentLink(baseCtx(), { adhesionRequestId: 'adh-1', channel: 'whatsapp' });
+    expect(result).toEqual({
+      status: 409,
+      body: { ok: false, status: 'already_sent', error: 'El enlace ya se envió hace instantes. Esperá un minuto antes de reenviarlo.' },
+    });
   });
 });
