@@ -12,10 +12,10 @@ import {
   routeWebhookNotification,
   runDeferredReconciliation,
 } from './server/mercadopago.js';
-import { buildPatientAuthUser, sendActivationEmail } from './server/affiliateActivation.js';
+import { activateAdhesion } from './server/adhesionActivation.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
-import { resolveSellablePlan, preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
-import { createAdhesionPreapproval, createAdhesionCheckoutPreference, postAdhesionCheckoutPayment } from './server/adhesionPayments.js';
+import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
+import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
 import { sendAdhesionPaymentLink } from './server/adhesionPaymentLinkDelivery.js';
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
@@ -1118,270 +1118,24 @@ app.post(
 
 /**
  * POST /api/approve-adhesion
- * Aprueba una solicitud de adhesión. Crea el usuario paciente en Supabase Auth,
- * inicializa su perfil, crea su grupo familiar (si tiene) e integrantes,
- * y marca la solicitud como 'approved'.
+ * Aprueba una solicitud de adhesión (fallback manual del admin). The activation
+ * itself lives in server/adhesionActivation.js, shared with auto-activation.
  */
 app.post('/api/approve-adhesion', requireAuth, requireAdmin, async (req, res) => {
-  if (!supabaseAdmin) {
-    return res.status(503).json({ error: 'Servicio de administración no configurado.' });
-  }
-
-  const { adhesionId } = req.body;
-  if (!adhesionId) {
-    return res.status(400).json({ error: 'Falta el campo adhesionId.' });
-  }
-
-  try {
-    // 1. Obtener la solicitud
-    const { data: request, error: fetchError } = await supabaseAdmin
-      .from('adhesion_requests')
-      .select('*')
-      .eq('id', adhesionId)
-      .single();
-
-    if (fetchError || !request) {
-      console.error('[approve-adhesion] Error fetching application:', fetchError);
-      return res.status(404).json({ error: 'Solicitud de adhesión no encontrada.' });
-    }
-
-    if (request.status !== 'pending') {
-      return res.status(400).json({ error: `La solicitud ya se encuentra en estado: ${request.status}` });
-    }
-
-    // Validar que el email de la solicitud esté verificado
-    if (EMAIL_VERIFICATION_REQUIRED && !request.email_verified) {
-      return res.status(400).json({ error: 'No se puede aprobar una solicitud que no tiene el correo electrónico verificado.' });
-    }
-
-    // 2. Crear usuario paciente en Supabase Auth. No password is set here —
-    // the account is activated via a best-effort recovery-link email sent
-    // below (step 5b), never a DNI-derived password (spec "No Plaintext-DNI
-    // Password On Approval").
-    const authUserPayload = buildPatientAuthUser(request);
-    const targetEmail = authUserPayload.email;
-    const titularFullName = `${request.titular_first_name || ''} ${request.titular_last_name || ''}`.trim() || request.titular_name;
-
-    console.log(`[approve-adhesion] Creando usuario auth para: ${targetEmail}`);
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser(authUserPayload);
-
-    if (authError) {
-      console.error('[approve-adhesion] Auth creation failed:', authError.message);
-      return res.status(400).json({ error: `Error en autenticación: ${authError.message}` });
-    }
-
-    const userId = authData.user.id;
-
-    // 2b. Resolver promoter_id (código de texto, ej. "LANDING") al UUID real
-    // del productor, para poblar profiles.producer_id — sin esto, "Afiliados
-    // Traídos" en Asesores Comerciales queda siempre en 0 aunque la solicitud
-    // tenga el código bien guardado.
-    let resolvedProducerId = null;
-    if (request.promoter_id && request.promoter_id.trim() !== '') {
-      const { data: producer } = await supabaseAdmin
-        .from('producers')
-        .select('id')
-        .eq('producer_code', request.promoter_id.trim().toUpperCase())
-        .maybeSingle();
-      resolvedProducerId = producer?.id || null;
-    }
-
-    // 2c. Resolver plan_id real con el catálogo vigente (tipo de plan + medio de pago).
-    // Nunca escribimos plan_name directo — el trigger sync_profile_plan_name_trigger
-    // lo sincroniza a partir de plan_id.
-    const resolvedPlan = await resolveSellablePlan(supabaseAdmin, {
-      planType: request.plan_type,
-      paymentMethod: request.payment_method,
-    });
-    const resolvedPlanId = resolvedPlan?.id || null;
-
-    // 3. Actualizar perfil del Paciente en public.profiles (que se autogeneró por trigger)
-    console.log(`[approve-adhesion] Actualizando perfil del titular: ${userId}`);
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        first_name: request.titular_first_name || split_part(request.titular_name, ' ', 1),
-        last_name: request.titular_last_name || substring(request.titular_name, ' ', 2),
-        email: targetEmail,
-        dni: request.titular_dni.trim(),
-        cuil: request.titular_cuil?.trim() || null,
-        phone: request.titular_phone,
-        address: request.titular_address,
-        province: request.titular_province || null,
-        city: request.titular_city || null,
-        locality: request.titular_locality,
-        neighborhood: request.titular_neighborhood,
-        birth_date: request.titular_birth_date,
-        plan_id: resolvedPlanId,
-        plan_status: 'active',
-        // `profiles.payment_status` is DEPRECATED (write-stopped since
-        // cuenta-corriente-billing PR1) — it's now derived read-only from the
-        // receivables ledger (`affiliate_payment_status` view), never written
-        // directly by onboarding or any other app-layer path.
-        is_active: true,
-        producer_id: resolvedProducerId
-      })
-      .eq('id', userId);
-
-    if (profileError) {
-      console.error('[approve-adhesion] Profile update failed:', profileError.message);
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-      return res.status(500).json({ error: `Error al crear el perfil: ${profileError.message}` });
-    }
-
-    // 4. Crear grupo familiar si la solicitud contiene integrantes
-    const familyMembersList = Array.isArray(request.family_members) ? request.family_members : [];
-    if (familyMembersList.length > 0) {
-      console.log(`[approve-adhesion] Procesando grupo familiar (${familyMembersList.length} miembros)...`);
-      
-      const { data: famGroup, error: famGroupError } = await supabaseAdmin
-        .from('family_groups')
-        .insert({
-          primary_affiliate_id: userId,
-          name: `Familia de ${titularFullName}`
-        })
-        .select()
-        .single();
-
-      if (famGroupError) {
-        console.error('[approve-adhesion] family_groups creation failed:', famGroupError.message);
-      } else {
-        const familyGroupId = famGroup.id;
-        
-        await supabaseAdmin
-          .from('profiles')
-          .update({ family_group_id: familyGroupId })
-          .eq('id', userId);
-
-        const insertMembers = familyMembersList.map(member => {
-          let relation = 'otro';
-          const relLower = (member.parentesco || '').toLowerCase();
-          if (relLower.includes('conyuge') || relLower.includes('cónyuge') || relLower.includes('espos')) relation = 'cónyuge';
-          else if (relLower.includes('hijo') || relLower.includes('hija')) relation = 'hijo/a';
-          else if (relLower.includes('padre') || relLower.includes('madre') || relLower.includes('papá') || relLower.includes('mamá')) relation = 'padre/madre';
-          else if (relLower.includes('hermano') || relLower.includes('hermana')) relation = 'hermano/a';
-          
-          const rawName = member.name || member.fullName || 'Familiar de Prueba';
-          const fName = member.first_name || member.firstName || rawName.split(' ')[0];
-          const lName = member.last_name || member.lastName || rawName.split(' ').slice(1).join(' ');
-
-          return {
-            family_group_id: familyGroupId,
-            first_name: fName,
-            last_name: lName,
-            relation: relation,
-            birth_date: member.birthDate || member.fechaNac || null,
-            dni: member.dni ? String(member.dni).trim() : null,
-            cuil: member.cuil ? String(member.cuil).trim() : null
-          };
-        });
-
-        const { error: membersError } = await supabaseAdmin
-          .from('family_members')
-          .insert(insertMembers);
-
-        if (membersError) {
-          console.error('[approve-adhesion] family_members insertion failed:', membersError.message);
-        }
-      }
-    }
-
-    // 5. Marcar la solicitud como aprobada. approved_profile_id records the
-    // link (design D-F, fact 9) — this endpoint previously recorded nothing
-    // beyond status='approved', leaving any signup-time MP subscription's
-    // profile_id link unrecoverable if the back-fill below failed.
-    console.log(`[approve-adhesion] Marcando solicitud como aprobada...`);
-    await supabaseAdmin
-      .from('adhesion_requests')
-      .update({ status: 'approved', approved_profile_id: userId })
-      .eq('id', adhesionId);
-
-    // 5a. A Checkout Pro payment that arrived before the approval is posted to
-    // the ledger now (idempotent; a no-op when unpaid or already posted).
-    // Best-effort: never fails the approval; the payment webhook retries it.
-    const ledgerPost = await postAdhesionCheckoutPayment(supabaseAdmin, adhesionId);
-    if (!ledgerPost.ok) {
-      console.error('[approve-adhesion] Ledger posting of the checkout payment failed:', ledgerPost.error);
-    } else if (ledgerPost.posted) {
-      console.log(`[approve-adhesion] Checkout payment posted to the ledger (invoice ${ledgerPost.invoiceId}).`);
-    }
-
-    // 5b. Mercado Pago débito-automático link back-fill (design D-F "Link
-    // back-fill at approval", steps a-d). Best-effort and NON-BLOCKING: a
-    // failure here must never fail the approval itself. Pass B of the D-H
-    // sweep re-drives steps (b)-(c) on any later run using
-    // approved_profile_id, independent of this request completing.
-    if (mercadoPagoEnabled) {
-      let linkedPreapprovalId = null;
-      try {
-        const { data: subscription } = await supabaseAdmin
-          .from('affiliate_payment_subscriptions')
-          .select('id, mp_preapproval_id')
-          .eq('adhesion_request_id', adhesionId)
-          .is('profile_id', null)
-          .maybeSingle();
-
-        if (subscription) {
-          await supabaseAdmin
-            .from('affiliate_payment_subscriptions')
-            .update({ profile_id: userId })
-            .eq('id', subscription.id);
-
-          if (subscription.mp_preapproval_id) {
-            linkedPreapprovalId = subscription.mp_preapproval_id;
-            const preapproval = await mpFetch(`/preapproval/${subscription.mp_preapproval_id}`);
-            await handleSubscriptionEvent({ supabaseAdmin }, { resource: preapproval, kind: 'preapproval' });
-          }
-        }
-      } catch (err) {
-        console.error('[approve-adhesion] Mercado Pago subscription link back-fill failed (non-blocking):', err.message);
-      }
-
-      // Step (d): a scoped D-H sweep run for just this subscription — the
-      // id comes from the DB row read above, NEVER from the request body.
-      // Covers anything steps (a)-(c) above could not complete synchronously
-      // (e.g. no invoice exists yet for this period) by replaying it through
-      // the same idempotent primitives the live webhook uses. Never blocks
-      // or fails the approval response itself.
-      if (linkedPreapprovalId) {
-        try {
-          await runDeferredReconciliation({ supabaseAdmin, mpFetch }, { preapprovalId: linkedPreapprovalId });
-        } catch (err) {
-          console.error('[approve-adhesion] Scoped D-H sweep failed (non-blocking):', err.message);
-        }
-      }
-    }
-
-    // 5b(email). Best-effort activation email — own try/catch, NEVER throws
-    // (mirrors notifyPaymentSettled) and never blocks the approval response.
-    // Placed after the Mercado Pago block (design D3): both steps are
-    // independent best-effort operations, and this keeps the payment-adjacent
-    // block above byte-identical.
-    let activationEmailSent = false;
-    try {
-      const emailResult = await sendActivationEmail(
-        { supabaseAdmin, createMailTransporter, fromAddress: FROM_ADDRESS, publicAppUrl: PUBLIC_APP_URL },
-        { email: targetEmail, fullName: titularFullName }
-      );
-      activationEmailSent = !!emailResult?.sent;
-    } catch (err) {
-      console.error('[approve-adhesion] Activation email failed (non-blocking):', err?.message || String(err));
-    }
-
-    console.log(`[approve-adhesion] Solicitud aprobada con éxito para titular: ${targetEmail}`);
-    res.status(200).json({
-      message: 'Solicitud aprobada exitosamente y paciente registrado.',
-      userId,
-      // Judgment Day finding: without this, a failed activation email left
-      // the affiliate with a passwordless account and no visible signal to
-      // any admin. Surfacing it here lets the admin UI warn immediately,
-      // instead of the affiliate silently having no way to ever log in.
-      activationEmailSent,
-    });
-  } catch (err) {
-    console.error('[approve-adhesion] Unexpected error:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
-  }
+  const { status, body } = await activateAdhesion(
+    {
+      supabaseAdmin,
+      mercadoPagoEnabled,
+      mpFetch,
+      createMailTransporter,
+      fromAddress: FROM_ADDRESS,
+      publicAppUrl: PUBLIC_APP_URL,
+      emailVerificationRequired: EMAIL_VERIFICATION_REQUIRED,
+    },
+    req.body?.adhesionId,
+    { source: 'admin' }
+  );
+  res.status(status).json(body);
 });
 
 /**
@@ -1728,20 +1482,6 @@ app.get('/api/advisors/search', requireAuth, requireAdmin, async (req, res) => {
     res.status(500).json({ error: 'Error interno en el servidor.' });
   }
 });
-
-// Helpers de strings para mapeos robustos
-function split_part(str, delim, index) {
-  if (!str) return '';
-  const parts = str.split(delim);
-  return parts[index - 1] || '';
-}
-
-function substring(str, delim, startIndex) {
-  if (!str) return '';
-  const idx = str.indexOf(delim);
-  if (idx === -1) return '';
-  return str.substring(idx + delim.length);
-}
 
 // Catch-all middleware to serve index.html for SPA routing
 // This is the most compatible way for Express 5
