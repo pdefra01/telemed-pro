@@ -19,6 +19,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "livekit-client": "^2.18.6",

@@ -232,10 +232,10 @@ describe('autoActivateAdhesion — activation', () => {
 describe('/api/adhesion/:id/activate route registration (server.js source)', () => {
   // server.js calls app.listen at import time, so the registration is
   // asserted over its source (same approach as approveAdhesionAuth.test.js).
-  it('registers a public POST /api/adhesion/:id/activate that delegates to autoActivateAdhesion', () => {
+  it('registers a public (rate-limited) POST /api/adhesion/:id/activate that delegates to autoActivateAdhesion', () => {
     const serverSource = readFileSync(resolve(__dirname, '..', '..', 'server.js'), 'utf-8');
     expect(serverSource).toMatch(
-      /app\.post\(\s*['"]\/api\/adhesion\/:id\/activate['"]\s*,\s*async\s*\(\s*req\s*,\s*res\s*\)\s*=>\s*\{[\s\S]{0,200}?autoActivateAdhesion\(/
+      /app\.post\(\s*['"]\/api\/adhesion\/:id\/activate['"]\s*,\s*(?:\w+\s*,\s*)*async\s*\(\s*req\s*,\s*res\s*\)\s*=>\s*\{[\s\S]{0,200}?autoActivateAdhesion\(/
     );
   });
 });

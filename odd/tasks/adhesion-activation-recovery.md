@@ -35,7 +35,7 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
 ## Tasks
 - [x] T1 Server: stale-claim detection, `releaseStuckActivation` + admin endpoint, `/activate` stale answer; tests.
 - [ ] T2 Admin UI: stale badge + "Liberar" action in Afiliados; tests.
-- [ ] T3 Rate limit on public `/activate` (+ trust proxy); tests.
+- [x] T3 Rate limit on public `/activate` (+ trust proxy); tests.
 - [ ] T4 Docs: MANUAL_DE_USUARIO (admin recovery), COOLIFY_DEPLOYMENT if config changes.
 
 ## Route
@@ -47,7 +47,7 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
 
 ## Progress
 - Branch `feat/adhesion-activation-recovery` from master (cdf5ffa).
-- T1 done (delegated writer). `server/adhesionActivationRecovery.js`
+- T1 done (delegated writer), commit `fb59b92`. `server/adhesionActivationRecovery.js`
   (`isActivationClaimStale`, `releaseStuckActivation`), admin route
   `POST /api/adhesion-requests/:id/release-activation` (requireAuth,
   requireAdmin), `/activate` answers 409 `{ ok:false, pendingReview:true, error }`
@@ -61,6 +61,14 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
   (profile cascades), clear claim guarded by `status='pending'`.
   RED observed (module missing + stale test 202). Checks: focused 47/47 pass;
   `npm test` 898 pass / 5 fail (known base failures only); `npx tsc --noEmit` exit 0.
+- T3 done (delegated writer). `express-rate-limit` 8.7.1; `server/rateLimits.js`
+  (`createActivateAdhesionLimiter`, 10 req / 15 min per IP, draft-7
+  `RateLimit` headers, 429 `{ error }` in Spanish, in-memory store) applied only
+  to `POST /api/adhesion/:id/activate`; `app.set('trust proxy', 1)` (no other
+  code reads req.ip / X-Forwarded-For). Note in COOLIFY_DEPLOYMENT.md; no new
+  env vars. RED observed (module missing). Checks: focused 28/28 pass; `npm test`
+  903 pass / 5 fail (known base failures only); `npx tsc --noEmit` exit 0;
+  `node --check server.js` ok.
 
 ## Next step
-- T3.
+- T2 (admin UI), then T4.

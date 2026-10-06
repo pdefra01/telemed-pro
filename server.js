@@ -15,6 +15,7 @@ import {
 import { activateAdhesion } from './server/adhesionActivation.js';
 import { autoActivateAdhesion } from './server/adhesionAutoActivation.js';
 import { releaseStuckActivation } from './server/adhesionActivationRecovery.js';
+import { createActivateAdhesionLimiter } from './server/rateLimits.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
@@ -35,6 +36,10 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const app = express();
+// Coolify serves the app behind a single Traefik hop: trust exactly that hop so
+// req.ip is the real client IP (used by the per-IP rate limits) and a client
+// cannot spoof it with its own X-Forwarded-For entries.
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 
@@ -1160,9 +1165,10 @@ app.post('/api/adhesion-requests/:id/release-activation', requireAuth, requireAd
  * Activates the request right after submit once the titular email is verified
  * server-side and the DNI/CUIL are not registered yet
  * (server/adhesionAutoActivation.js documents the response contract).
- * TODO: per-IP rate limit (no limiter exists in the codebase yet).
+ * Rate-limited per client IP (server/rateLimits.js).
  */
-app.post('/api/adhesion/:id/activate', async (req, res) => {
+const activateAdhesionLimiter = createActivateAdhesionLimiter();
+app.post('/api/adhesion/:id/activate', activateAdhesionLimiter, async (req, res) => {
   const { status, body } = await autoActivateAdhesion(
     {
       supabaseAdmin,
