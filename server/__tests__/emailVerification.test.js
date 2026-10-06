@@ -13,10 +13,11 @@ import {
  * to `result` when awaited (via .limit()).
  */
 function createDb(result = { data: [], error: null }) {
-  const query = { table: null, eq: {}, not: [], gte: {}, order: null, limit: null };
+  const query = { table: null, eq: {}, is: {}, not: [], gte: {}, order: null, limit: null };
   const builder = {
     select: () => builder,
     eq: (c, v) => { query.eq[c] = v; return builder; },
+    is: (c, v) => { query.is[c] = v; return builder; },
     not: (c, op, v) => { query.not.push([c, op, v]); return builder; },
     gte: (c, v) => { query.gte[c] = v; return builder; },
     order: (c, o) => { query.order = [c, o]; return builder; },
@@ -73,6 +74,9 @@ describe('isEmailVerified', () => {
     expect(query.table).toBe('contact_verifications');
     expect(query.eq).toEqual({ channel: 'email', contact_value: 'juan@test.com' });
     expect(query.not).toEqual([['verified_at', 'is', null]]);
+    // Only server-issued guest challenges count: profile 2FA rows (user_id set)
+    // are verified by the browser itself and must never satisfy this gate.
+    expect(query.is).toEqual({ user_id: null });
     expect(query.gte).toEqual({
       verified_at: new Date(NOW - VERIFIED_EMAIL_MAX_AGE_MS).toISOString(),
     });

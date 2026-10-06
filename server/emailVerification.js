@@ -54,6 +54,9 @@ export async function isEmailVerified(supabaseAdmin, email, { now = Date.now(), 
     .select('id')
     .eq('channel', 'email')
     .eq('contact_value', cleanEmail)
+    // Guest challenges are written by the service role with user_id NULL;
+    // profile 2FA rows are verified client-side and are not proof of ownership.
+    .is('user_id', null)
     .not('verified_at', 'is', null)
     .gte('verified_at', new Date(now - maxAgeMs).toISOString())
     .order('verified_at', { ascending: false })
