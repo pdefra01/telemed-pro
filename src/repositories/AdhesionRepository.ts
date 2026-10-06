@@ -34,6 +34,8 @@ export interface AdhesionRequest {
   promoter_id?: string;
   email_verified?: boolean;
   preferred_billing_day?: number;
+  /** Set by the server while an activation holds the row; null = unclaimed. */
+  activation_claimed_at?: string | null;
   created_at?: string;
 }
 
@@ -41,11 +43,14 @@ export interface AdhesionRequest {
  * Outcome of the public auto-activation call (POST /api/adhesion/:id/activate).
  * `failed` covers every non-success answer and network errors: the row stays
  * pending and the admin "Aprobar" button remains the fallback.
+ * `pending_review` means an earlier activation got stuck (stale claim): the
+ * row waits for an admin to release it.
  */
 export type ActivationResult =
   | { status: 'activated'; activationEmailSent: boolean; message?: string }
   | { status: 'already_active'; message?: string }
   | { status: 'processing'; message?: string }
+  | { status: 'pending_review'; httpStatus: number; error: string }
   | { status: 'failed'; httpStatus?: number; error: string };
 
 const ACTIVATION_FAILED_MESSAGE = 'No se pudo activar la cuenta automáticamente.';
@@ -208,6 +213,9 @@ export class AdhesionRepository {
     }
 
     const error = typeof body?.error === 'string' && body.error ? body.error : ACTIVATION_FAILED_MESSAGE;
+    if (response.status === 409 && body?.pendingReview === true) {
+      return { status: 'pending_review', httpStatus: response.status, error };
+    }
     return { status: 'failed', httpStatus: response.status, error };
   }
 
@@ -282,6 +290,31 @@ export class AdhesionRepository {
 
     const result = await response.json().catch(() => ({}));
     return result?.email || email;
+  }
+
+  /**
+   * Libera una activación trabada (solo admin): el servidor borra la cuenta de
+   * acceso incompleta (si es segura de borrar) y limpia el claim, dejando la
+   * solicitud pendiente para "Aprobar". Lanza con el mensaje del servidor si
+   * lo rechaza (claim todavía fresco, cuenta no borrable, fila modificada).
+   */
+  async releaseStuckActivation(id: string): Promise<{ deletedUserId: string | null }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`/api/adhesion-requests/${encodeURIComponent(id)}/release-activation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al liberar la activación.');
+    }
+
+    const result = await response.json().catch(() => ({}));
+    return { deletedUserId: typeof result?.deletedUserId === 'string' ? result.deletedUserId : null };
   }
 
   /**

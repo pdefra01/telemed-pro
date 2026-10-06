@@ -776,6 +776,8 @@ describe('AdhesionForm - automatic activation after submit', () => {
   it.each([
     ['failed', { status: 'failed', httpStatus: 409, error: 'Duplicado' }],
     ['processing', { status: 'processing', message: 'En curso' }],
+    ['pending_review', { status: 'pending_review', httpStatus: 409, error: 'Pendiente de revisión' }],
+    ['rate limited', { status: 'failed', httpStatus: 429, error: 'Demasiados intentos' }],
   ])('keeps the pending-review wording and the pay link when activation is %s', async (_label, result) => {
     vi.mocked(adhesionRepository.activateApplication).mockResolvedValue(result as any);
     await submitForm('adhesion-304');

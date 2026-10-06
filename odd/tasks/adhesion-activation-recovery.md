@@ -34,7 +34,7 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
 
 ## Tasks
 - [x] T1 Server: stale-claim detection, `releaseStuckActivation` + admin endpoint, `/activate` stale answer; tests.
-- [ ] T2 Admin UI: stale badge + "Liberar" action in Afiliados; tests.
+- [x] T2 Admin UI: stale badge + "Liberar" action in Afiliados; tests.
 - [x] T3 Rate limit on public `/activate` (+ trust proxy); tests.
 - [ ] T4 Docs: MANUAL_DE_USUARIO (admin recovery), COOLIFY_DEPLOYMENT if config changes.
 
@@ -69,6 +69,22 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
   env vars. RED observed (module missing). Checks: focused 28/28 pass; `npm test`
   903 pass / 5 fail (known base failures only); `npx tsc --noEmit` exit 0;
   `node --check server.js` ok.
+- T2 done (delegated writer). `src/utils/activationClaim.ts`
+  (`getActivationClaimState` -> none/fresh/stale, mirrors the server rule and
+  its 10 min threshold); `AdhesionRequest.activation_claimed_at` (the pending
+  query already selects `*`); `adhesionRepository.releaseStuckActivation(id)`
+  (Bearer token, throws the server `error` like the other admin methods);
+  `activateApplication` maps 409 `pendingReview` to `pending_review` (429 stays
+  `failed`). Afiliados > Solicitudes: "Activación trabada" / "Activando…" badges
+  in the list; in the review modal a stale claim shows a warning + "Liberar"
+  (window.confirm, same pattern as "Rechazar"), and "Aprobar y Registrar" is
+  disabled for any claim (label "Activando…" while fresh). On success: toast,
+  claim cleared locally, list reloaded. AdhesionForm needed no change: every
+  non-active result (including `pending_review` and 429) already shows the
+  pending-review wording; covered by new test cases. RED observed (module
+  missing, release method missing, pendingReview mapped to failed, UI missing).
+  Checks: focused 150/150 pass; `npm test` 923 pass / 5 fail (known base
+  failures only); `npx tsc --noEmit` exit 0.
 
 ## Next step
 - T2 (admin UI), then T4.
