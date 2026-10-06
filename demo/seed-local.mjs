@@ -27,14 +27,23 @@ export const DEMO = {
 };
 DEMO.patient.email = `${DEMO.patient.dni}@medinex-paciente.com`;
 
-// Hourly slots 00:00–23:00 every day (0 = Sunday), so a run at any time of
-// day finds a slot that already started and offers "Atención Inmediata".
-const SLOTS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
-const AVAILABILITY = [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, slots: SLOTS }));
+// A short window of hourly slots around the current hour, every day
+// (0 = Sunday). The slot of the current hour already started, so the app
+// offers "Atención Inmediata" at any time of day, and the booking grid stays
+// small enough for the captions. The seed runs at the start of every recording.
+export function slotsAround(now = new Date()) {
+  const hour = now.getHours();
+  return [-1, 0, 1, 2, 3, 4]
+    .map((offset) => (hour + offset + 24) % 24)
+    .sort((a, b) => a - b)
+    .map((h) => `${String(h).padStart(2, '0')}:00`);
+}
+
+const availabilityAround = (now) => [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, slots: slotsAround(now) }));
 
 // A profile update that matches no row means the auth trigger did not create
 // the profile: fail instead of recording a demo with a half-seeded persona.
-function expectOneRow(result, what) {
+export function expectOneRow(result, what) {
   if (result.rowCount !== 1) throw new Error(`[seed] Expected to update 1 ${what} profile, updated ${result.rowCount}.`);
 }
 
@@ -92,7 +101,7 @@ export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
          license_number = $5, availability = $6::jsonb, is_active = true,
          is_verified = true, rating = 4.9
        where id = $1`,
-      [doctorId, `Dra. ${doctor.firstName}`, doctor.lastName, doctor.specialty, doctor.licenseNumber, JSON.stringify(AVAILABILITY)]
+      [doctorId, doctor.firstName, doctor.lastName, doctor.specialty, doctor.licenseNumber, JSON.stringify(availabilityAround(new Date()))]
     );
     expectOneRow(doctorUpdate, 'doctor');
 
@@ -107,11 +116,38 @@ export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
     );
     expectOneRow(patientUpdate, 'patient');
 
+    // The dashboard reads the quota from the current coverage window (the
+    // snapshot assign_plan opens in production). Open a 30-day one locally so
+    // the badge shows the plan quota ("Consultas Bonificadas: n/∞" for the
+    // unlimited Plan Individual) instead of "n/null".
+    const coverage = await db.query(
+      `insert into public.family_coverage_windows
+         (subject_profile_id, plan_id_snapshot, period_start, paid_through, granted_quota, is_unlimited)
+       select pr.id, pl.id, now(), now() + interval '30 days',
+              case when pl.is_unlimited then null else pl.bonified_consultations end, pl.is_unlimited
+       from public.profiles pr join public.plans pl on pl.id = pr.plan_id
+       where pr.id = $1
+       on conflict (subject_profile_id) where subject_profile_id is not null do update set
+         plan_id_snapshot = excluded.plan_id_snapshot, period_start = excluded.period_start,
+         paid_through = excluded.paid_through, granted_quota = excluded.granted_quota,
+         is_unlimited = excluded.is_unlimited`,
+      [patientId]
+    );
+    if (coverage.rowCount !== 1) throw new Error('[seed] Could not open the patient coverage window (is "Plan Individual" seeded?).');
+
     // Clean slate: previous demo consultations would clutter the queue.
     await db.query('delete from public.prescriptions where patient_id = $1', [patientId]);
     await db.query('delete from public.medical_records where patient_id = $1', [patientId]);
     await db.query('delete from public.notifications where user_id = any($1::uuid[])', [[patientId, doctorId]]);
     await db.query('delete from public.appointments where patient_id = $1 or doctor_id = $2', [patientId, doctorId]);
+
+    // finalize-consultation uploads the prescription PDF to this private
+    // bucket. Production created it by hand (the migrations only make it
+    // private), so a fresh local stack lacks it and falls back to a dummy URL.
+    await db.query(
+      `insert into storage.buckets (id, name, public) values ('prescriptions_pdfs', 'prescriptions_pdfs', false)
+       on conflict (id) do update set public = false`
+    );
 
     // The migrations do not ship an INSERT policy for appointments (production
     // got it from scripts/fix-rls.js). Add it locally so the patient can book.

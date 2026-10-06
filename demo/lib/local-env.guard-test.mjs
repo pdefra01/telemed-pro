@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assertLocalDbUrl, assertLocalUrl, buildAppEnv, isLocalUrl } from './local-env.mjs';
-import { seedLocal } from '../seed-local.mjs';
+import { expectOneRow, seedLocal, slotsAround } from '../seed-local.mjs';
 
 const LOCAL = {
   apiUrl: 'http://127.0.0.1:54321',
@@ -61,4 +61,18 @@ test('seedLocal refuses remote API or DB URLs before connecting', async () => {
     seedLocal({ ...LOCAL, dbUrl: 'postgresql://postgres:pw@db.x.supabase.co:5432/postgres' }),
     /Refusing to run/
   );
+});
+
+test('expectOneRow accepts exactly one updated row', () => {
+  assert.doesNotThrow(() => expectOneRow({ rowCount: 1 }, 'doctor'));
+  for (const rowCount of [0, 2, undefined]) {
+    assert.throws(() => expectOneRow({ rowCount }, 'doctor'), /Expected to update 1 doctor profile/, String(rowCount));
+  }
+});
+
+test('slotsAround offers a short window that includes the current hour', () => {
+  assert.deepEqual(slotsAround(new Date(2026, 9, 6, 14, 35)), ['13:00', '14:00', '15:00', '16:00', '17:00', '18:00']);
+  // Near midnight the window wraps and stays sorted for the booking grid.
+  assert.deepEqual(slotsAround(new Date(2026, 9, 6, 23, 10)), ['00:00', '01:00', '02:00', '03:00', '22:00', '23:00']);
+  assert.deepEqual(slotsAround(new Date(2026, 9, 6, 0, 5)), ['00:00', '01:00', '02:00', '03:00', '04:00', '23:00']);
 });

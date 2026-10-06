@@ -1,6 +1,7 @@
 // Turns the raw per-role recordings into the final demo videos:
 //   paciente.mp4, medico.mp4 and consulta-completa.mp4 (sequenced, with a
-//   side-by-side section during the video call). All 1280x720, H.264.
+//   side-by-side section during the video call, then the prescription and the
+//   patient finding it in her dashboard). All 1280x720, H.264.
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -73,11 +74,16 @@ export async function compose() {
   const timeline = JSON.parse(await readFile(join(OUTPUT_DIR, 'timeline.json'), 'utf8'));
   const { patient, doctor, files } = timeline;
   if (!files?.patient || !files?.doctor) throw new Error('[compose] Missing raw recordings; run `npm run demo:record` first.');
-  const p = (name) => patient.marks[name] - patient.start;
-  const d = (name) => doctor.marks[name] - doctor.start;
-  for (const [role, marks] of [['patient', ['waiting', 'callConnected', 'callEnd']], ['doctor', ['callConnected', 'callEnd', 'end']]]) {
+  const required = [
+    ['patient', ['waiting', 'callConnected', 'callEnd', 'rxStart', 'end']],
+    ['doctor', ['callConnected', 'notes', 'callEnd', 'end']],
+  ];
+  for (const [role, marks] of required) {
     for (const m of marks) if (!timeline[role].marks[m]) throw new Error(`[compose] timeline is missing ${role}.${m}; the recording did not finish.`);
   }
+  // Origins are taken just before each page (and its video) is created.
+  const p = (name) => patient.marks[name] - patient.start;
+  const d = (name) => doctor.marks[name] - doctor.start;
 
   await rm(TMP_DIR, { recursive: true, force: true });
   await mkdir(TMP_DIR, { recursive: true });
@@ -87,12 +93,15 @@ export async function compose() {
   transcode(files.doctor, join(OUTPUT_DIR, 'medico.mp4'));
 
   // Wall-clock marks are shared, so the call window maps onto both recordings.
-  const callMs = Math.min(p('callEnd') - p('callConnected'), d('callEnd') - d('callConnected'));
+  // The side-by-side shows the call itself; once the doctor starts writing
+  // notes and the prescription, her full-screen view is easier to read.
+  const callMs = Math.min(p('callEnd') - p('callConnected'), d('notes') - d('callConnected'));
   const parts = [
     clip(files.patient, 0, p('waiting'), join(TMP_DIR, '1-paciente.mp4')),
     clip(files.doctor, 0, d('callConnected'), join(TMP_DIR, '2-medico.mp4')),
     sideBySide(files.patient, files.doctor, p('callConnected'), d('callConnected'), callMs, join(TMP_DIR, '3-llamada.mp4')),
-    clip(files.doctor, d('callEnd'), d('end'), join(TMP_DIR, '4-cierre.mp4')),
+    clip(files.doctor, d('notes'), d('end'), join(TMP_DIR, '4-receta.mp4')),
+    clip(files.patient, p('rxStart'), p('end'), join(TMP_DIR, '5-paciente-receta.mp4')),
   ];
   const list = join(TMP_DIR, 'concat.txt');
   await writeFile(list, parts.map((f) => `file '${f.replaceAll('\\', '/')}'`).join('\n'));

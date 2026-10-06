@@ -95,8 +95,26 @@ export async function installCaptions(context, roleLabel) {
   await context.addInitScript(overlayScript, { roleLabel });
 }
 
+// Long enough to read a one-line caption on video without pausing it.
+export const READ_MS = 3800;
+
 /** Shows a caption and holds it long enough to be read on video. */
-export async function caption(page, text, holdMs = 1800) {
+export async function caption(page, text, holdMs = READ_MS) {
   await page.evaluate((t) => window.__demoCaption?.(t), text);
+  if (holdMs > 0) await page.waitForTimeout(holdMs);
+}
+
+/**
+ * Same as caption(), for a page that may be navigating on its own (e.g. the
+ * patient's room when the doctor ends the call). If the document is replaced
+ * mid-call, retry once on the new one; a caption never fails the recording.
+ */
+export async function captionSafely(page, text, holdMs = 0) {
+  try {
+    await caption(page, text, 0);
+  } catch {
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    await caption(page, text, 0).catch((err) => console.warn(`[captions] skipped "${text}": ${err.message}`));
+  }
   if (holdMs > 0) await page.waitForTimeout(holdMs);
 }
