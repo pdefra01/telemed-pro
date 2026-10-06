@@ -43,7 +43,7 @@ data. Never against production.
 - [x] T1 Demo harness: media prep (ffmpeg → y4m/wav), local LiveKit, local
   seed (doctor/patient/availability/RLS for local only), env guard that refuses
   any non-local Supabase URL.
-- [ ] T2 Playwright recording script (two browsers with distinct fake cameras,
+- [x] T2 Playwright recording script (two browsers with distinct fake cameras,
   captions overlay, per-role videos) + ffmpeg composition.
 - [ ] T3 README for re-running and swapping in own clips; produce the videos.
 
@@ -79,7 +79,49 @@ data. Never against production.
     - `node demo/start-livekit.mjs` → dev mode on 127.0.0.1:7880, HTTP 200.
   - Commit: `feat(demo): add local demo harness for recording sales videos`
     (first commit on `feat/demo-videos` after b21f23d; hash in `git log`).
-  - Native review: not run by the writer (RDD assess left to the parent).
+  - Native review: assessed medium (`slice_budget_reached`); consent granted;
+    one-lens (reliability) review approved and acknowledged (lineage
+    `review-a5336b388e151426`). Reviewed boundary advances to the T1 commit.
+  - Non-blocking review follow-ups (fold the warnings into T2):
+    - WARNING `demo/lib/local-env.mjs:96`: DB URL passed to the app env is not
+      re-asserted by the guard.
+    - WARNING `demo/seed-local.mjs:83-100`: an update matching zero rows
+      succeeds silently.
+    - SUGGESTION `demo/fetch-media.mjs:45`: download is not atomic (write to a
+      temp file, then rename).
+    - SUGGESTION `demo/seed-local.mjs:30-33`: availability slots before 8 AM.
+
+- T2 done (delegated direct, writer trigger: 3 new + 6 modified files).
+  Files: `demo/record.mjs`, `demo/compose.mjs`, `demo/lib/captions.mjs`;
+  modified guard/seed/fetch/package.json. `npm run demo:record` records and
+  composes; `demo:compose` alone. Seed deletes prior demo appointments
+  (idempotent). Network rule aborts any request to supabase.co/.in/railway.app.
+  - T1 warnings fixed: `assertLocalDbUrl` (status reader, `buildAppEnv`,
+    seed); seed profile updates must touch exactly 1 row. Suggestions: atomic
+    download done; availability now 00:00–23:00 (lets recording run anytime;
+    makes the booking modal tall).
+  - Evidence (2026-10-06): RED (import of missing `assertLocalDbUrl`) → GREEN
+    `npm run demo:test` 6/6 (parent re-ran: 6/6). `demo:record` ×2 → 3 MP4s
+    1280x720 (paciente ~73 s, medico ~48 s, consulta-completa ~70 s); DB after
+    run 2: exactly 1 completed demo appointment. Frames inspected (parent
+    checked side-by-side `run2-45.jpg`: both stock feeds live, captions ok).
+  - Teardown: app/LiveKit stopped, `supabase stop`, Docker Desktop stopped,
+    `wsl --shutdown`.
+  - Commit `2789003` feat(demo): record patient and doctor demo videos with
+    Playwright. Review assess: medium, `slice_budget_reached` (610 lines);
+    consent granted; one-lens (reliability) review approved and acknowledged
+    (lineage `review-71abfb0e72f29602`, authority burned). Reviewed boundary
+    advances to `2789003`.
+  - Non-blocking review findings (fold into T3):
+    - WARNING `demo/record.mjs:183-189` immediate-care probe for non-waiting state.
+    - WARNING `demo/record.mjs:250` patient page evaluate after the call ends.
+    - SUGGESTION `demo/record.mjs:316-322` stack teardown not guaranteed.
+    - SUGGESTION `demo/record.mjs:138-139` timeline origin offset.
+    - SUGGESTION `demo/seed-local.mjs:37-39` exactly-1-row guard untested.
+  - Cosmetic follow-ups: "Dr. Dra. Lucía Fernández" (app prefixes "Dr."; seed
+    first name "Dra. Lucía"); "Consultas Bonificadas: 1/null" (local plan
+    quota missing); caption covers lower slots of the tall booking grid.
 
 ## Next step
-- T2 Playwright recording script via writer.
+- T3: README, cosmetic seed fixes, T2 review warnings, final render. Memory is tight (7.5 GB RAM): start local Supabase and LiveKit
+  only when recording; tear down after, including Docker/WSL.
