@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AdhesionForm } from '../AdhesionForm';
@@ -10,7 +10,8 @@ import { planRepository } from '../../repositories/PlanRepository';
 // Mock AdhesionRepository and PlanRepository
 vi.mock('../../repositories/AdhesionRepository', () => ({
   adhesionRepository: {
-    submitApplication: vi.fn()
+    submitApplication: vi.fn(),
+    activateApplication: vi.fn()
   }
 }));
 
@@ -41,6 +42,19 @@ const mockToast = vi.fn();
 vi.mock('../../context/ToastContext', () => ({
   useToast: () => ({ toast: mockToast })
 }));
+
+// Email OTP verification is ON by default (only 'false' disables it). Most
+// suites below exercise later steps, so they opt out explicitly; the
+// verification suite re-enables it. Activation defaults to the "still being
+// processed" outcome so pre-existing expectations keep the pending wording.
+beforeEach(() => {
+  vi.stubEnv('VITE_EMAIL_VERIFICATION_REQUIRED', 'false');
+  vi.mocked(adhesionRepository.activateApplication).mockResolvedValue({ status: 'processing', message: 'En curso' });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const renderForm = () => render(<AdhesionForm />, { wrapper: MemoryRouter });
 
@@ -75,15 +89,24 @@ const fillTitularStep1 = (options?: { skipCuil?: boolean; cuilValue?: string }) 
 
 /**
  * Drives the wizard from Step 1 into Step 5, ready to submit. Email OTP
- * verification is currently suspended (EMAIL_VERIFICATION_REQUIRED = false
- * in AdhesionForm.tsx), so Step 1 advances without it. Step 2 picks the plan
+ * verification is disabled for most suites (VITE_EMAIL_VERIFICATION_REQUIRED
+ * stubbed to 'false'); pass `verifyEmail` to complete the OTP in Step 1 when
+ * it is enabled. Step 2 picks the plan
  * (Familiar by default) and, for Familiar, a payment option; Individual skips
  * the family step.
  */
 const next = () => fireEvent.click(screen.getByRole('button', { name: /Siguiente/i }));
 
-const advanceToSignatureStep = async (opts?: { kind?: 'individual' | 'familiar'; option?: RegExp; standardMethod?: string }) => {
+const completeEmailOtp = async () => {
+  fireEvent.click(screen.getByRole('button', { name: /Validar Correo/i }));
+  fireEvent.change(await screen.findByPlaceholderText('Ej: 123456'), { target: { value: '123456' } });
+  fireEvent.click(screen.getByRole('button', { name: /Confirmar/i }));
+  await screen.findByText(/^Verificado$/);
+};
+
+const advanceToSignatureStep = async (opts?: { kind?: 'individual' | 'familiar'; option?: RegExp; standardMethod?: string; verifyEmail?: boolean }) => {
   fillTitularStep1();
+  if (opts?.verifyEmail) await completeEmailOtp();
   next(); // -> Step 2
   await screen.findByRole('button', { name: /Plan Individual/i });
 
@@ -675,5 +698,173 @@ describe('AdhesionForm - step 6 payment link delivery (M5)', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://mp.test/init-copy'));
     await waitFor(() => expect(screen.getByText(/Copiado/i)).toBeInTheDocument());
+  });
+});
+
+const stubCanvas = () => {
+  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
+    strokeStyle: '',
+    lineWidth: 0,
+    lineCap: '',
+    lineJoin: '',
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    clearRect: vi.fn()
+  }) as any;
+  HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/png;base64,xxx') as any;
+};
+
+// odd/adhesion-auto-activation T4: the form activates the affiliate right
+// after the payment link exists; activation never blocks the payment step.
+describe('AdhesionForm - automatic activation after submit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(planRepository.getOffered).mockResolvedValue(OFFERED_PLANS as any);
+    vi.mocked(adhesionRepository.activateApplication).mockResolvedValue({ status: 'processing', message: 'En curso' });
+    stubCanvas();
+    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+  });
+
+  const submitForm = async (id: string) => {
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id });
+    const { container } = renderForm();
+    await advanceToSignatureStep();
+    signAndSubmit(container);
+    await waitFor(() => expect(screen.getByText(/¡Solicitud Enviada!/i)).toBeInTheDocument());
+  };
+
+  it('activates the created adhesion once, after the payment link was created', async () => {
+    const fetchSpy = vi.mocked(window.fetch);
+    await submitForm('adhesion-301');
+
+    await waitFor(() => expect(adhesionRepository.activateApplication).toHaveBeenCalledWith('adhesion-301'));
+    expect(adhesionRepository.activateApplication).toHaveBeenCalledTimes(1);
+    const mpCall = fetchSpy.mock.calls.findIndex((c: any[]) => c[0] === '/api/adhesion/preapproval');
+    expect(mpCall).toBeGreaterThanOrEqual(0);
+    expect(fetchSpy.mock.invocationCallOrder[mpCall])
+      .toBeLessThan(vi.mocked(adhesionRepository.activateApplication).mock.invocationCallOrder[0]);
+  });
+
+  it('tells the affiliate the account is active and to look for the password email (spam included)', async () => {
+    vi.mocked(adhesionRepository.activateApplication).mockResolvedValue({ status: 'activated', activationEmailSent: true, message: 'ok' });
+    await submitForm('adhesion-302');
+
+    expect(await screen.findByText(/Tu cuenta ya está activa/i)).toBeInTheDocument();
+    expect(screen.getByText(/crear tu contraseña/i)).toBeInTheDocument();
+    expect(screen.getByText(/spam/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Nuestro equipo administrativo revisará/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Ir a pagar con Mercado Pago/i })).toHaveAttribute('href', 'https://mp.test/init');
+  });
+
+  it('says the account is active even when the password email could not be sent', async () => {
+    vi.mocked(adhesionRepository.activateApplication).mockResolvedValue({ status: 'activated', activationEmailSent: false, message: 'ok' });
+    await submitForm('adhesion-303');
+
+    expect(await screen.findByText(/Tu cuenta ya está activa/i)).toBeInTheDocument();
+    expect(screen.getByText(/No pudimos enviarte el correo/i)).toBeInTheDocument();
+  });
+
+  it('treats an already active adhesion like an activated one', async () => {
+    vi.mocked(adhesionRepository.activateApplication).mockResolvedValue({ status: 'already_active', message: 'Ya activa' });
+    await submitForm('adhesion-307');
+
+    expect(await screen.findByText(/Tu cuenta ya está activa/i)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['failed', { status: 'failed', httpStatus: 409, error: 'Duplicado' }],
+    ['processing', { status: 'processing', message: 'En curso' }],
+  ])('keeps the pending-review wording and the pay link when activation is %s', async (_label, result) => {
+    vi.mocked(adhesionRepository.activateApplication).mockResolvedValue(result as any);
+    await submitForm('adhesion-304');
+
+    await waitFor(() => expect(adhesionRepository.activateApplication).toHaveBeenCalled());
+    expect(await screen.findByText(/Nuestro equipo administrativo revisará/i)).toBeInTheDocument();
+    expect(screen.getByText(/enlace para crear tu contraseña/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Tu cuenta ya está activa/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Ir a pagar con Mercado Pago/i })).toBeInTheDocument();
+  });
+
+  it('still reaches the payment step when activation rejects unexpectedly', async () => {
+    vi.mocked(adhesionRepository.activateApplication).mockRejectedValue(new Error('boom'));
+    await submitForm('adhesion-305');
+
+    await waitFor(() => expect(adhesionRepository.activateApplication).toHaveBeenCalled());
+    expect(screen.getByRole('link', { name: /Ir a pagar con Mercado Pago/i })).toBeInTheDocument();
+    expect(screen.getByText(/Nuestro equipo administrativo revisará/i)).toBeInTheDocument();
+  });
+
+  it('does not activate while the payment link could not be created', async () => {
+    vi.mocked(window.fetch).mockImplementation((url: any) =>
+      Promise.resolve((String(url).startsWith('/api/')
+        ? { ok: false, json: async () => ({ ok: false, error: 'boom' }) }
+        : { ok: false, json: async () => ({}) }) as Response));
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-306' });
+    const { container } = renderForm();
+    await advanceToSignatureStep();
+    signAndSubmit(container);
+
+    await screen.findByRole('button', { name: /Reintentar/i });
+    expect(adhesionRepository.activateApplication).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdhesionForm - email verification (ON by default)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.mocked(planRepository.getOffered).mockResolvedValue(OFFERED_PLANS as any);
+    vi.mocked(adhesionRepository.activateApplication).mockResolvedValue({ status: 'processing', message: 'En curso' });
+    stubCanvas();
+    vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true, initPoint: 'https://mp.test/init' }) } as Response);
+  });
+
+  it('requires the OTP before leaving Step 1 when the env var is unset', () => {
+    vi.stubEnv('VITE_EMAIL_VERIFICATION_REQUIRED', undefined);
+    renderForm();
+    fillTitularStep1();
+    next();
+
+    expect(mockToast).toHaveBeenCalledWith('Por favor verificá tu correo electrónico antes de avanzar', 'warning');
+    expect(screen.getByRole('button', { name: /Validar Correo/i })).toBeInTheDocument();
+  });
+
+  it('only an explicit "false" disables the OTP', () => {
+    vi.stubEnv('VITE_EMAIL_VERIFICATION_REQUIRED', ' FALSE ');
+    renderForm();
+    expect(screen.queryByRole('button', { name: /Validar Correo/i })).not.toBeInTheDocument();
+  });
+
+  it('submits email_verified true only after a successful OTP', async () => {
+    vi.stubEnv('VITE_EMAIL_VERIFICATION_REQUIRED', 'true');
+    vi.mocked(adhesionRepository.submitApplication).mockResolvedValueOnce({ id: 'adhesion-401' });
+    const { container } = renderForm();
+    await advanceToSignatureStep({ verifyEmail: true });
+    signAndSubmit(container);
+
+    await waitFor(() => expect(adhesionRepository.submitApplication).toHaveBeenCalled());
+    const payload = vi.mocked(adhesionRepository.submitApplication).mock.calls[0][0] as any;
+    expect(payload.email_verified).toBe(true);
+    expect(window.fetch).toHaveBeenCalledWith('/api/email-verification/verify', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('keeps the user on Step 1 when the OTP is rejected', async () => {
+    vi.stubEnv('VITE_EMAIL_VERIFICATION_REQUIRED', 'true');
+    vi.mocked(window.fetch).mockImplementation((url: any) =>
+      Promise.resolve((String(url) === '/api/email-verification/verify'
+        ? { ok: false, json: async () => ({ error: 'Código incorrecto.' }) }
+        : { ok: true, json: async () => ({ ok: true }) }) as Response));
+    renderForm();
+    fillTitularStep1();
+    fireEvent.click(screen.getByRole('button', { name: /Validar Correo/i }));
+    fireEvent.change(await screen.findByPlaceholderText('Ej: 123456'), { target: { value: '000000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar/i }));
+
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Código incorrecto.', 'error'));
+    next();
+    expect(mockToast).toHaveBeenCalledWith('Por favor verificá tu correo electrónico antes de avanzar', 'warning');
+    expect(screen.queryByText(/Elegí tu Plan/i)).not.toBeInTheDocument();
   });
 });

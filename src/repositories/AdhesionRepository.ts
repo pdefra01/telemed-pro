@@ -37,6 +37,19 @@ export interface AdhesionRequest {
   created_at?: string;
 }
 
+/**
+ * Outcome of the public auto-activation call (POST /api/adhesion/:id/activate).
+ * `failed` covers every non-success answer and network errors: the row stays
+ * pending and the admin "Aprobar" button remains the fallback.
+ */
+export type ActivationResult =
+  | { status: 'activated'; activationEmailSent: boolean; message?: string }
+  | { status: 'already_active'; message?: string }
+  | { status: 'processing'; message?: string }
+  | { status: 'failed'; httpStatus?: number; error: string };
+
+const ACTIVATION_FAILED_MESSAGE = 'No se pudo activar la cuenta automáticamente.';
+
 export class AdhesionRepository {
   /**
    * Envía una solicitud de adhesión de forma pública (para el formulario QR).
@@ -162,6 +175,40 @@ export class AdhesionRepository {
     }
 
     return { id: generatedId };
+  }
+
+  /**
+   * Activates a just-submitted adhesion (public endpoint, no session: the
+   * server checks the OTP-verified email and re-runs duplicate checks).
+   * Never throws: the payment step must not depend on activation.
+   */
+  async activateApplication(id: string): Promise<ActivationResult> {
+    let response: Response;
+    try {
+      response = await fetch(`/api/adhesion/${encodeURIComponent(id)}/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      console.warn('[AdhesionRepository] activateApplication network error:', err);
+      return { status: 'failed', error: ACTIVATION_FAILED_MESSAGE };
+    }
+
+    const body: any = await response.json().catch(() => ({}));
+    const message = typeof body?.message === 'string' ? body.message : undefined;
+
+    if (response.status === 202 && body?.processing) {
+      return { status: 'processing', message };
+    }
+    if (response.ok && body?.activated) {
+      return { status: 'activated', activationEmailSent: body.activationEmailSent !== false, message };
+    }
+    if (response.ok && body?.alreadyActive) {
+      return { status: 'already_active', message };
+    }
+
+    const error = typeof body?.error === 'string' && body.error ? body.error : ACTIVATION_FAILED_MESSAGE;
+    return { status: 'failed', httpStatus: response.status, error };
   }
 
   /**

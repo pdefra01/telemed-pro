@@ -48,7 +48,7 @@ manual transfer check) must NOT gate activation.
 - [x] T1 Extract `activateAdhesion` module + atomic claim migration + tests; admin endpoint delegates (no behavior change besides the guard).
 - [x] T2 Enforce email verification server-side (default ON, crypto OTP) + helper to check a verified email; tests.
 - [x] T3 Public `POST /api/adhesion/:id/activate` (verified email + duplicate re-check + activateAdhesion) + tests.
-- [ ] T4 Form calls `/activate` after submit; success screen reflects activation; client verification default ON; tests.
+- [x] T4 Form calls `/activate` after submit; success screen reflects activation; client verification default ON; tests.
 - [ ] T5 Docs: MANUAL_DE_USUARIO / admin notes on the new flow.
 
 ## Route
@@ -120,7 +120,34 @@ manual transfer check) must NOT gate activation.
   `npm test` 846 passed / 5 failed (known base failures); `npx tsc --noEmit`
   exit 0.
 
+- T2 blocker fixed (route: delegated writer). Migration
+  `20260925000000_lock_down_contact_verifications.sql` drops the three
+  "Public ..." policies, `REVOKE ALL ... FROM anon`, and recreates the
+  authenticated own-row policies with INSERT `WITH CHECK (user_id = auth.uid()
+  AND verified_at IS NULL AND attempts = 0)` and UPDATE `WITH CHECK (user_id =
+  auth.uid())`. No browser code touches the table for the guest flow (only
+  `ContactVerificationRepository.ts` via `ContactValidationModal`, logged-in
+  2FA; still compatible). pgTAP `supabase/tests/contact_verifications_rls.sql`
+  added, not run locally (no Docker). Commit: 338c0ff.
+  Residual risk: the profile 2FA flow is client-trusted (client reads
+  `otp_code` and sets `verified_at` on its own row), and `isEmailVerified`
+  does not filter `user_id IS NULL`, so a logged-in user can still mark an
+  arbitrary email verified in their own row and pass the 403 gate. Fix: add
+  `.is('user_id', null)` to `isEmailVerified` (server/emailVerification.js).
+
+- T4 done (route: delegated writer). `AdhesionRepository.activateApplication(id)`
+  → `POST /api/adhesion/:id/activate`, never throws, returns
+  `ActivationResult` (`activated` | `already_active` | `processing` |
+  `failed`). The form fires it once, after the Mercado Pago step succeeded
+  (activation back-fills the MP subscription created by that step, so it must
+  not run before it); the success screen says the account is active (password
+  email, check spam) or keeps the pending-review wording. Client verification
+  default ON (only `VITE_EMAIL_VERIFICATION_REQUIRED=false` disables it, read
+  at render time). Checks: RED observed (24 new tests failing: method missing,
+  copy absent, flag default off); focused 80/80; `npm test` 872 passed / 5
+  failed (known base failures); `npx tsc --noEmit` exit 0. Commit:
+  `feat(adhesion): activate the affiliate right after the form is submitted`.
+
 ## Next step
-- Before shipping T3 to production: add a migration closing the anon
-  `contact_verifications` RLS hole (see T2 blocker), otherwise the 403 gate is
-  bypassable with the anon key. Then T4 (form wiring).
+- Close the residual `isEmailVerified` / `user_id` gap above before production,
+  then T5 (docs).

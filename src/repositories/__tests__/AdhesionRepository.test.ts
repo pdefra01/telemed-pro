@@ -453,4 +453,90 @@ describe('AdhesionRepository', () => {
       await expect(repository.resendActivationEmail('p1')).rejects.toThrow('Error al reenviar el mail de activación.');
     });
   });
+
+  describe('activateApplication (public auto-activation, never throws)', () => {
+    const respond = (status: number, body: unknown) =>
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => body,
+      } as unknown as Response);
+
+    it('POSTs to /api/adhesion/:id/activate without credentials', async () => {
+      const fetchSpy = respond(200, { activated: true, message: 'ok', activationEmailSent: true });
+      await repository.activateApplication('a b');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion/a%20b/activate', expect.objectContaining({ method: 'POST' }));
+      const headers = (fetchSpy.mock.calls[0][1] as RequestInit).headers as Record<string, string> | undefined;
+      expect(headers?.Authorization).toBeUndefined();
+    });
+
+    it('maps 200 activated', async () => {
+      respond(200, { activated: true, message: 'Cuenta activada', activationEmailSent: true });
+      await expect(repository.activateApplication('id')).resolves.toEqual({
+        status: 'activated',
+        activationEmailSent: true,
+        message: 'Cuenta activada',
+      });
+    });
+
+    it('maps 200 activated with a failed activation email', async () => {
+      respond(200, { activated: true, message: 'm', activationEmailSent: false });
+      await expect(repository.activateApplication('id')).resolves.toMatchObject({
+        status: 'activated',
+        activationEmailSent: false,
+      });
+    });
+
+    it('maps 200 alreadyActive', async () => {
+      respond(200, { alreadyActive: true, message: 'Ya activa' });
+      await expect(repository.activateApplication('id')).resolves.toEqual({ status: 'already_active', message: 'Ya activa' });
+    });
+
+    it('maps 202 processing', async () => {
+      respond(202, { processing: true, message: 'En curso' });
+      await expect(repository.activateApplication('id')).resolves.toEqual({ status: 'processing', message: 'En curso' });
+    });
+
+    it.each([400, 403, 404, 500, 503])('maps %i to a non-throwing failure with the server error', async (code) => {
+      respond(code, { error: `err ${code}` });
+      await expect(repository.activateApplication('id')).resolves.toEqual({
+        status: 'failed',
+        httpStatus: code,
+        error: `err ${code}`,
+      });
+    });
+
+    it('maps 409 duplicate conflicts to a failure', async () => {
+      respond(409, { ok: false, error: 'Duplicado', conflicts: [{ person: 'titular' }] });
+      await expect(repository.activateApplication('id')).resolves.toEqual({
+        status: 'failed',
+        httpStatus: 409,
+        error: 'Duplicado',
+      });
+    });
+
+    it('treats an unexpected 200 body as a failure', async () => {
+      respond(200, { something: 'else' });
+      await expect(repository.activateApplication('id')).resolves.toMatchObject({ status: 'failed', httpStatus: 200 });
+    });
+
+    it('falls back to a generic error when the body is not JSON', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => { throw new Error('not json'); },
+      } as unknown as Response);
+      const result = await repository.activateApplication('id');
+      expect(result.status).toBe('failed');
+      expect(result).toMatchObject({ httpStatus: 500 });
+      expect((result as { error: string }).error).toBeTruthy();
+    });
+
+    it('maps a network error to a non-throwing failure', async () => {
+      vi.spyOn(window, 'fetch').mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      const result = await repository.activateApplication('id');
+      expect(result.status).toBe('failed');
+      expect(result).not.toHaveProperty('httpStatus');
+    });
+  });
 });

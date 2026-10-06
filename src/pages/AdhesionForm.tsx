@@ -6,7 +6,7 @@ import {
   MessageCircle, Copy, Mail, AlertCircle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
-import { adhesionRepository, AdhesionRequest } from '../repositories/AdhesionRepository';
+import { adhesionRepository, AdhesionRequest, type ActivationResult } from '../repositories/AdhesionRepository';
 import { producerRepository } from '../repositories/ProducerRepository';
 import { planRepository } from '../repositories/PlanRepository';
 import { systemSettingsRepository } from '../repositories/SystemSettingsRepository';
@@ -14,9 +14,15 @@ import { Plan } from '../types';
 import { billingDayLabel, DEFAULT_BILLING_DAYS, RECOMMENDED_BILLING_DAY } from '../utils/billingDays';
 import logoMedinex from '../logo_medinex.jpeg';
 
-// Toggle to suspend email OTP verification without removing the feature.
-// Default false for dev/tests; enable via VITE_EMAIL_VERIFICATION_REQUIRED=true env var.
-const EMAIL_VERIFICATION_REQUIRED = import.meta.env.VITE_EMAIL_VERIFICATION_REQUIRED === 'true';
+// Email OTP verification is ON unless VITE_EMAIL_VERIFICATION_REQUIRED is
+// explicitly 'false' (case/whitespace-insensitive), mirroring
+// isEmailVerificationRequired in server/emailVerification.js. Read at render
+// time so tests can stub the env var.
+const isEmailVerificationRequired = (): boolean => {
+  const raw = import.meta.env.VITE_EMAIL_VERIFICATION_REQUIRED;
+  if (typeof raw !== 'string') return true;
+  return raw.trim().toLowerCase() !== 'false';
+};
 
 const PROVINCIAS_ARGENTINA = [
   'Buenos Aires', 'Ciudad Autónoma de Buenos Aires', 'Catamarca', 'Chaco',
@@ -309,6 +315,7 @@ export const AdhesionForm: React.FC = () => {
   });
 
   // Email verification OTP states
+  const EMAIL_VERIFICATION_REQUIRED = isEmailVerificationRequired();
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -327,6 +334,11 @@ export const AdhesionForm: React.FC = () => {
   const [adhesionCreated, setAdhesionCreated] = useState(false);
   const createdAdhesionId = useRef<string | null>(null);
   const mpInFlight = useRef(false);
+
+  // odd/adhesion-auto-activation T4: activation outcome shown on the success
+  // step. Null while the request is in flight or was never made.
+  const [activation, setActivation] = useState<ActivationResult | null>(null);
+  const activationRequested = useRef(false);
 
   // M5 (odd/adhesion-payment-link-delivery): explicit delivery of the MP
   // payment link, in addition to the direct link. One status per channel so
@@ -626,6 +638,25 @@ export const AdhesionForm: React.FC = () => {
     setStep(prev => prev + 1);
   };
 
+  // Fire-and-forget auto-activation, once per adhesion. Runs after the payment
+  // link exists because activation back-fills the MP subscription created by
+  // that step (server/adhesionActivation.js). Any failure leaves the row
+  // pending for the admin fallback and never blocks the payment step.
+  const requestActivation = (adhesionRequestId: string) => {
+    if (activationRequested.current) return;
+    activationRequested.current = true;
+    Promise.resolve()
+      .then(() => adhesionRepository.activateApplication(adhesionRequestId))
+      .then(setActivation)
+      .catch((err) => {
+        console.warn('[AdhesionForm] Auto-activation failed; the request stays pending.', err);
+        setActivation({ status: 'failed', error: String(err?.message || err) });
+      });
+  };
+
+  const isAccountActive = activation?.status === 'activated' || activation?.status === 'already_active';
+  const activationEmailFailed = activation?.status === 'activated' && !activation.activationEmailSent;
+
   // Requests the Mercado Pago link for the already-created adhesion request.
   // Mandatory: the form only reaches the success step once a link exists.
   const completeMercadoPagoStep = async () => {
@@ -648,6 +679,7 @@ export const AdhesionForm: React.FC = () => {
       setMpInitPoint(result.initPoint);
       setStep(6);
       toast("Solicitud de adhesión enviada con éxito!", "success");
+      requestActivation(adhesionRequestId);
     } catch (mpError) {
       console.warn('[AdhesionForm] No se pudo crear el pago en Mercado Pago.', mpError);
       setMpError('No pudimos generar tu pago en Mercado Pago. Tu solicitud ya fue guardada: reintentá para obtener el enlace de pago.');
@@ -1682,15 +1714,28 @@ export const AdhesionForm: React.FC = () => {
                 <Sparkles size={16} />
                 Próximos pasos:
               </h4>
-              <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
-                <li>Nuestro equipo administrativo revisará los datos cargados.</li>
-                <li>Una vez aprobada tu afiliación, te llegará un correo de confirmación.</li>
-                <li>Te enviaremos un correo con un enlace para crear tu contraseña y acceder a la App de <strong>MEDINEX</strong>.</li>
-              </ol>
+              {isAccountActive ? (
+                <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
+                  <li><strong className="text-emerald-400">Tu cuenta ya está activa.</strong></li>
+                  {activationEmailFailed ? (
+                    <li>No pudimos enviarte el correo para crear tu contraseña. Nuestro equipo te lo reenviará a la brevedad.</li>
+                  ) : (
+                    <li>Te enviamos un correo con un enlace para crear tu contraseña y acceder a la App de <strong>MEDINEX</strong>. Si no lo ves, revisá la carpeta de spam o correo no deseado.</li>
+                  )}
+                </ol>
+              ) : (
+                <ol className="list-decimal list-inside text-xs text-slate-300 space-y-2 leading-relaxed">
+                  <li>Nuestro equipo administrativo revisará los datos cargados.</li>
+                  <li>Una vez aprobada tu afiliación, te llegará un correo de confirmación.</li>
+                  <li>Te enviaremos un correo con un enlace para crear tu contraseña y acceder a la App de <strong>MEDINEX</strong>.</li>
+                </ol>
+              )}
             </div>
 
             <p className="text-slate-300 text-sm leading-relaxed mb-6 max-w-md mx-auto">
-              Tu afiliación se completa una vez que realices el pago en Mercado Pago.
+              {isAccountActive
+                ? 'Para mantener tu cobertura, completá el pago en Mercado Pago.'
+                : 'Tu afiliación se completa una vez que realices el pago en Mercado Pago.'}
             </p>
 
             {mpInitPoint && (
