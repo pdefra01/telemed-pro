@@ -58,7 +58,9 @@ manual transfer check) must NOT gate activation.
 - `npm test` (vitest) per task; `npx tsc --noEmit` for client tasks.
 
 ## Delivery
-- Strategy: ask-on-risk. Forecast ~600-800 authored lines → will ask chain strategy before exceeding ~400.
+- Strategy: ask-on-risk → chain strategy `stacked-to-main` (user-chosen
+  2026-10-06): one PR per task slice targeting master, merged in order.
+  Slice 1 = T1 (f23a2ca + doc commits).
 
 ## Progress
 - Branch `feat/adhesion-auto-activation` created.
@@ -74,5 +76,13 @@ manual transfer check) must NOT gate activation.
   `supabase/tests/adhesion_activation_claim.sql` added, not run locally.
   Commit: f23a2ca.
 
+- T1 review: assessed medium (`slice_budget_reached`), consent granted,
+  native review approved + acknowledged (lineage review-989c967c3691a5ea,
+  reviewed boundary = 50a3fa3). Advisory (non-blocking) follow-ups:
+  approve-update result unverified (adhesionActivation.js:262-274); claim
+  never released once an auth user exists (351-358) → row stuck at 409, needs
+  an admin recovery path; deleteUser result unchecked (214-221); pgTAP file
+  not executed.
+
 ## Next step
-- T2.
+- T2 + T3 (delegated writer, one commit each).
