@@ -5,7 +5,7 @@ import pg from 'pg';
 import { createClient } from '@supabase/supabase-js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertLocalUrl, isMainModule, readLocalSupabaseStatus } from './lib/local-env.mjs';
+import { assertLocalDbUrl, assertLocalUrl, isMainModule, readLocalSupabaseStatus } from './lib/local-env.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -27,10 +27,16 @@ export const DEMO = {
 };
 DEMO.patient.email = `${DEMO.patient.dni}@medinex-paciente.com`;
 
-// Hourly slots 08:00–21:00 every day (0 = Sunday), so a run at any time of
+// Hourly slots 00:00–23:00 every day (0 = Sunday), so a run at any time of
 // day finds a slot that already started and offers "Atención Inmediata".
-const SLOTS = Array.from({ length: 14 }, (_, i) => `${String(8 + i).padStart(2, '0')}:00`);
+const SLOTS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
 const AVAILABILITY = [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, slots: SLOTS }));
+
+// A profile update that matches no row means the auth trigger did not create
+// the profile: fail instead of recording a demo with a half-seeded persona.
+function expectOneRow(result, what) {
+  if (result.rowCount !== 1) throw new Error(`[seed] Expected to update 1 ${what} profile, updated ${result.rowCount}.`);
+}
 
 async function ensureUser(admin, { email, password, metadata }) {
   const { data: list, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
@@ -57,7 +63,7 @@ async function ensureUser(admin, { email, password, metadata }) {
 
 export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
   assertLocalUrl('Supabase API URL', status.apiUrl);
-  assertLocalUrl('Supabase DB URL', status.dbUrl.replace(/^postgres(ql)?:/, 'http:'));
+  assertLocalDbUrl('Supabase DB URL', status.dbUrl);
 
   const admin = createClient(status.apiUrl, status.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -80,7 +86,7 @@ export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
   try {
     await db.query('begin');
 
-    await db.query(
+    const doctorUpdate = await db.query(
       `update public.profiles set
          role = 'doctor', first_name = $2, last_name = $3, specialty = $4,
          license_number = $5, availability = $6::jsonb, is_active = true,
@@ -88,8 +94,9 @@ export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
        where id = $1`,
       [doctorId, `Dra. ${doctor.firstName}`, doctor.lastName, doctor.specialty, doctor.licenseNumber, JSON.stringify(AVAILABILITY)]
     );
+    expectOneRow(doctorUpdate, 'doctor');
 
-    await db.query(
+    const patientUpdate = await db.query(
       `update public.profiles set
          role = 'patient', first_name = $2, last_name = $3, dni = $4,
          is_active = true, plan_status = 'active', payment_status = 'paid',
@@ -98,6 +105,7 @@ export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
        where id = $1`,
       [patientId, patient.firstName, patient.lastName, patient.dni]
     );
+    expectOneRow(patientUpdate, 'patient');
 
     // Clean slate: previous demo consultations would clutter the queue.
     await db.query('delete from public.prescriptions where patient_id = $1', [patientId]);

@@ -24,6 +24,17 @@ export function assertLocalUrl(name, value) {
   }
 }
 
+/** Same guard for a postgres connection string (postgres:// or postgresql://). */
+export function assertLocalDbUrl(name, value) {
+  const asHttp = typeof value === 'string' ? value.replace(/^postgres(ql)?:/, 'http:') : value;
+  if (typeof value !== 'string' || !/^postgres(ql)?:/.test(value) || !isLocalUrl(asHttp)) {
+    throw new Error(
+      `[demo] Refusing to run: ${name} is not a local postgres URL. ` +
+        'The demo recorder only works against a local Supabase/LiveKit stack.'
+    );
+  }
+}
+
 /** Reads `supabase status -o env` for the LOCAL stack (never the linked project). */
 export function readLocalSupabaseStatus(cwd) {
   let raw;
@@ -47,7 +58,7 @@ export function readLocalSupabaseStatus(cwd) {
     if (!value) throw new Error(`[demo] Could not read ${key} from \`supabase status -o env\`.`);
   }
   assertLocalUrl('Supabase API URL', status.apiUrl);
-  assertLocalUrl('Supabase DB URL', status.dbUrl.replace(/^postgres(ql)?:/, 'http:'));
+  assertLocalDbUrl('Supabase DB URL', status.dbUrl);
   return status;
 }
 
@@ -65,6 +76,7 @@ export const LIVEKIT = {
 export function buildAppEnv(status) {
   assertLocalUrl('VITE_SUPABASE_URL', status.apiUrl);
   assertLocalUrl('VITE_LIVEKIT_URL', LIVEKIT.url);
+  assertLocalDbUrl('DATABASE_URL', status.dbUrl);
   const DEAD = 'http://127.0.0.1:9';
   return {
     ...process.env,

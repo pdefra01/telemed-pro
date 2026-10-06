@@ -13,6 +13,8 @@
     "demo:media": "node demo/prepare-media.mjs",
     "demo:livekit": "node demo/start-livekit.mjs",
     "demo:seed": "node demo/seed-local.mjs",
+    "demo:record": "node demo/record.mjs",
+    "demo:compose": "node demo/compose.mjs",
     "demo:test": "node --test demo/lib/local-env.guard-test.mjs"
   },
   "dependencies": {

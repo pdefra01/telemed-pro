@@ -2,7 +2,7 @@
 // Run with `node --test demo/lib/local-env.guard-test.mjs`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assertLocalUrl, buildAppEnv, isLocalUrl } from './local-env.mjs';
+import { assertLocalDbUrl, assertLocalUrl, buildAppEnv, isLocalUrl } from './local-env.mjs';
 import { seedLocal } from '../seed-local.mjs';
 
 const LOCAL = {
@@ -37,6 +37,22 @@ test('refuses remote, look-alike and malformed URLs', () => {
 test('buildAppEnv refuses a remote Supabase URL', () => {
   assert.throws(() => buildAppEnv({ ...LOCAL, apiUrl: 'https://x.supabase.co' }), /Refusing to run/);
   assert.equal(buildAppEnv(LOCAL).VITE_SUPABASE_URL, LOCAL.apiUrl);
+});
+
+test('buildAppEnv refuses a remote database URL', () => {
+  assert.throws(
+    () => buildAppEnv({ ...LOCAL, dbUrl: 'postgresql://postgres:pw@db.x.supabase.co:5432/postgres' }),
+    /Refusing to run/
+  );
+  assert.equal(buildAppEnv(LOCAL).DATABASE_URL, LOCAL.dbUrl);
+});
+
+test('assertLocalDbUrl accepts only loopback postgres URLs', () => {
+  assert.doesNotThrow(() => assertLocalDbUrl('db', LOCAL.dbUrl));
+  assert.doesNotThrow(() => assertLocalDbUrl('db', 'postgres://postgres:postgres@localhost:54322/postgres'));
+  for (const url of ['postgresql://u:p@db.x.supabase.co:5432/postgres', 'postgresql://u:p@127.0.0.1@evil.example/db', '', undefined]) {
+    assert.throws(() => assertLocalDbUrl('db', url), /Refusing to run/, String(url));
+  }
 });
 
 test('seedLocal refuses remote API or DB URLs before connecting', async () => {

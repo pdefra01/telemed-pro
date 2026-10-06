@@ -1,7 +1,7 @@
 // Downloads the stock clips used as fake webcams into demo/.cache/.
 // Clips: Pexels (free license, commercial use allowed). Files are treated as
 // untrusted data: they are only read by ffmpeg, never executed.
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rename, stat, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMainModule } from './lib/local-env.mjs';
@@ -42,7 +42,11 @@ export async function fetchMedia({ force = false } = {}) {
     if (!res.ok || !type.startsWith('video/')) {
       throw new Error(`[media] Download failed for ${clip.id}: HTTP ${res.status} (${type}). Download it manually from ${clip.page} into ${target}.`);
     }
-    await writeFile(target, Buffer.from(await res.arrayBuffer()));
+    // Write to a temp file and rename, so an interrupted download never leaves
+    // a truncated clip that the cache check would accept as complete.
+    const partial = `${target}.part`;
+    await writeFile(partial, Buffer.from(await res.arrayBuffer()));
+    await rename(partial, target);
   }
   return paths;
 }
