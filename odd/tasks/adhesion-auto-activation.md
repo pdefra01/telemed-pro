@@ -146,8 +146,16 @@ manual transfer check) must NOT gate activation.
   at render time). Checks: RED observed (24 new tests failing: method missing,
   copy absent, flag default off); focused 80/80; `npm test` 872 passed / 5
   failed (known base failures); `npx tsc --noEmit` exit 0. Commit:
-  `feat(adhesion): activate the affiliate right after the form is submitted`.
+  `feat(adhesion): activate the affiliate right after the form is submitted`
+  (e05dccb).
+- Residual gap closed (route: inline, one-line fix): `isEmailVerified` now
+  filters `.is('user_id', null)` (guest OTP rows from `/send` never set
+  user_id). RED observed (query assertion failing), then
+  emailVerification + adhesionAutoActivation 37/37. Commit: 935aa4e.
+- Slice 2 = branch `feat/adhesion-auto-activation-endpoint` (99803c1, 41fa783,
+  338c0ff, e05dccb, 935aa4e), stacked on slice 1.
+- Follow-ups (not in scope): no rate limit on public `/activate`; claim stuck
+  after auth user exists needs an admin recovery path; pgTAP files not run.
 
 ## Next step
-- Close the residual `isEmailVerified` / `user_id` gap above before production,
-  then T5 (docs).
+- Review slice 2, then T5 (docs).
