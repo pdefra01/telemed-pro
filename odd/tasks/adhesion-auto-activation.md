@@ -72,6 +72,7 @@ manual transfer check) must NOT gate activation.
   DashboardRepository x1, crypto x1); new `adhesionActivation.test.js` 16/16
   (RED observed first: module missing). `npx tsc --noEmit` exit 0. pgTAP file
   `supabase/tests/adhesion_activation_claim.sql` added, not run locally.
+  Commit: f23a2ca.
 
 ## Next step
 - T2.
