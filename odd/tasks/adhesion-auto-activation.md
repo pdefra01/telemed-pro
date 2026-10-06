@@ -174,6 +174,15 @@ manual transfer check) must NOT gate activation.
   mandatory email verification, automatic activation and the admin fallback.
   Check: structural readback.
 
+- PRs opened (stacked-to-main, user-authorized 2026-10-06): #48
+  `feat/adhesion-auto-activation` → master (slice 1: f23a2ca + doc commits,
+  1144 lines); #49 `feat/adhesion-auto-activation-endpoint` →
+  `feat/adhesion-auto-activation` (slice 2: 99803c1, 41fa783, 338c0ff,
+  e05dccb, 935aa4e, 0b0da70 + doc commits, 1339 lines). Both over the
+  400-line budget after one slicing pass → `size:exception` recommended in
+  each PR body.
+
 ## Next step
-- Open PRs (stacked-to-main) when the user decides; follow-up: admin recovery
-  for stuck claims + rate limit on `/activate`.
+- Merge #48, retarget #49 to master, merge #49; apply migrations
+  20260924000000 then 20260925000000 before deploying. Follow-up feature:
+  admin recovery for stuck claims + rate limit on `/activate`.
