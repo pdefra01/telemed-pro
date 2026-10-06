@@ -49,6 +49,8 @@ Configurar estas variables en la sección **Environment Variables** de Coolify p
 | `WHATSAPP_GATEWAY_SESSION` | Nombre de la sesión del gateway (opcional) | `default` |
 | `EMAIL_VERIFICATION_REQUIRED` | Exige verificar el correo (código OTP) en la adhesión pública. Activado por defecto; solo `false` lo desactiva. Debe coincidir con `VITE_EMAIL_VERIFICATION_REQUIRED` del formulario | `true` |
 
+> **Proxy y límite de intentos (sin variables nuevas).** `server.js` confía en **un** salto de proxy (`app.set('trust proxy', 1)`, el Traefik de Coolify) para conocer la IP real del cliente. El endpoint público `POST /api/adhesion/:id/activate` admite 10 intentos cada 15 minutos por IP (`server/rateLimits.js`) y responde `429` al superarlo. El contador vive en memoria: vale para una sola instancia. Si se agrega otro proxy delante (p. ej. Cloudflare) hay que subir el número de saltos, y si se escala a varias réplicas hace falta un almacenamiento compartido.
+
 ---
 
 ## 🚀 2. Pasos Paso a Paso en el Panel de Coolify

@@ -196,6 +196,31 @@ describe('autoActivateAdhesion — activation', () => {
     expect(res.body).toMatchObject({ processing: true });
   });
 
+  it('keeps 202 processing while an existing claim is fresh', async () => {
+    activateAdhesion.mockResolvedValue({ status: 409, body: { error: 'x' } });
+    const freshClaim = new Date(Date.now() - 60 * 1000).toISOString();
+    const { supabaseAdmin } = createSupabase({ row: buildRow({ activation_claimed_at: freshClaim }) });
+
+    const res = await autoActivateAdhesion(buildDeps(supabaseAdmin), ADHESION_ID);
+
+    expect(res.status).toBe(202);
+    expect(res.body).toMatchObject({ processing: true });
+  });
+
+  it('answers 409 pendingReview (not processing) when the claim is stale, without re-running checks', async () => {
+    const staleClaim = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { supabaseAdmin } = createSupabase({ row: buildRow({ activation_claimed_at: staleClaim }) });
+
+    const res = await autoActivateAdhesion(buildDeps(supabaseAdmin), ADHESION_ID);
+
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ ok: false, pendingReview: true });
+    expect(res.body.processing).toBeUndefined();
+    expect(typeof res.body.error).toBe('string');
+    expect(findRegisteredIdentityConflicts).not.toHaveBeenCalled();
+    expect(activateAdhesion).not.toHaveBeenCalled();
+  });
+
   it.each([400, 500, 503])('passes through a %i from activateAdhesion', async (status) => {
     activateAdhesion.mockResolvedValue({ status, body: { error: 'x' } });
     const { supabaseAdmin } = createSupabase();
@@ -207,10 +232,10 @@ describe('autoActivateAdhesion — activation', () => {
 describe('/api/adhesion/:id/activate route registration (server.js source)', () => {
   // server.js calls app.listen at import time, so the registration is
   // asserted over its source (same approach as approveAdhesionAuth.test.js).
-  it('registers a public POST /api/adhesion/:id/activate that delegates to autoActivateAdhesion', () => {
+  it('registers a public (rate-limited) POST /api/adhesion/:id/activate that delegates to autoActivateAdhesion', () => {
     const serverSource = readFileSync(resolve(__dirname, '..', '..', 'server.js'), 'utf-8');
     expect(serverSource).toMatch(
-      /app\.post\(\s*['"]\/api\/adhesion\/:id\/activate['"]\s*,\s*async\s*\(\s*req\s*,\s*res\s*\)\s*=>\s*\{[\s\S]{0,200}?autoActivateAdhesion\(/
+      /app\.post\(\s*['"]\/api\/adhesion\/:id\/activate['"]\s*,\s*(?:\w+\s*,\s*)*async\s*\(\s*req\s*,\s*res\s*\)\s*=>\s*\{[\s\S]{0,200}?autoActivateAdhesion\(/
     );
   });
 });

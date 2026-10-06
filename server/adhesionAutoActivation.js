@@ -8,7 +8,8 @@
 // Response contract ({ status, body }):
 //   200 { activated: true, message, activationEmailSent }   activated now
 //   200 { alreadyActive: true, message }                     already approved (idempotent)
-//   202 { processing: true, message }                        another activation holds the claim; do not retry
+//   202 { processing: true, message }                        another activation holds a fresh claim; do not retry
+//   409 { ok: false, pendingReview: true, error }            the claim is stale (crashed activation): pending admin review
 //   400 { error }                                            invalid id / not pending (e.g. rejected) / activation precondition
 //   403 { error }                                            titular email not verified server-side
 //   404 { error }                                            unknown request
@@ -18,6 +19,7 @@
 import { activateAdhesion } from './adhesionActivation.js';
 import { isEmailVerified } from './emailVerification.js';
 import { buildPeople, findRegisteredIdentityConflicts } from './adhesionChecks.js';
+import { isActivationClaimStale } from './adhesionActivationRecovery.js';
 
 const LOG = '[adhesion/activate]';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,7 +42,7 @@ export async function autoActivateAdhesion(deps, adhesionId) {
 
   const { data: request, error: fetchError } = await supabaseAdmin
     .from('adhesion_requests')
-    .select('id,status,titular_email,titular_dni,titular_cuil,family_members')
+    .select('id,status,titular_email,titular_dni,titular_cuil,family_members,activation_claimed_at')
     .eq('id', adhesionId)
     .maybeSingle();
 
@@ -57,6 +59,21 @@ export async function autoActivateAdhesion(deps, adhesionId) {
   }
   if (request.status !== 'pending') {
     return { status: 400, body: { error: `La solicitud ya se encuentra en estado: ${request.status}` } };
+  }
+
+  // A stale claim means an earlier activation crashed after creating the
+  // account; only an admin can release it, so "processing" would never end.
+  // Answered before the duplicate scan: the activation would lose the claim.
+  if (isActivationClaimStale(request)) {
+    console.log(`${LOG} ${adhesionId}: stale activation claim, pending admin review`);
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        pendingReview: true,
+        error: 'Tu adhesión quedó pendiente de revisión por un administrador. Te contactaremos a la brevedad.',
+      },
+    };
   }
 
   if (emailVerificationRequired) {
@@ -96,7 +113,7 @@ export async function autoActivateAdhesion(deps, adhesionId) {
   const result = await activateAdhesion(deps, adhesionId, { source: 'auto' });
 
   if (result.status === 409) {
-    // Another activation (admin or a concurrent auto call) holds the claim.
+    // Another activation (admin or a concurrent auto call) holds a fresh claim.
     return { status: 202, body: { processing: true, message: 'La solicitud ya está siendo procesada.' } };
   }
   if (result.status === 200) {
