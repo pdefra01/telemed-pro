@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, Edit2, Trash2, AlertCircle, Shield, User as UserIcon,
   Building2, Filter, Key, ShieldCheck, Mail, Phone, MapPin,
-  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw, FileText
+  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw, FileText, Unlock
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../../repositories/AffiliateRepository';
@@ -12,6 +12,7 @@ import { AdhesionEmailEditor } from './AdhesionEmailEditor';
 import { planRepository } from '../../repositories/PlanRepository';
 import { Patient, Plan } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
+import { getActivationClaimState } from '../../utils/activationClaim';
 
 // Glass Card for Table Container
 const GlassTableContainer: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -312,6 +313,24 @@ const Affiliates: React.FC = () => {
     }
   };
 
+  const handleReleaseActivation = async (id: string) => {
+    if (!window.confirm(
+      "La activación automática de esta solicitud quedó trabada. Liberarla borra la cuenta de acceso incompleta " +
+      "que se creó para el titular y deja la solicitud pendiente, lista para \"Aprobar\". ¿Querés continuar?"
+    )) return;
+    setIsSubmitting(true);
+    try {
+      await adhesionRepository.releaseStuckActivation(id);
+      toast("Activación liberada. La solicitud quedó lista para aprobar.", "success");
+      setSelectedRequest((prev) => (prev && prev.id === id ? { ...prev, activation_claimed_at: null } : prev));
+      loadRequests();
+    } catch (error: any) {
+      toast(error.message || "Error al liberar la activación", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleRejectRequest = async (id: string) => {
     if (!window.confirm("¿Estás seguro de que querés rechazar esta solicitud de adhesión?")) return;
     setIsSubmitting(true);
@@ -330,6 +349,8 @@ const Affiliates: React.FC = () => {
   const promoterOptions = Array.from(
     new Set(requests.map(r => r.promoter_id?.trim().toUpperCase() || 'SIN_PROMOTOR'))
   ).sort();
+
+  const selectedClaimState = getActivationClaimState(selectedRequest);
 
   const filteredRequests = promoterFilter === 'all'
     ? requests
@@ -598,6 +619,16 @@ const Affiliates: React.FC = () => {
                         {req.titular_last_name && req.titular_first_name
                           ? `${req.titular_last_name}, ${req.titular_first_name}`
                           : req.titular_name}
+                        {getActivationClaimState(req) === 'stale' && (
+                          <span className="ml-2 align-middle text-[8px] font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1 py-0.5 rounded inline-flex items-center gap-0.5 uppercase tracking-wider">
+                            <AlertCircle size={8} /> Activación trabada
+                          </span>
+                        )}
+                        {getActivationClaimState(req) === 'fresh' && (
+                          <span className="ml-2 align-middle text-[8px] font-bold bg-sky-500/10 border border-sky-500/20 text-sky-400 px-1 py-0.5 rounded inline-flex items-center gap-0.5 uppercase tracking-wider">
+                            <Loader2 size={8} className="animate-spin" /> Activando…
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
                         <span>{req.titular_email}</span>
@@ -1094,6 +1125,16 @@ const Affiliates: React.FC = () => {
               </div>
             </div>
 
+            {selectedClaimState === 'stale' && (
+              <div className="mt-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-300 leading-relaxed flex items-start gap-2">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <span>
+                  La activación automática de esta solicitud quedó trabada. Usá <strong>Liberar</strong> para borrar la cuenta de acceso
+                  incompleta y dejar la solicitud lista para aprobar.
+                </span>
+              </div>
+            )}
+
             <div className="border-t border-white/5 pt-6 mt-6 flex justify-between space-x-4">
               <button
                 onClick={() => handleRejectRequest(selectedRequest.id!)}
@@ -1103,23 +1144,42 @@ const Affiliates: React.FC = () => {
                 <XCircle size={16} />
                 Rechazar
               </button>
-              <button
-                onClick={() => handleApproveRequest(selectedRequest.id!)}
-                disabled={isSubmitting}
-                className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-[#020617] rounded-2xl font-bold transition-all text-xs active:scale-95 cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-1.5"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Procesando...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 size={16} />
-                    Aprobar y Registrar
-                  </>
+              <div className="flex items-center gap-3">
+                {selectedClaimState === 'stale' && (
+                  <button
+                    onClick={() => handleReleaseActivation(selectedRequest.id!)}
+                    disabled={isSubmitting}
+                    title="Liberar activación trabada"
+                    className="px-6 py-3.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 rounded-2xl font-bold transition-all text-xs active:scale-95 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Unlock size={16} />
+                    Liberar
+                  </button>
                 )}
-              </button>
+                <button
+                  onClick={() => handleApproveRequest(selectedRequest.id!)}
+                  // A claimed row (activation running or stuck) cannot be approved: the server would refuse it.
+                  disabled={isSubmitting || selectedClaimState !== 'none'}
+                  className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-[#020617] rounded-2xl font-bold transition-all text-xs active:scale-95 cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : selectedClaimState === 'fresh' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Activando…
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={16} />
+                      Aprobar y Registrar
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

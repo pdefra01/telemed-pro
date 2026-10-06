@@ -454,6 +454,52 @@ describe('AdhesionRepository', () => {
     });
   });
 
+  describe('releaseStuckActivation (admin recovery of a stale claim)', () => {
+    beforeEach(() => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: { access_token: 'jwt-1' } } } as any);
+    });
+
+    it('POSTs to the release endpoint with the bearer token and returns the deleted user id', async () => {
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ released: true, deletedUserId: 'u-9' }),
+      } as any);
+      await expect(repository.releaseStuckActivation('a b')).resolves.toEqual({ deletedUserId: 'u-9' });
+      expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion-requests/a%20b/release-activation', expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer jwt-1' }),
+      }));
+    });
+
+    it('returns a null deletedUserId when no orphan account existed', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ released: true, deletedUserId: null }),
+      } as any);
+      await expect(repository.releaseStuckActivation('id')).resolves.toEqual({ deletedUserId: null });
+    });
+
+    it('surfaces the server error (409 claim still fresh)', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'La activación está en curso; reintentá en unos minutos.' }),
+      } as any);
+      await expect(repository.releaseStuckActivation('id')).rejects.toThrow('La activación está en curso; reintentá en unos minutos.');
+    });
+
+    it('falls back to a generic message when the body is not JSON', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => { throw new Error('x'); },
+      } as any);
+      await expect(repository.releaseStuckActivation('id')).rejects.toThrow('Error al liberar la activación.');
+    });
+  });
+
   describe('activateApplication (public auto-activation, never throws)', () => {
     const respond = (status: number, body: unknown) =>
       vi.spyOn(window, 'fetch').mockResolvedValueOnce({
@@ -503,6 +549,24 @@ describe('AdhesionRepository', () => {
         status: 'failed',
         httpStatus: code,
         error: `err ${code}`,
+      });
+    });
+
+    it('maps a 409 stale claim (pendingReview) to pending_review', async () => {
+      respond(409, { ok: false, pendingReview: true, error: 'Tu solicitud quedó pendiente de revisión.' });
+      await expect(repository.activateApplication('id')).resolves.toEqual({
+        status: 'pending_review',
+        httpStatus: 409,
+        error: 'Tu solicitud quedó pendiente de revisión.',
+      });
+    });
+
+    it('maps 429 rate limiting to a non-throwing failure with the server error', async () => {
+      respond(429, { error: 'Demasiados intentos.' });
+      await expect(repository.activateApplication('id')).resolves.toEqual({
+        status: 'failed',
+        httpStatus: 429,
+        error: 'Demasiados intentos.',
       });
     });
 
