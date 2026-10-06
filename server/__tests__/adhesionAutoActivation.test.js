@@ -196,6 +196,31 @@ describe('autoActivateAdhesion — activation', () => {
     expect(res.body).toMatchObject({ processing: true });
   });
 
+  it('keeps 202 processing while an existing claim is fresh', async () => {
+    activateAdhesion.mockResolvedValue({ status: 409, body: { error: 'x' } });
+    const freshClaim = new Date(Date.now() - 60 * 1000).toISOString();
+    const { supabaseAdmin } = createSupabase({ row: buildRow({ activation_claimed_at: freshClaim }) });
+
+    const res = await autoActivateAdhesion(buildDeps(supabaseAdmin), ADHESION_ID);
+
+    expect(res.status).toBe(202);
+    expect(res.body).toMatchObject({ processing: true });
+  });
+
+  it('answers 409 pendingReview (not processing) when the claim is stale, without re-running checks', async () => {
+    const staleClaim = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { supabaseAdmin } = createSupabase({ row: buildRow({ activation_claimed_at: staleClaim }) });
+
+    const res = await autoActivateAdhesion(buildDeps(supabaseAdmin), ADHESION_ID);
+
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ ok: false, pendingReview: true });
+    expect(res.body.processing).toBeUndefined();
+    expect(typeof res.body.error).toBe('string');
+    expect(findRegisteredIdentityConflicts).not.toHaveBeenCalled();
+    expect(activateAdhesion).not.toHaveBeenCalled();
+  });
+
   it.each([400, 500, 503])('passes through a %i from activateAdhesion', async (status) => {
     activateAdhesion.mockResolvedValue({ status, body: { error: 'x' } });
     const { supabaseAdmin } = createSupabase();

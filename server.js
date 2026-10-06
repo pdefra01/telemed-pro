@@ -14,6 +14,7 @@ import {
 } from './server/mercadopago.js';
 import { activateAdhesion } from './server/adhesionActivation.js';
 import { autoActivateAdhesion } from './server/adhesionAutoActivation.js';
+import { releaseStuckActivation } from './server/adhesionActivationRecovery.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
@@ -1138,6 +1139,18 @@ app.post('/api/approve-adhesion', requireAuth, requireAdmin, async (req, res) =>
     req.body?.adhesionId,
     { source: 'admin' }
   );
+  res.status(status).json(body);
+});
+
+/**
+ * POST /api/adhesion-requests/:id/release-activation
+ * Admin: releases an activation that crashed after creating the auth user
+ * (stale claim). Deletes the orphan account only when it is provably that
+ * orphan, then clears the claim so "Aprobar" can run again
+ * (server/adhesionActivationRecovery.js documents the checks and contract).
+ */
+app.post('/api/adhesion-requests/:id/release-activation', requireAuth, requireAdmin, async (req, res) => {
+  const { status, body } = await releaseStuckActivation({ supabaseAdmin }, req.params.id);
   res.status(status).json(body);
 });
 
