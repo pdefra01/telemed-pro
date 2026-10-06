@@ -45,7 +45,15 @@ data. Never against production.
   any non-local Supabase URL.
 - [x] T2 Playwright recording script (two browsers with distinct fake cameras,
   captions overlay, per-role videos) + ffmpeg composition.
-- [ ] T3 README for re-running and swapping in own clips; produce the videos.
+- [x] T3 README for re-running and swapping in own clips; cosmetic seed fixes;
+  T2 review findings; slower pacing so `consulta-completa.mp4` runs ~2 min
+  (user request 2026-10-06: "muy rápido pasa todo"); the doctor issues a
+  prescription (user request 2026-10-06); produce the videos.
+  - Prescription: `finalize-consultation` builds the PDF and only logs a mock
+    WhatsApp message; the real send is `POST /api/prescriptions/:id/send-whatsapp`
+    (server.js:174), which returns 503 `whatsapp_disabled` locally. Demo-only
+    fix: Playwright `page.route` fulfills that call with success; no app change.
+  Route: delegated direct (writer trigger: record/compose/seed/README).
 
 ## Route
 - Delegated direct (writer; multi-file, needs iterative runs).
@@ -122,6 +130,37 @@ data. Never against production.
     first name "Dra. Lucía"); "Consultas Bonificadas: 1/null" (local plan
     quota missing); caption covers lower slots of the tall booking grid.
 
+- T3 done (delegated direct). Commit `9b7ec73` feat(demo): issue a
+  prescription and slow the demo pacing to about two minutes. Files:
+  record/compose/seed/captions/guard-test, new `demo/README.md`.
+  - Prescription: doctor adds Ibuprofeno 400 mg + Loratadina 10 mg in Receta,
+    diagnosis "Rinosinusitis viral aguda", finalizes; recorder fulfills
+    `**/api/prescriptions/*/send-whatsapp` with `200 {"status":"sent"}` (run
+    fails if never hit); patient then sees "Mis Recetas".
+  - Seed now creates private `prescriptions_pdfs` bucket (fresh local stack
+    lacked it → finalize silently stored a dummy w3.org URL), a 30-day coverage
+    window ("0/∞" instead of "1/null"), 6 slots around the current hour
+    (`slotsAround`), first name "Lucía" → app shows "Dr. Lucía Fernández"
+    ("Dra." needs an app change: hardcoded "Dr.", no gender/title column).
+  - T2 findings fixed (probe waits, `captionSafely`, teardown on all failure
+    paths + Ctrl+C, timeline origin before `newPage()`, `expectOneRow` test).
+  - Evidence (2026-10-06): RED (missing exports) → GREEN `demo:test` 8/8
+    (parent re-ran: 8/8). `demo:record` ×4; final: paciente 127.6 s, medico
+    88.1 s, consulta-completa 126.4 s, 1280x720. DB: 1 completed appointment,
+    1 prescription with 2 meds + PDF in storage (1848 bytes). Parent checked
+    frame `t3-115.jpg` ("¡Consulta Finalizada!" + "Enviado por WhatsApp").
+  - Teardown: supabase stop, docker desktop stop, wsl --shutdown; parent
+    confirmed 0 heavy processes.
+  - Review: medium, `slice_budget_reached` (497 lines); consent granted;
+    reliability lens approved and acknowledged (lineage
+    `review-70807c153e9f0b43`, authority burned). Boundary → `9b7ec73`.
+  - Non-blocking follow-ups: WARNING `demo/record.mjs:381-388` signal during
+    startup; WARNING `demo/record.mjs:216-218` selected-slot CSS coupling;
+    SUGGESTION `demo/seed-local.mjs:123-136` coverage window untested. Known
+    cosmetic: stored `pdf_url` signed with internal `kong:8000` host (demo
+    never clicks it); caption slightly overlaps "CONFIRMAR TURNO"; brief blank
+    patient dashboard load.
+
 ## Next step
-- T3: README, cosmetic seed fixes, T2 review warnings, final render. Memory is tight (7.5 GB RAM): start local Supabase and LiveKit
+- All tasks done. Optional: "Dra." title (app change), push/PR (user decision). Memory is tight (7.5 GB RAM): start local Supabase and LiveKit
   only when recording; tear down after, including Docker/WSL.
