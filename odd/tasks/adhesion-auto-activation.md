@@ -49,7 +49,7 @@ manual transfer check) must NOT gate activation.
 - [x] T2 Enforce email verification server-side (default ON, crypto OTP) + helper to check a verified email; tests.
 - [x] T3 Public `POST /api/adhesion/:id/activate` (verified email + duplicate re-check + activateAdhesion) + tests.
 - [x] T4 Form calls `/activate` after submit; success screen reflects activation; client verification default ON; tests.
-- [ ] T5 Docs: MANUAL_DE_USUARIO / admin notes on the new flow.
+- [x] T5 Docs: MANUAL_DE_USUARIO / admin notes on the new flow.
 
 ## Route
 - Delegated direct (writer trigger: 2+ non-trivial files; mapping done by explorer).
@@ -163,5 +163,17 @@ manual transfer check) must NOT gate activation.
   now that verification defaults ON (server.js:42-44) — check prod for such
   rows before deploy.
 
+- Re-review after doc commit: approved + acknowledged (lineage
+  review-09e0663a9808fb9b). New advisory: a stuck claim (auth user created,
+  then failure) makes `/activate` answer 202 "processing" forever
+  (adhesionAutoActivation.js:98-101) — same root as the stuck-claim follow-up.
+- Prod check (user ran it in the SQL editor, 2026-10-06): pending rows = 2,
+  both `email_verified=true`; no pending row with `email_verified=false` →
+  the legacy-approval advisory does not affect current data.
+- T5 done (route: inline, passive docs): MANUAL_DE_USUARIO.md documents
+  mandatory email verification, automatic activation and the admin fallback.
+  Check: structural readback.
+
 ## Next step
-- T5 (docs); then PRs (stacked-to-main) when the user decides.
+- Open PRs (stacked-to-main) when the user decides; follow-up: admin recovery
+  for stuck claims + rate limit on `/activate`.
