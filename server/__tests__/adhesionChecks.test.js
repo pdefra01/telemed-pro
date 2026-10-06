@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { normalize, buildConflictMessage, checkDuplicatesHandler } from '../adhesionChecks.js';
+import {
+  normalize,
+  buildConflictMessage,
+  checkDuplicatesHandler,
+  buildPeople,
+  findRegisteredIdentityConflicts,
+} from '../adhesionChecks.js';
 
-function createStub(tables) {
+function createStub(tables, queried = []) {
   function from(table) {
+    queried.push(table);
     const filters = {};
     const rows = () => (typeof tables[table] === 'function' ? tables[table](filters) : tables[table]) ?? [];
     const builder = {
@@ -119,5 +126,34 @@ describe('checkDuplicatesHandler', () => {
     const family = [1, 2, 3, 4].map((n) => ({ dni: `3112345${n}` }));
     const res = await run(createStub(EMPTY), { titularDni: '30111222', family });
     expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('findRegisteredIdentityConflicts', () => {
+  it('flags registered affiliates and family members but never consults pending requests', async () => {
+    const queried = [];
+    const stub = createStub({
+      ...EMPTY,
+      profiles: [{ id: 'u1', dni: '30.111.222', cuil: null }],
+      family_members: [{ id: 'f1', dni: null, cuil: '27-40111222-3', full_name: 'Ana' }],
+      // The request being re-checked is itself pending: it must not conflict.
+      adhesion_requests: [{ id: 'req-1', titular_dni: '30111222', titular_cuil: null, titular_phone: null }],
+    }, queried);
+    const people = buildPeople({ titularDni: '30111222', family: [{ name: 'Ana', dni: '40111222', cuil: '27401112223' }] });
+
+    const conflicts = await findRegisteredIdentityConflicts(stub, people);
+
+    expect(queried).not.toContain('adhesion_requests');
+    expect(conflicts).toEqual([
+      expect.objectContaining({ identifier: 'dni', person: 'titular', reason: 'affiliate' }),
+      expect.objectContaining({ identifier: 'cuil', person: 'family', name: 'Ana', reason: 'family_member' }),
+    ]);
+  });
+
+  it('skips the queries when nobody has a DNI or CUIL', async () => {
+    const queried = [];
+    const conflicts = await findRegisteredIdentityConflicts(createStub(EMPTY, queried), buildPeople({}));
+    expect(conflicts).toEqual([]);
+    expect(queried).toEqual([]);
   });
 });

@@ -47,7 +47,7 @@ manual transfer check) must NOT gate activation.
 ## Tasks
 - [x] T1 Extract `activateAdhesion` module + atomic claim migration + tests; admin endpoint delegates (no behavior change besides the guard).
 - [x] T2 Enforce email verification server-side (default ON, crypto OTP) + helper to check a verified email; tests.
-- [ ] T3 Public `POST /api/adhesion/:id/activate` (verified email + duplicate re-check + activateAdhesion) + tests.
+- [x] T3 Public `POST /api/adhesion/:id/activate` (verified email + duplicate re-check + activateAdhesion) + tests.
 - [ ] T4 Form calls `/activate` after submit; success screen reflects activation; client verification default ON; tests.
 - [ ] T5 Docs: MANUAL_DE_USUARIO / admin notes on the new flow.
 
@@ -103,5 +103,24 @@ manual transfer check) must NOT gate activation.
   the service role; `ContactVerificationRepository.ts` is the only client user,
   via `ContactValidationModal`).
 
+- T3 done (route: delegated writer). `server/adhesionAutoActivation.js`
+  `autoActivateAdhesion(deps, id)`; public route `POST /api/adhesion/:id/activate`
+  in server.js. `adhesionChecks.js` refactored (no behavior change) to export
+  `buildPeople`, `matchIdentityConflicts`, `findRegisteredIdentityConflicts`
+  (profiles + family_members only, so the pending row never matches itself;
+  titular and the row's family members are checked). Contract:
+  200 `{activated:true,message,activationEmailSent}` (user id not exposed) |
+  200 `{alreadyActive:true,message}` | 202 `{processing:true,message}` (claim
+  held elsewhere; do not retry) | 400 invalid UUID / not pending / activation
+  precondition (incl. browser `email_verified` false when verification is on) |
+  403 email not verified server-side | 404 | 409 `{ok:false,error,conflicts}` |
+  500 | 503. No rate limiter exists in the codebase: per-IP limit is a
+  follow-up (TODO at the route). Checks: RED observed (module missing);
+  `adhesionAutoActivation.test.js` 21/21, `adhesionChecks.test.js` 16/16;
+  `npm test` 846 passed / 5 failed (known base failures); `npx tsc --noEmit`
+  exit 0.
+
 ## Next step
-- T3 (delegated writer).
+- Before shipping T3 to production: add a migration closing the anon
+  `contact_verifications` RLS hole (see T2 blocker), otherwise the 403 gate is
+  bypassable with the anon key. Then T4 (form wiring).
