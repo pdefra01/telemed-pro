@@ -46,7 +46,7 @@ manual transfer check) must NOT gate activation.
 
 ## Tasks
 - [x] T1 Extract `activateAdhesion` module + atomic claim migration + tests; admin endpoint delegates (no behavior change besides the guard).
-- [ ] T2 Enforce email verification server-side (default ON, crypto OTP) + helper to check a verified email; tests.
+- [x] T2 Enforce email verification server-side (default ON, crypto OTP) + helper to check a verified email; tests.
 - [ ] T3 Public `POST /api/adhesion/:id/activate` (verified email + duplicate re-check + activateAdhesion) + tests.
 - [ ] T4 Form calls `/activate` after submit; success screen reflects activation; client verification default ON; tests.
 - [ ] T5 Docs: MANUAL_DE_USUARIO / admin notes on the new flow.
@@ -84,5 +84,24 @@ manual transfer check) must NOT gate activation.
   an admin recovery path; deleteUser result unchecked (214-221); pgTAP file
   not executed.
 
+- T2 done (route: delegated writer). New `server/emailVerification.js`:
+  `normalizeEmail`, `isEmailVerificationRequired(env)` (ON unless
+  `EMAIL_VERIFICATION_REQUIRED=false`), `generateOtpCode` (`crypto.randomInt`),
+  `isEmailVerified(supabaseAdmin, email, { now, maxAgeMs })` (verified email
+  challenge whose `verified_at` is within 24h; throws on DB error). Freshness is
+  measured from `verified_at`, not the OTP `expires_at`, so shortening the OTP
+  window later does not expire a just-verified email mid-form. server.js reads
+  the env var and uses the helpers in the OTP endpoints; env var documented in
+  COOLIFY_DEPLOYMENT.md (no `.env.example` exists). Checks: RED observed
+  (module missing); `emailVerification.test.js` 16/16; `npm test` 823 passed /
+  5 failed (known base failures); `npx tsc --noEmit` exit 0.
+  BLOCKER found (outside T2 surface): RLS on `contact_verifications`
+  (migration 20260718001000) lets anon INSERT with `WITH CHECK (true)` (can
+  insert a row with `verified_at` already set) and SELECT unverified rows
+  including `otp_code`. Server-side verification is bypassable with the anon
+  key until a migration drops the anon policies/grants (the OTP endpoints use
+  the service role; `ContactVerificationRepository.ts` is the only client user,
+  via `ContactValidationModal`).
+
 ## Next step
-- T2 + T3 (delegated writer, one commit each).
+- T3 (delegated writer).

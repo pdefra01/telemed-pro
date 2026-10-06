@@ -47,6 +47,7 @@ Configurar estas variables en la sección **Environment Variables** de Coolify p
 | `WHATSAPP_GATEWAY_URL` | URL **interna** del gateway de WhatsApp (ver sección 4) | `http://waha:3000` |
 | `WHATSAPP_GATEWAY_API_KEY` | Clave con la que `server.js` llama al gateway | `(cadena larga aleatoria)` |
 | `WHATSAPP_GATEWAY_SESSION` | Nombre de la sesión del gateway (opcional) | `default` |
+| `EMAIL_VERIFICATION_REQUIRED` | Exige verificar el correo (código OTP) en la adhesión pública. Activado por defecto; solo `false` lo desactiva. Debe coincidir con `VITE_EMAIL_VERIFICATION_REQUIRED` del formulario | `true` |
 
 ---
 

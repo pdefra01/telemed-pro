@@ -13,6 +13,7 @@ import {
   runDeferredReconciliation,
 } from './server/mercadopago.js';
 import { activateAdhesion } from './server/adhesionActivation.js';
+import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
@@ -36,8 +37,9 @@ app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 
 // Toggle to suspend email OTP verification without removing the feature.
-// Mirrored by EMAIL_VERIFICATION_REQUIRED in src/pages/AdhesionForm.tsx — flip both together.
-const EMAIL_VERIFICATION_REQUIRED = false;
+// ON by default; set EMAIL_VERIFICATION_REQUIRED=false to suspend it.
+// Mirrored by VITE_EMAIL_VERIFICATION_REQUIRED in src/pages/AdhesionForm.tsx — flip both together.
+const EMAIL_VERIFICATION_REQUIRED = isEmailVerificationRequired(process.env);
 
 /**
  * Returns an ISO 8601 timestamp for the next occurrence of the given day-of-month
@@ -966,8 +968,8 @@ app.post('/api/email-verification/send', async (req, res) => {
     return res.status(400).json({ error: 'El campo email es requerido.' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const cleanEmail = normalizeEmail(email);
+  const otpCode = generateOtpCode();
 
   try {
     const { error } = await supabaseAdmin
@@ -1055,7 +1057,7 @@ app.post('/api/email-verification/verify', async (req, res) => {
     return res.status(400).json({ error: 'Faltan los campos email y code.' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanEmail = normalizeEmail(email);
   const cleanCode = code.trim();
 
   try {
