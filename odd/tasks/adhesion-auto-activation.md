@@ -157,5 +157,11 @@ manual transfer check) must NOT gate activation.
 - Follow-ups (not in scope): no rate limit on public `/activate`; claim stuck
   after auth user exists needs an admin recovery path; pgTAP files not run.
 
+- Slice 2 review: medium, consent granted, approved + acknowledged (lineage
+  review-d1b22df9c6af1100). New advisory: pending rows created before this
+  change with `email_verified=false` can no longer be approved by the admin
+  now that verification defaults ON (server.js:42-44) — check prod for such
+  rows before deploy.
+
 ## Next step
-- Review slice 2, then T5 (docs).
+- T5 (docs); then PRs (stacked-to-main) when the user decides.
