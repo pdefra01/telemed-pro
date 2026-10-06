@@ -36,7 +36,7 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
 - [x] T1 Server: stale-claim detection, `releaseStuckActivation` + admin endpoint, `/activate` stale answer; tests.
 - [x] T2 Admin UI: stale badge + "Liberar" action in Afiliados; tests.
 - [x] T3 Rate limit on public `/activate` (+ trust proxy); tests.
-- [ ] T4 Docs: MANUAL_DE_USUARIO (admin recovery), COOLIFY_DEPLOYMENT if config changes.
+- [x] T4 Docs: MANUAL_DE_USUARIO (admin recovery), COOLIFY_DEPLOYMENT if config changes.
 
 ## Route
 - Delegated direct (writer trigger: multi-file).
@@ -69,7 +69,7 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
   env vars. RED observed (module missing). Checks: focused 28/28 pass; `npm test`
   903 pass / 5 fail (known base failures only); `npx tsc --noEmit` exit 0;
   `node --check server.js` ok.
-- T2 done (delegated writer). `src/utils/activationClaim.ts`
+- T2 done (delegated writer), commit `ad9b2de`. `src/utils/activationClaim.ts`
   (`getActivationClaimState` -> none/fresh/stale, mirrors the server rule and
   its 10 min threshold); `AdhesionRequest.activation_claimed_at` (the pending
   query already selects `*`); `adhesionRepository.releaseStuckActivation(id)`
@@ -85,6 +85,12 @@ Follow-up to `odd/tasks/adhesion-auto-activation.md` (shipped as #48/#49).
   missing, release method missing, pendingReview mapped to failed, UI missing).
   Checks: focused 150/150 pass; `npm test` 923 pass / 5 fail (known base
   failures only); `npx tsc --noEmit` exit 0.
+- T4 done (delegated writer), docs-only commit (hash in git log after `ad9b2de`).
+  MANUAL_DE_USUARIO: "Activaciones trabadas" (Activando… / Activación trabada
+  badges, 10 min rule, what Liberar deletes and when it is refused, form wording)
+  and "Límite de intentos" (10 per 15 min per IP). COOLIFY_DEPLOYMENT already
+  covered by T3 (no config change in T2/T4). Check: structural readback only
+  (passive docs).
 
 ## Next step
-- T2 (admin UI), then T4.
+- review + PR.
