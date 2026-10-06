@@ -34,6 +34,75 @@ export function buildConflictMessage(identifier, reason) {
   return `Este ${label} ya se encuentra registrado.`;
 }
 
+/**
+ * Builds the normalized list of people (titular + family) whose DNI/CUIL are
+ * compared against existing records.
+ */
+export function buildPeople({ titularDni, titularCuil, family } = {}) {
+  const familyList = Array.isArray(family) ? family : [];
+  return [
+    { person: 'titular', name: null, rawDni: titularDni, rawCuil: titularCuil, dni: normalize(titularDni), cuil: normalize(titularCuil) },
+    ...familyList.map((f) => ({
+      person: 'family',
+      name: f?.name || null,
+      rawDni: f?.dni,
+      rawCuil: f?.cuil,
+      dni: normalize(f?.dni),
+      cuil: normalize(f?.cuil),
+    })),
+  ];
+}
+
+/**
+ * Pure: conflicts between `people` and one stored row ({ dni, cuil }) for the
+ * given reason (affiliate | family_member | pending_request).
+ */
+export function matchIdentityConflicts(people, row, reason) {
+  const conflicts = [];
+  const rowDni = normalize(row?.dni);
+  const rowCuil = normalize(row?.cuil);
+  for (const p of people) {
+    if (rowDni && p.dni && rowDni === p.dni) {
+      conflicts.push({ identifier: 'dni', value: p.rawDni, person: p.person, name: p.name, reason, message: buildConflictMessage('dni', reason) });
+    }
+    if (rowCuil && p.cuil && rowCuil === p.cuil) {
+      conflicts.push({ identifier: 'cuil', value: p.rawCuil, person: p.person, name: p.name, reason, message: buildConflictMessage('cuil', reason) });
+    }
+  }
+  return conflicts;
+}
+
+/**
+ * DNI/CUIL conflicts of `people` against registered identities: active
+ * affiliates (profiles) and members of a family group (family_members).
+ * Pending requests are NOT consulted, so re-checking an existing pending
+ * request never flags it against itself. Throws on a database error.
+ */
+export async function findRegisteredIdentityConflicts(supabaseAdmin, people) {
+  const hasIdentifiers = people.some((p) => p.dni || p.cuil);
+  if (!hasIdentifiers) return [];
+
+  // Rows are fetched and compared normalized in JS: stored identifiers may
+  // carry separators and a PostgREST .in() compares the raw column exactly.
+  // The tables are small.
+  const conflicts = [];
+  const { data: profileMatches, error: profileErr } = await supabaseAdmin
+    .from('profiles')
+    .select('id,dni,cuil')
+    .or('dni.not.is.null,cuil.not.is.null');
+  if (profileErr) throw profileErr;
+  for (const row of profileMatches || []) conflicts.push(...matchIdentityConflicts(people, row, 'affiliate'));
+
+  const { data: familyMatches, error: familyErr } = await supabaseAdmin
+    .from('family_members')
+    .select('id,dni,cuil,full_name')
+    .or('dni.not.is.null,cuil.not.is.null');
+  if (familyErr) throw familyErr;
+  for (const row of familyMatches || []) conflicts.push(...matchIdentityConflicts(people, row, 'family_member'));
+
+  return conflicts;
+}
+
 /** Resolves 'individual' | 'familiar' from a kind or a legacy plan name. */
 async function resolvePlanKind(supabaseAdmin, planType) {
   const requested = (planType || '').toString().trim();
@@ -82,61 +151,18 @@ export function checkDuplicatesHandler({ supabaseAdmin }) {
         return res.status(400).json({ error });
       }
 
-      const people = [
-        { person: 'titular', name: null, rawDni: titularDni, rawCuil: titularCuil, dni: normalize(titularDni), cuil: normalize(titularCuil) },
-        ...familyList.map((f) => ({
-          person: 'family',
-          name: f?.name || null,
-          rawDni: f?.dni,
-          rawCuil: f?.cuil,
-          dni: normalize(f?.dni),
-          cuil: normalize(f?.cuil),
-        })),
-      ];
-
-      const dniSet = [...new Set(people.map((p) => p.dni).filter(Boolean))];
-      const cuilSet = [...new Set(people.map((p) => p.cuil).filter(Boolean))];
+      const people = buildPeople({ titularDni, titularCuil, family: familyList });
       const phone = normalizeArgentinePhone(titularPhone);
 
       const conflicts = [];
-      function collectConflicts(row, reason) {
-        const rowDni = normalize(row.dni);
-        const rowCuil = normalize(row.cuil);
-        for (const p of people) {
-          if (rowDni && p.dni && rowDni === p.dni) {
-            conflicts.push({ identifier: 'dni', value: p.rawDni, person: p.person, name: p.name, reason, message: buildConflictMessage('dni', reason) });
-          }
-          if (rowCuil && p.cuil && rowCuil === p.cuil) {
-            conflicts.push({ identifier: 'cuil', value: p.rawCuil, person: p.person, name: p.name, reason, message: buildConflictMessage('cuil', reason) });
-          }
-        }
-      }
       function collectPhoneConflict(rowPhone, reason) {
         if (phone && normalizeArgentinePhone(rowPhone) === phone) {
           conflicts.push({ identifier: 'phone', value: titularPhone, person: 'titular', name: null, reason, message: buildConflictMessage('phone', reason) });
         }
       }
 
-      // Se traen las filas y se compara normalizado en JS: los identificadores
-      // guardados pueden tener separadores y un .in() de PostgREST compara
-      // string exacto contra la columna cruda. Las tablas son chicas.
-      if (dniSet.length > 0 || cuilSet.length > 0) {
-        // 1. Afiliados activos
-        const { data: profileMatches, error: profileErr } = await supabaseAdmin
-          .from('profiles')
-          .select('id,dni,cuil')
-          .or('dni.not.is.null,cuil.not.is.null');
-        if (profileErr) throw profileErr;
-        for (const row of profileMatches || []) collectConflicts(row, 'affiliate');
-
-        // 2. Integrantes de otro grupo familiar
-        const { data: familyMatches, error: familyErr } = await supabaseAdmin
-          .from('family_members')
-          .select('id,dni,cuil,full_name')
-          .or('dni.not.is.null,cuil.not.is.null');
-        if (familyErr) throw familyErr;
-        for (const row of familyMatches || []) collectConflicts(row, 'family_member');
-      }
+      // 1-2. Afiliados activos e integrantes de otro grupo familiar
+      conflicts.push(...await findRegisteredIdentityConflicts(supabaseAdmin, people));
 
       // 3. Solicitudes pendientes (DNI/CUIL y teléfono)
       const { data: pendingMatches, error: pendingErr } = await supabaseAdmin
@@ -145,7 +171,7 @@ export function checkDuplicatesHandler({ supabaseAdmin }) {
         .eq('status', 'pending');
       if (pendingErr) throw pendingErr;
       for (const row of pendingMatches || []) {
-        collectConflicts({ dni: row.titular_dni, cuil: row.titular_cuil }, 'pending_request');
+        conflicts.push(...matchIdentityConflicts(people, { dni: row.titular_dni, cuil: row.titular_cuil }, 'pending_request'));
         collectPhoneConflict(row.titular_phone, 'pending_request');
       }
 

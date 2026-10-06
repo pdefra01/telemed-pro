@@ -13,6 +13,8 @@ import {
   runDeferredReconciliation,
 } from './server/mercadopago.js';
 import { activateAdhesion } from './server/adhesionActivation.js';
+import { autoActivateAdhesion } from './server/adhesionAutoActivation.js';
+import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
@@ -36,8 +38,9 @@ app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 
 // Toggle to suspend email OTP verification without removing the feature.
-// Mirrored by EMAIL_VERIFICATION_REQUIRED in src/pages/AdhesionForm.tsx — flip both together.
-const EMAIL_VERIFICATION_REQUIRED = false;
+// ON by default; set EMAIL_VERIFICATION_REQUIRED=false to suspend it.
+// Mirrored by VITE_EMAIL_VERIFICATION_REQUIRED in src/pages/AdhesionForm.tsx — flip both together.
+const EMAIL_VERIFICATION_REQUIRED = isEmailVerificationRequired(process.env);
 
 /**
  * Returns an ISO 8601 timestamp for the next occurrence of the given day-of-month
@@ -966,8 +969,8 @@ app.post('/api/email-verification/send', async (req, res) => {
     return res.status(400).json({ error: 'El campo email es requerido.' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const cleanEmail = normalizeEmail(email);
+  const otpCode = generateOtpCode();
 
   try {
     const { error } = await supabaseAdmin
@@ -1055,7 +1058,7 @@ app.post('/api/email-verification/verify', async (req, res) => {
     return res.status(400).json({ error: 'Faltan los campos email y code.' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanEmail = normalizeEmail(email);
   const cleanCode = code.trim();
 
   try {
@@ -1134,6 +1137,30 @@ app.post('/api/approve-adhesion', requireAuth, requireAdmin, async (req, res) =>
     },
     req.body?.adhesionId,
     { source: 'admin' }
+  );
+  res.status(status).json(body);
+});
+
+/**
+ * POST /api/adhesion/:id/activate
+ * Public, mirrors /api/adhesion/preapproval (the adhesion form has no session).
+ * Activates the request right after submit once the titular email is verified
+ * server-side and the DNI/CUIL are not registered yet
+ * (server/adhesionAutoActivation.js documents the response contract).
+ * TODO: per-IP rate limit (no limiter exists in the codebase yet).
+ */
+app.post('/api/adhesion/:id/activate', async (req, res) => {
+  const { status, body } = await autoActivateAdhesion(
+    {
+      supabaseAdmin,
+      mercadoPagoEnabled,
+      mpFetch,
+      createMailTransporter,
+      fromAddress: FROM_ADDRESS,
+      publicAppUrl: PUBLIC_APP_URL,
+      emailVerificationRequired: EMAIL_VERIFICATION_REQUIRED,
+    },
+    req.params.id
   );
   res.status(status).json(body);
 });
