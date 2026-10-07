@@ -31,7 +31,7 @@ Local calendar days are stored as `YYYY-MM-DD` strings but produced with
   helpers.
 
 ## Tasks
-- [ ] T1 Local-date helper with tests; booking modal and appointment mappers
+- [x] T1 Local-date helper with tests; booking modal and appointment mappers
   use it; booking test at 21:30 local proves header date, Atención inmediata
   and `scheduled_at`.
   Route: delegated direct (writer trigger: 4+ non-trivial files).
@@ -49,7 +49,24 @@ Local calendar days are stored as `YYYY-MM-DD` strings but produced with
   typecheck/lint.
 
 ## Progress
-- Branch `fix/booking-local-date` from master (b21f23d).
+- Branch `fix/booking-local-date` from master (b21f23d), rebased onto
+  da2b5b8 after PR #53 merged.
+- T1 done (delegated direct). Commit `981112e` fix(booking): use the local
+  calendar day instead of the UTC day. Files: new `src/utils/localDate.ts`
+  (+9 tests), `PatientDashboard.tsx` (6 spots; today recomputed when the
+  modal opens), `AppointmentRepository.ts:50,95,345`,
+  `DoctorDashboard.tsx:216`, `vite.config.ts` (TZ pinned under VITEST),
+  mapper tests, 2 dashboard tests with fake timers.
+  - Evidence (2026-10-06): RED observed for helper (missing module), mappers
+    (`2026-10-08` vs `2026-10-07`) and dashboard (header `08/10` vs
+    `07/10`). TZ pin proven by switching to Asia/Tokyo (test failed). GREEN:
+    localDate 9/9, AppointmentRepository 11/11, PatientDashboard 8/8 (parent
+    re-ran the 3 files: 28/28). `npm test`: 937 pass, 5 fail — same 5 fail
+    on the base (VideoRoom ×3, DashboardRepository ×1, crypto ×1).
+    `npx tsc --noEmit`: clean. No lint script in the repo.
+  - Review assess (base da2b5b8): medium, `under_budget` (304 lines),
+    `review_due: false` — stays pending in the slice.
 
 ## Next step
-- T1 via writer.
+- Push and PR (user decision). Follow-ups out of scope: date-only rendering
+  one day early in MedicalHistory/VideoRoom/Profile; month-bound Z billing.
