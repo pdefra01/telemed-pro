@@ -62,7 +62,7 @@ data. Never against production.
   receta PDF at the end (fix the `kong:8000` signed URL for local playback).
   Route: delegated direct (writer: record/compose/seed).
 
-- [ ] T5 Patient mobile video (user request 2026-10-06): patient flow
+- [x] T5 Patient mobile video (user request 2026-10-06): patient flow
   (book → call → receta) recorded with Playwright mobile emulation (touch,
   phone viewport), composed vertical 9:16 (1080x1920) with a phone mockup
   centered on a Medinex-branded background (dark navy + teal, logo on top,
@@ -201,7 +201,35 @@ data. Never against production.
     cosmetic (out of scope): Historia clínica shows raw ISO dates and English
     visit types ("CHECKUP") in `DoctorDashboard.tsx`.
 
+- T5 done (delegated direct). Commit `9360367` feat(demo): record the
+  patient's phone experience as a vertical video. New `demo/record-mobile.mjs`,
+  `demo/compose-mobile.mjs`, `demo/lib/phone-layout.mjs`,
+  `demo/lib/phone-stage.mjs` (+ guard test); `npm run demo:record:mobile`.
+  - Mobile emulation 412x839, scaled 1.49x into a phone mockup on a branded
+    1080x1920 stage; captions emitted as cues and rendered below the phone.
+    PDF shown through a same-origin viewer page (`/__demo/receta`) because
+    Chromium's mobile PDF viewer lays out a 980 px desktop page.
+  - Evidence (2026-10-06): `demo:test` 17/17 (parent re-ran: 17/17; RED
+    first). `demo:record:mobile` ×3 exit 0; final 132.8 s 1080x1920.
+    `demo:record` re-run: consulta-completa 178.0 s. Parent checked
+    `t5-51.jpg` (phone mockup, call, caption below).
+  - Teardown: supabase stop, docker desktop stop, wsl --shutdown; parent
+    confirmed 0 heavy processes.
+  - Review: medium, `slice_budget_reached` (844 lines); consent granted;
+    reliability lens approved and acknowledged (lineage
+    `review-a9093fa86c269614`). Boundary → `9360367`.
+  - Non-blocking follow-ups: WARNING `demo/compose-mobile.mjs:35-39` call cut
+    overlap; WARNING `demo/compose-mobile.mjs:44` recetas overlap; WARNING
+    `demo/record-mobile.mjs:153-161` markReached can hang; SUGGESTION
+    `demo/compose-mobile.mjs:142` filter-script flag; SUGGESTION segments
+    untested (`demo/compose-mobile.mjs:30-52`).
+  - App issues found (out of scope): VideoRoom header card overflows at phone
+    width ("DURA 00:"); self-view overlaps "negociando códecs" while waiting;
+    after 21:00 local (UTC-3) the booking modal shows next-day slots (UTC/local
+    date mix), hiding "Atención inmediata" — record before 21:00.
+
 ## Next step
-- T5 patient mobile 9:16 video. Optional: "Dra." title (app change),
-  push/PR (user decision). Memory is tight (7.5 GB RAM): start local Supabase and LiveKit
+- All tasks done. Optional (app changes, separate features): "Dra." title,
+  mobile VideoRoom header overflow, booking UTC/local date bug, Historia
+  clínica date/type formatting. Push/PR is the user's decision. Memory is tight (7.5 GB RAM): start local Supabase and LiveKit
   only when recording; tear down after, including Docker/WSL.
