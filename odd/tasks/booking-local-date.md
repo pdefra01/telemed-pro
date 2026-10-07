@@ -65,7 +65,11 @@ Local calendar days are stored as `YYYY-MM-DD` strings but produced with
     on the base (VideoRoom ×3, DashboardRepository ×1, crypto ×1).
     `npx tsc --noEmit`: clean. No lint script in the repo.
   - Review assess (base da2b5b8): medium, `under_budget` (304 lines),
-    `review_due: false` — stays pending in the slice.
+    `review_due: false`. The PR slice (da2b5b8..2fc7459, 321 lines) was then
+    reviewed on user consent: reliability lens approved and acknowledged
+    (lineage `review-ffd8794d2f7fc0ec`). Four SUGGESTION-level notes only
+    (PatientDashboard.tsx:234, localDate.ts:12-14, DoctorDashboard.tsx:217,
+    AppointmentRepository.test.ts:72).
 
 ## Next step
 - Push and PR (user decision). Follow-ups out of scope: date-only rendering
