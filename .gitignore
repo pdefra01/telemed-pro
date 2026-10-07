@@ -32,3 +32,7 @@ dist-ssr
 
 # Scratch scripts
 scratch/
+
+# Demo recorder: downloaded clips, converted media, LiveKit binary, videos
+demo/.cache/
+demo/output/
