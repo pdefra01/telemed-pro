@@ -14,6 +14,7 @@ import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskConical, ExternalLink, History, FolderOpen, Pill } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { playArrivalSound } from '../../utils/audio';
+import { toLocalDateStr } from '../../utils/localDate';
 
 interface Props {
     user: Doctor;
@@ -213,7 +214,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 patientPlan: row.patient_plan,
                 doctorId: row.doctor_id,
                 doctorName: "", 
-                date: new Date(row.scheduled_at).toISOString().split('T')[0],
+                date: toLocalDateStr(new Date(row.scheduled_at)),
                 time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                 status: row.status,
                 type: 'video',

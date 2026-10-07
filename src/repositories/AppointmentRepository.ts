@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import { Appointment } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { toLocalDateStr } from '../utils/localDate';
 import { affiliateRepository } from './AffiliateRepository';
 
 export class AppointmentRepository {
@@ -47,7 +48,7 @@ export class AppointmentRepository {
       patientName: "", // Se llena desde Auth/App context
       doctorId: row.doctor_id,
       doctorName: row.doctor?.full_name || "Doctor",
-      date: new Date(row.scheduled_at).toISOString().split('T')[0],
+      date: toLocalDateStr(new Date(row.scheduled_at)),
       time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       status: row.status,
       type: 'video', // Por defecto en este MVP
@@ -92,7 +93,7 @@ export class AppointmentRepository {
       patientName: row.patient?.full_name || "Paciente",
       doctorId: row.doctor_id,
       doctorName: "", // Llenado en el contexto
-      date: new Date(row.scheduled_at).toISOString().split('T')[0],
+      date: toLocalDateStr(new Date(row.scheduled_at)),
       time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       status: row.status,
       type: 'video',
@@ -342,7 +343,7 @@ export class AppointmentRepository {
       doctorName: data.doctor?.full_name || "Doctor",
       doctorSpecialty: data.doctor?.specialty || "",
       doctorLicense: data.doctor?.license_number || "",
-      date: new Date(data.scheduled_at).toISOString().split('T')[0],
+      date: toLocalDateStr(new Date(data.scheduled_at)),
       time: new Date(data.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       status: data.status,
       type: 'video', // Por defecto en este MVP

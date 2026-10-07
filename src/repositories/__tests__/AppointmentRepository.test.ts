@@ -66,6 +66,53 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
     });
   });
 
+  describe('local calendar day of mapped appointments', () => {
+    // 2026-10-08T00:00:00Z is 21:00 on 07/10 in Argentina (UTC-3, the pinned test TZ).
+    const lateEveningRow = { id: 'late', status: 'confirmed', scheduled_at: '2026-10-08T00:00:00Z' };
+    const expectedTime = new Date(lateEveningRow.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    it('maps a patient appointment to its local day and time, not the UTC day', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.not = vi.fn().mockReturnValue({ order: vi.fn().mockResolvedValue({ data: [lateEveningRow], error: null }) });
+
+      const [appointment] = await appointmentRepository.getPatientAppointments('patient-1');
+
+      expect(appointment.date).toBe('2026-10-07');
+      expect(appointment.time).toBe(expectedTime);
+      expect(new Date(lateEveningRow.scheduled_at).getHours()).toBe(21);
+    });
+
+    it('maps a doctor appointment to its local day', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.in = vi.fn().mockReturnValue(supabaseMock);
+      supabaseMock.order = vi.fn().mockResolvedValue({ data: [lateEveningRow], error: null });
+
+      const [appointment] = await appointmentRepository.getDoctorAppointments('doc1', { status: ['confirmed'] });
+
+      expect(appointment.date).toBe('2026-10-07');
+      expect(appointment.time).toBe(expectedTime);
+    });
+
+    it('maps a single appointment to its local day', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.single.mockResolvedValueOnce({ data: lateEveningRow, error: null });
+
+      const appointment = await appointmentRepository.getAppointmentById('late');
+
+      expect(appointment?.date).toBe('2026-10-07');
+      expect(appointment?.time).toBe(expectedTime);
+    });
+  });
+
   describe('getDoctorAppointments', () => {
     // Escenario 1: El médico recupera sus turnos activos (confirmados o pendientes)
     it('should filter appointments by an array of statuses', async () => {
