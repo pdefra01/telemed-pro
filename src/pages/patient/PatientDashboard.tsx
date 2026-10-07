@@ -17,6 +17,7 @@ import { NotificationListener } from '../../components/dashboard/NotificationLis
 import { notificationRepository } from '../../repositories/NotificationRepository';
 import { getBranding } from '../../config/branding';
 import { isSafeExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
+import { toLocalDateStr, addDaysLocal } from '../../utils/localDate';
 
 interface Props {
     user: Patient;
@@ -222,15 +223,16 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
     const [isLoadingDoctors, setIsLoadingDoctors] = useState(false);
     const [isBooking, setIsBooking] = useState(false);
 
-    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState<string>(() => toLocalDateStr());
     const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
     const [showPastSlotWarning, setShowPastSlotWarning] = useState<boolean>(false);
     const [pendingSlot, setPendingSlot] = useState<string | null>(null);
 
-    // Reset scheduler states on modal close
+    // Recompute "today" whenever the modal opens or closes (the page may stay
+    // open across midnight) and reset scheduler states on close
     useEffect(() => {
+        setSelectedDate(toLocalDateStr());
         if (!showAppointmentModal) {
-            setSelectedDate(new Date().toISOString().split('T')[0]);
             setShowDatePicker(false);
             setShowPastSlotWarning(false);
             setPendingSlot(null);
@@ -994,7 +996,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             <div className="flex gap-3">
                                                 <input
                                                     type="date"
-                                                    min={new Date().toISOString().split('T')[0]}
+                                                    min={toLocalDateStr()}
                                                     value={selectedDate}
                                                     onChange={(e) => {
                                                         const newDateVal = e.target.value;
@@ -1027,7 +1029,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     type="button"
                                                     onClick={() => {
                                                         setShowDatePicker(false);
-                                                        const todayStr = new Date().toISOString().split('T')[0];
+                                                        const todayStr = toLocalDateStr();
                                                         setSelectedDate(todayStr);
                                                         setSelectedSlot(null);
                                                         setShowPastSlotWarning(false);
@@ -1092,7 +1094,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                         type="button"
                                                         onClick={() => {
                                                             // Check if selectedDate is today
-                                                            const isToday = selectedDate === new Date().toISOString().split('T')[0];
+                                                            const isToday = selectedDate === toLocalDateStr();
                                                             if (isToday) {
                                                                 const now = new Date();
                                                                 const [hours, minutes] = slot.split(':');
@@ -1150,9 +1152,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        const tomorrow = new Date();
-                                                        tomorrow.setDate(tomorrow.getDate() + 1);
-                                                        setSelectedDate(tomorrow.toISOString().split('T')[0]);
+                                                        setSelectedDate(addDaysLocal(toLocalDateStr(), 1));
                                                         setSelectedSlot(pendingSlot);
                                                         setShowPastSlotWarning(false);
                                                         setPendingSlot(null);

@@ -174,6 +174,94 @@ describe('PatientDashboard Scheduler', () => {
   });
 });
 
+describe('PatientDashboard Scheduler in the late evening (local day differs from the UTC day)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Only Date is faked, so timers and promises behave normally.
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('books today at 21:30 local: header shows the local day, a started slot offers Atención Inmediata and the instant is correct', async () => {
+    vi.mocked(doctorRepository.getSpecialties).mockResolvedValue(['Cardiología']);
+    vi.mocked(doctorRepository.getDoctorsBySpecialty).mockResolvedValue([
+      { id: 'doc1', name: 'Dr. Smith', specialty: 'Cardiología', rating: 4.8, availability: ['10:00', '21:00'] }
+    ] as any);
+    vi.mocked(appointmentRepository.getPatientAppointments).mockResolvedValue([]);
+    vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValue([]);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([]);
+
+    // The dashboard was opened the day before; "today" must be computed when the modal opens.
+    vi.setSystemTime(new Date(2026, 9, 5, 10, 0));
+    renderWithRouter(<PatientDashboard user={MOCK_PATIENT} />);
+
+    // 06/10 21:30 in Argentina (UTC-3) is already 07/10 00:30 UTC.
+    vi.setSystemTime(new Date(2026, 9, 6, 21, 30));
+    fireEvent.click(screen.getByText(/Nuevo Turno/i));
+
+    await waitFor(() => {
+      expect(screen.getByText('CARDIOLOGÍA')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('CARDIOLOGÍA'));
+    await waitFor(() => {
+      expect(screen.getByText('DR. SMITH')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('DR. SMITH'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Horarios Disponibles \(06\/10\/2026\)/)).toBeDefined();
+    });
+
+    // 21:00 already started today, so the patient is offered immediate attention.
+    fireEvent.click(screen.getByText('21:00'));
+    fireEvent.click(screen.getByText(/Agendar para Hoy \(Atención Inmediata\)/i));
+
+    fireEvent.click(screen.getByText(/CONFIRMAR TURNO/i));
+
+    await waitFor(() => {
+      expect(appointmentRepository.createAppointment).toHaveBeenCalledWith(expect.objectContaining({
+        doctor_id: 'doc1',
+        scheduled_at: '2026-10-07T00:00:00.000Z',
+      }));
+    });
+  });
+
+  it('"Agendar para Mañana" moves a started slot to the next local day', async () => {
+    vi.mocked(doctorRepository.getSpecialties).mockResolvedValue(['Cardiología']);
+    vi.mocked(doctorRepository.getDoctorsBySpecialty).mockResolvedValue([
+      { id: 'doc1', name: 'Dr. Smith', specialty: 'Cardiología', rating: 4.8, availability: ['10:00', '21:00'] }
+    ] as any);
+    vi.mocked(appointmentRepository.getPatientAppointments).mockResolvedValue([]);
+    vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValue([]);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([]);
+
+    vi.setSystemTime(new Date(2026, 9, 6, 21, 30));
+    renderWithRouter(<PatientDashboard user={MOCK_PATIENT} />);
+    fireEvent.click(screen.getByText(/Nuevo Turno/i));
+
+    await waitFor(() => {
+      expect(screen.getByText('CARDIOLOGÍA')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('CARDIOLOGÍA'));
+    await waitFor(() => {
+      expect(screen.getByText('DR. SMITH')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('DR. SMITH'));
+
+    await waitFor(() => {
+      expect(screen.getByText('21:00')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('21:00'));
+    fireEvent.click(screen.getByText(/Agendar para Mañana/i));
+
+    expect(screen.getByText(/Horarios Disponibles \(07\/10\/2026\)/)).toBeDefined();
+  });
+});
+
 describe('PatientDashboard obra social prescription link', () => {
   const baseRx = {
     id: 'rx-1',
