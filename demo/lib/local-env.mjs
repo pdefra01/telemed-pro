@@ -35,6 +35,32 @@ export function assertLocalDbUrl(name, value) {
   }
 }
 
+// The local edge runtime reaches the API gateway as http://kong:8000, so the
+// signed URLs it stores (e.g. prescriptions.pdf_url) carry that host, which
+// only resolves inside Docker.
+const EDGE_RUNTIME_ORIGIN = 'http://kong:8000';
+
+/**
+ * Rewrites a storage URL signed by the local edge runtime so a browser on
+ * this machine can open it. The signature covers the path, not the host.
+ * Refuses anything that is not the internal gateway or already local.
+ */
+export function toLocalStorageUrl(signedUrl, apiUrl) {
+  assertLocalUrl('Supabase API URL', apiUrl);
+  let url;
+  try {
+    url = new URL(signedUrl);
+  } catch {
+    throw new Error(`[demo] Refusing to run: ${signedUrl || '<empty>'} is not a URL.`);
+  }
+  if (isLocalUrl(signedUrl)) return signedUrl;
+  if (url.origin !== EDGE_RUNTIME_ORIGIN) assertLocalUrl('storage URL', signedUrl);
+  const api = new URL(apiUrl);
+  url.protocol = api.protocol;
+  url.host = api.host;
+  return url.toString();
+}
+
 /** Reads `supabase status -o env` for the LOCAL stack (never the linked project). */
 export function readLocalSupabaseStatus(cwd) {
   let raw;

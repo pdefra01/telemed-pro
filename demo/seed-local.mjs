@@ -39,6 +39,38 @@ export function slotsAround(now = new Date()) {
     .map((h) => `${String(h).padStart(2, '0')}:00`);
 }
 
+// Two earlier visits with the same doctor, so her "Historia clínica" view of
+// the patient has content before the demo call. The allergic rhinitis note
+// sets up today's prescription (loratadine).
+export function priorConsultations(now = new Date()) {
+  const daysAgo = (days, hour) => {
+    const at = new Date(now);
+    at.setDate(at.getDate() - days);
+    at.setHours(hour, 30, 0, 0);
+    return at;
+  };
+  return [
+    {
+      at: daysAgo(152, 10),
+      type: 'consultation',
+      diagnosis: 'Faringitis aguda',
+      notes:
+        'Odinofagia y febrícula de 24 h. Fauces congestivas, sin exudado ni adenopatías. ' +
+        'Se indica paracetamol 500 mg cada 8 h, hidratación y control si persiste la fiebre. ' +
+        'Evolución favorable a las 72 h.',
+    },
+    {
+      at: daysAgo(41, 16),
+      type: 'checkup',
+      diagnosis: 'Control de salud anual',
+      notes:
+        'Asintomática. TA 110/70 mmHg, FC 72 lpm, IMC 22. ' +
+        'Antecedente de rinitis alérgica estacional; usa loratadina 10 mg a demanda en primavera. ' +
+        'Se solicita laboratorio de rutina.',
+    },
+  ];
+}
+
 const availabilityAround = (now) => [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, slots: slotsAround(now) }));
 
 // A profile update that matches no row means the auth trigger did not create
@@ -140,6 +172,21 @@ export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
     await db.query('delete from public.medical_records where patient_id = $1', [patientId]);
     await db.query('delete from public.notifications where user_id = any($1::uuid[])', [[patientId, doctorId]]);
     await db.query('delete from public.appointments where patient_id = $1 or doctor_id = $2', [patientId, doctorId]);
+
+    // Re-create the earlier, completed visits and their clinical notes.
+    for (const [i, visit] of priorConsultations(new Date()).entries()) {
+      const appt = await db.query(
+        `insert into public.appointments (patient_id, doctor_id, scheduled_at, specialty, status, livekit_room_name, notes, created_at)
+         values ($1, $2, $3, $4, 'completed', $5, $6, $3)
+         returning id`,
+        [patientId, doctorId, visit.at, doctor.specialty, `room-demo-prior-${i + 1}-${patientId.slice(0, 8)}`, visit.notes]
+      );
+      await db.query(
+        `insert into public.medical_records (appointment_id, patient_id, doctor_id, doctor_name, date, diagnosis, notes, type, created_at)
+         values ($1, $2, $3, $4, ($5::timestamptz)::date, $6, $7, $8, $5::timestamptz)`,
+        [appt.rows[0].id, patientId, doctorId, `${doctor.firstName} ${doctor.lastName}`, visit.at, visit.diagnosis, visit.notes, visit.type]
+      );
+    }
 
     // finalize-consultation uploads the prescription PDF to this private
     // bucket. Production created it by hand (the migrations only make it

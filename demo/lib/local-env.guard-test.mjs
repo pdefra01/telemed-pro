@@ -2,8 +2,9 @@
 // Run with `node --test demo/lib/local-env.guard-test.mjs`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assertLocalDbUrl, assertLocalUrl, buildAppEnv, isLocalUrl } from './local-env.mjs';
-import { expectOneRow, seedLocal, slotsAround } from '../seed-local.mjs';
+import { assertLocalDbUrl, assertLocalUrl, buildAppEnv, isLocalUrl, toLocalStorageUrl } from './local-env.mjs';
+import { expectOneRow, priorConsultations, seedLocal, slotsAround } from '../seed-local.mjs';
+import { videoClock } from '../compose.mjs';
 
 const LOCAL = {
   apiUrl: 'http://127.0.0.1:54321',
@@ -75,4 +76,41 @@ test('slotsAround offers a short window that includes the current hour', () => {
   // Near midnight the window wraps and stays sorted for the booking grid.
   assert.deepEqual(slotsAround(new Date(2026, 9, 6, 23, 10)), ['00:00', '01:00', '02:00', '03:00', '22:00', '23:00']);
   assert.deepEqual(slotsAround(new Date(2026, 9, 6, 0, 5)), ['00:00', '01:00', '02:00', '03:00', '04:00', '23:00']);
+});
+
+test('toLocalStorageUrl points the edge runtime signed URL at the local API', () => {
+  const signed = 'http://kong:8000/storage/v1/object/sign/prescriptions_pdfs/p/a-1.pdf?token=abc.def';
+  assert.equal(
+    toLocalStorageUrl(signed, LOCAL.apiUrl),
+    'http://127.0.0.1:54321/storage/v1/object/sign/prescriptions_pdfs/p/a-1.pdf?token=abc.def'
+  );
+  // An already-local URL is kept as is.
+  const local = 'http://127.0.0.1:54321/storage/v1/object/sign/x.pdf?token=t';
+  assert.equal(toLocalStorageUrl(local, LOCAL.apiUrl), local);
+});
+
+test('toLocalStorageUrl refuses remote URLs and a remote API', () => {
+  assert.throws(() => toLocalStorageUrl('https://x.supabase.co/storage/v1/object/sign/x.pdf?token=t', LOCAL.apiUrl), /Refusing to run/);
+  assert.throws(() => toLocalStorageUrl('http://kong:8000/storage/v1/object/sign/x.pdf', 'https://x.supabase.co'), /Refusing to run/);
+  assert.throws(() => toLocalStorageUrl('not a url', LOCAL.apiUrl), /Refusing to run/);
+});
+
+test('priorConsultations seeds past, oldest-first visits with content', () => {
+  const now = new Date(2026, 9, 6, 14, 35);
+  const visits = priorConsultations(now);
+  assert.equal(visits.length, 2);
+  for (const v of visits) {
+    assert.ok(v.at < now, 'in the past');
+    assert.ok(v.diagnosis.length > 5 && v.notes.length > 40);
+  }
+  assert.ok(visits[0].at < visits[1].at, 'oldest first');
+});
+
+test('videoClock maps wall-clock marks onto a drifting video', () => {
+  const role = { start: 1000, marks: { a: 61_000, closing: 181_000 } };
+  assert.equal(videoClock(role, 180_000)('a'), 60_000);
+  // A video 3% longer than the wall time stretches every mark by 3%.
+  assert.ok(Math.abs(videoClock(role, 185_400)('a') - 61_800) < 1e-6);
+  // An implausible ratio (e.g. a truncated video) falls back to wall time.
+  assert.equal(videoClock(role, 60_000)('a'), 60_000);
 });

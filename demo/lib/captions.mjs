@@ -12,6 +12,7 @@ function overlayScript({ roleLabel }) {
       border: 1px solid rgba(16, 185, 129, 0.55); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
       font: 600 22px/1.35 'Segoe UI', system-ui, sans-serif; color: #f8fafc; transition: opacity .35s; }
     #__demo-caption[data-empty="true"] { opacity: 0; }
+    #__demo-caption[data-pos="top"] { top: 28px; bottom: auto; }
     #__demo-caption .tag { flex: none; font-size: 13px; letter-spacing: .14em; text-transform: uppercase;
       color: #022c22; background: #34d399; padding: 5px 10px; border-radius: 999px; }
     .__demo-click { position: fixed; z-index: 2147483646; pointer-events: none; width: 44px; height: 44px;
@@ -36,41 +37,37 @@ function overlayScript({ roleLabel }) {
     return box;
   }
 
-  function render(text) {
+  function render(text, position) {
     const box = ensure();
     if (!box) return;
     box.querySelector('.text').textContent = text || '';
     box.dataset.empty = text ? 'false' : 'true';
+    box.dataset.pos = position === 'top' ? 'top' : 'bottom';
   }
 
-  window.__demoCaption = (text) => {
+  function saved() {
+    try {
+      return [sessionStorage.getItem(KEY) || '', sessionStorage.getItem(`${KEY}Pos`) || 'bottom'];
+    } catch {
+      return ['', 'bottom'];
+    }
+  }
+
+  window.__demoCaption = (text, position) => {
     try {
       sessionStorage.setItem(KEY, text || '');
+      sessionStorage.setItem(`${KEY}Pos`, position || 'bottom');
     } catch {
       /* storage unavailable: caption still renders for this document */
     }
-    render(text);
+    render(text, position);
   };
 
   const restore = () => {
-    let saved = '';
-    try {
-      saved = sessionStorage.getItem(KEY) || '';
-    } catch {
-      saved = '';
-    }
-    render(saved);
+    render(...saved());
     // React may replace body children on mount; keep the overlay attached.
     new MutationObserver(() => {
-      if (!document.getElementById('__demo-caption')) {
-        let current = '';
-        try {
-          current = sessionStorage.getItem(KEY) || '';
-        } catch {
-          current = '';
-        }
-        render(current);
-      }
+      if (!document.getElementById('__demo-caption')) render(...saved());
     }).observe(document.body, { childList: true });
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restore);
@@ -98,9 +95,12 @@ export async function installCaptions(context, roleLabel) {
 // Long enough to read a one-line caption on video without pausing it.
 export const READ_MS = 3800;
 
-/** Shows a caption and holds it long enough to be read on video. */
-export async function caption(page, text, holdMs = READ_MS) {
-  await page.evaluate((t) => window.__demoCaption?.(t), text);
+/**
+ * Shows a caption and holds it long enough to be read on video. Pass
+ * { position: 'top' } when the bottom of the screen holds the action shown.
+ */
+export async function caption(page, text, holdMs = READ_MS, { position = 'bottom' } = {}) {
+  await page.evaluate(([t, pos]) => window.__demoCaption?.(t, pos), [text, position]);
   if (holdMs > 0) await page.waitForTimeout(holdMs);
 }
 

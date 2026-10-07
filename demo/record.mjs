@@ -7,7 +7,9 @@
 // demo/compose.mjs turns them into the final MP4s.
 //
 // Pacing: the recording itself is slow on purpose (readable captions, human
-// typing, a held video call) so consulta-completa.mp4 runs about 2 minutes.
+// typing, a held video call) and shows real moments (the patient's clinical
+// history, notes written during the call, the prescription PDF), so
+// consulta-completa.mp4 runs about 3 minutes.
 import { spawn, spawnSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -15,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { caption, captionSafely, installCaptions } from './lib/captions.mjs';
-import { LIVEKIT, assertLocalUrl, buildAppEnv, isMainModule, readLocalSupabaseStatus } from './lib/local-env.mjs';
+import { LIVEKIT, assertLocalUrl, buildAppEnv, isMainModule, readLocalSupabaseStatus, toLocalStorageUrl } from './lib/local-env.mjs';
 import { DEMO, seedLocal } from './seed-local.mjs';
 import { startLivekit } from './start-livekit.mjs';
 import { compose } from './compose.mjs';
@@ -31,7 +33,7 @@ const APP_PORT = 3000;
 const API_PORT = 3001;
 const BASE_URL = `http://127.0.0.1:${APP_PORT}`;
 const SIZE = { width: 1280, height: 720 };
-const CALL_HOLD_MS = 9000; // per caption of plain call footage, before the doctor writes notes
+const CALL_HOLD_MS = 10_000; // per caption of plain call footage, before the doctor writes notes
 // Extra delay per key for pressSequentially; slowMo already slows every key.
 const TYPE = { slow: 90, normal: 30, fast: 10 };
 
@@ -40,6 +42,15 @@ const TYPE = { slow: 90, normal: 30, fast: 10 };
 // client expects instead; the app and the server stay untouched.
 const WHATSAPP_ROUTE = '**/api/prescriptions/*/send-whatsapp';
 const WHATSAPP_OK = { status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'sent' }) };
+
+const EVOLUTION =
+  'Cefalea frontal y congestión nasal de 48 h, con rinorrea serosa y estornudos. ' +
+  'Afebril, sin signos de alarma. Antecedente de rinitis alérgica. ' +
+  'Plan: analgesia, antihistamínico y control en 72 h.';
+
+const RECOMMENDATIONS =
+  'Hidratación abundante, lavajes nasales con solución fisiológica y reposo relativo. ' +
+  'Consultar si aparece fiebre.';
 
 const PRESCRIPTION = [
   { med: 'Ibuprofeno 400 mg', dose: '1 comp. cada 8 h por 3 días' },
@@ -83,12 +94,27 @@ function spawnLogged(name, args, env) {
   return child;
 }
 
+/** Children of the local stack, with an idempotent stop() usable at any time. */
+function createStack() {
+  const children = [];
+  let stopped = false;
+  return {
+    children,
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      children.reverse().forEach(killTree);
+    },
+  };
+}
+
 /**
  * Starts LiveKit (if needed), server.js and Vite, all pointed at the local
- * stack. Returns an idempotent stop(); every child started so far is stopped
+ * stack, registering each child in `stack` as soon as it is spawned so a
+ * Ctrl+C during startup stops it too. Every child started so far is stopped
  * if any later step fails.
  */
-async function startStack(status) {
+async function startStack(status, stack) {
   const env = buildAppEnv(status);
   for (const key of ['VITE_SUPABASE_URL', 'SUPABASE_URL', 'VITE_LIVEKIT_URL', 'PUBLIC_APP_URL']) {
     assertLocalUrl(key, env[key]);
@@ -99,13 +125,7 @@ async function startStack(status) {
     }
   }
 
-  const children = [];
-  let stopped = false;
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    children.reverse().forEach(killTree);
-  };
+  const { children } = stack;
   try {
     const livekitHttp = LIVEKIT.url.replace(/^ws/, 'http');
     if (!(await isUp(livekitHttp))) {
@@ -124,15 +144,17 @@ async function startStack(status) {
     await waitUp(`http://127.0.0.1:${API_PORT}/`, 'server.js');
     await waitUp(BASE_URL, 'Vite');
   } catch (err) {
-    stop();
+    stack.stop();
     throw err;
   }
-  return stop;
 }
 
 /** One Chromium process per role, each with its own fake camera clip. */
-async function openRole(role, roleLabel, timeline) {
+// The headless shell has no PDF viewer (a PDF becomes a download); the full
+// Chromium in new headless mode renders it, so the patient uses that one.
+async function openRole(role, roleLabel, timeline, { channel } = {}) {
   const browser = await chromium.launch({
+    channel,
     headless: true,
     slowMo: 120,
     args: [
@@ -212,18 +234,21 @@ async function patientBooks({ page, mark }) {
   await caption(page, 'Elige el horario actual para recibir atención inmediata', 2600);
   const hour = `${String(new Date().getHours()).padStart(2, '0')}:00`;
   await page.getByRole('button', { name: hour, exact: true }).click();
+  // "Confirmar turno" is enabled only once a slot is selected.
   const immediate = page.getByRole('button', { name: /atenci[oó]n inmediata/i });
-  const selected = page.locator('button.bg-emerald-500', { hasText: hour });
-  await immediate.or(selected).first().waitFor();
+  const confirm = page.getByRole('button', { name: /confirmar turno/i, disabled: false });
+  await immediate.or(confirm).first().waitFor();
   if (await immediate.isVisible()) {
     await page.waitForTimeout(1000);
     await immediate.click();
   }
-  await selected.waitFor();
+  await confirm.waitFor();
+  await confirm.evaluate((el) => el.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   await page.waitForTimeout(600);
 
-  await caption(page, 'Confirma el turno', 2000);
-  await page.getByRole('button', { name: /confirmar turno/i }).click();
+  // The button sits at the bottom of the modal: keep the caption clear of it.
+  await caption(page, 'Confirma el turno', 2000, { position: 'top' });
+  await confirm.click();
   mark('booked');
 
   const enter = page.getByRole('link', { name: /ingresar a la consulta/i }).first();
@@ -249,6 +274,22 @@ async function writePrescription(page) {
   }
 }
 
+/** The doctor reads the patient's earlier visits (seeded) before the call. */
+async function reviewHistory(page) {
+  await caption(page, 'Antes de atenderla, revisa su historia clínica', 2400);
+  await page.getByRole('button', { name: /expediente/i }).first().click();
+  await page.getByRole('heading', { name: /historia cl[ií]nica/i }).waitFor();
+  await page.getByText(/control de salud anual/i).first().waitFor({ timeout: 30_000 });
+  await caption(page, 'Consultas anteriores con sus diagnósticos y evoluciones');
+  await page.locator('article').first().hover();
+  await page.mouse.wheel(0, 260);
+  await caption(page, 'Antecedente de rinitis alérgica estacional, útil para la consulta de hoy', 4200);
+  await page.mouse.wheel(0, -260);
+  await page.waitForTimeout(600);
+  await page.getByRole('button', { name: /cerrar historia cl[ií]nica/i }).click();
+  await page.waitForTimeout(600);
+}
+
 async function doctorAttends(doctor, patient) {
   const { page, mark, context } = doctor;
   doctor.whatsappMocked = 0;
@@ -272,6 +313,7 @@ async function doctorAttends(doctor, patient) {
   const startCall = page.getByRole('link', { name: /iniciar llamada/i }).first();
   await startCall.waitFor();
   await caption(page, 'En la Sala de Espera aparece Camila, lista para ser atendida', 3800);
+  await reviewHistory(page);
   await caption(page, 'Inicia la videollamada con un clic', 2000);
   mark('callClick');
   await startCall.click();
@@ -291,17 +333,32 @@ async function doctorAttends(doctor, patient) {
   ]);
   await page.waitForTimeout(CALL_HOLD_MS);
 
+  // The side-by-side keeps running while she writes and saves the notes.
   mark('notes');
-  await caption(page, 'Durante la consulta registra la evolución médica', 2000);
+  await Promise.all([
+    caption(page, 'Mientras la escucha, registra la evolución médica', 0),
+    captionSafely(patient.page, 'La médica toma nota sin cortar la videollamada'),
+  ]);
   await page.getByRole('button', { name: /evoluci[oó]n/i }).first().click();
-  await page
-    .getByPlaceholder(/motivo de consulta/i)
-    .pressSequentially('Cefalea y congestión nasal de 48 h. Afebril, sin signos de alarma.', { delay: TYPE.fast });
-  await page.waitForTimeout(1200);
+  await page.getByPlaceholder(/motivo de consulta/i).pressSequentially(EVOLUTION, { delay: TYPE.normal });
+  await page.waitForTimeout(800);
+  await Promise.all([
+    caption(page, 'Guarda la evolución en la historia clínica', 0),
+    captionSafely(patient.page, 'La consulta sigue en curso'),
+  ]);
+  await page.getByRole('button', { name: /guardar evoluci[oó]n/i }).click();
+  await page.getByText(/sincronizaci[oó]n completa/i).first().waitFor({ timeout: 15_000 });
+  await page.waitForTimeout(2600);
+  mark('notesSaved');
 
   await caption(page, 'En la pestaña Receta indica los medicamentos', 2000);
   await writePrescription(page);
   await caption(page, 'Ibuprofeno y loratadina, con su posología', 3200);
+
+  await caption(page, 'En «Reco.» deja indicaciones para la paciente', 2000);
+  await page.getByRole('button', { name: /^reco\.?$/i }).click();
+  await page.getByPlaceholder(/instrucciones post-consulta/i).pressSequentially(RECOMMENDATIONS, { delay: TYPE.fast });
+  await page.waitForTimeout(1200);
 
   await caption(page, 'Finaliza el turno', 1600);
   mark('callEnd');
@@ -333,15 +390,39 @@ async function doctorAttends(doctor, patient) {
   mark('end');
 }
 
-async function patientSeesPrescription({ page, mark }) {
+async function patientSeesPrescription({ page, mark }, apiUrl) {
   await page.goto(`${BASE_URL}/#/`);
   const heading = page.getByRole('heading', { name: /mis recetas/i });
   await heading.waitFor();
   mark('rxStart');
   await caption(page, 'Camila vuelve a su panel', 1500);
-  await page.getByText(/2 medicamentos/i).first().waitFor({ timeout: 30_000 });
+  // Coming back from the room is a hash change: the dashboard can keep the
+  // data it loaded before the consultation ended. Reload once if so.
+  const rxCard = page.getByText(/2 medicamentos/i).first();
+  if (!(await rxCard.waitFor({ timeout: 8000 }).then(() => true, () => false))) {
+    await page.reload();
+    await heading.waitFor();
+    await rxCard.waitFor({ timeout: 30_000 });
+  }
   await heading.evaluate((el) => el.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  await caption(page, 'La receta ya está disponible en «Mis Recetas», lista para descargar', 5000);
+  await caption(page, 'La receta ya está disponible en «Mis Recetas»', 4200);
+
+  // The stored URL is signed with the edge runtime's internal host
+  // (kong:8000). Point the link at the local API and open it in this tab, so
+  // the PDF lands in the recording instead of an unrecorded popup.
+  const pdfLink = page.getByTitle(/descargar pdf/i).first();
+  const localUrl = toLocalStorageUrl(await pdfLink.getAttribute('href'), apiUrl);
+  await pdfLink.evaluate((el, href) => {
+    el.setAttribute('href', href);
+    el.removeAttribute('target');
+  }, localUrl);
+  await caption(page, 'Abre la receta en PDF con un clic', 2600);
+  await pdfLink.click();
+  await page.waitForURL((url) => url.pathname.endsWith('.pdf'), { timeout: 30_000 });
+  mark('pdf');
+  // The viewer takes a few seconds to paint under the recorder; compose.mjs
+  // skips that blank part (PDF_PAINT_MS) and keeps the rendered receta.
+  await page.waitForTimeout(14_000);
   mark('end');
 }
 
@@ -350,6 +431,9 @@ async function closeRole(handle) {
   const video = handle.page.video();
   const target = join(RAW_DIR, `${handle.role}.webm`);
   try {
+    // The video ends when its context closes: compose.mjs uses this mark to
+    // correct the drift between the video clock and the wall-clock marks.
+    handle.mark('closing');
     // The video is finalized when its context closes; saveAs needs the browser alive.
     await handle.context.close();
     if (!video) return null;
@@ -378,10 +462,10 @@ export async function record() {
   // Clean slate on every run: the seed deletes previous demo appointments.
   await seedLocal(status);
 
-  let stopStack = () => {};
-  // Ctrl+C must not leave server.js, Vite or LiveKit running.
+  const stack = createStack();
+  // Ctrl+C must not leave server.js, Vite or LiveKit running, even mid-startup.
   const onSignal = () => {
-    stopStack();
+    stack.stop();
     process.exit(130);
   };
   process.once('SIGINT', onSignal);
@@ -391,13 +475,13 @@ export async function record() {
   let patient;
   let doctor;
   try {
-    stopStack = await startStack(status);
+    await startStack(status, stack);
     try {
-      patient = await openRole('patient', 'Paciente', timeline);
+      patient = await openRole('patient', 'Paciente', timeline, { channel: 'chromium' });
       await patientBooks(patient);
       doctor = await openRole('doctor', 'Médica', timeline);
       await doctorAttends(doctor, patient);
-      await patientSeesPrescription(patient);
+      await patientSeesPrescription(patient, status.apiUrl);
       patient.assertNoLeaks();
       doctor.assertNoLeaks();
       if (doctor.whatsappMocked < 1) throw new Error('[record] the prescription was never sent by WhatsApp (mock not hit).');
@@ -412,7 +496,7 @@ export async function record() {
       );
     }
   } finally {
-    stopStack();
+    stack.stop();
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
   }

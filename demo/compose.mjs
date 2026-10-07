@@ -1,7 +1,8 @@
 // Turns the raw per-role recordings into the final demo videos:
-//   paciente.mp4, medico.mp4 and consulta-completa.mp4 (sequenced, with a
-//   side-by-side section during the video call, then the prescription and the
-//   patient finding it in her dashboard). All 1280x720, H.264.
+//   paciente.mp4, medico.mp4 and consulta-completa.mp4 (sequenced: booking,
+//   the doctor reviewing the clinical history, a side-by-side section during
+//   the video call while she writes and saves the notes, the prescription,
+//   and the patient opening its PDF). All 1280x720, H.264.
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -14,6 +15,8 @@ const OUTPUT_DIR = join(here, 'output');
 const TMP_DIR = join(OUTPUT_DIR, 'tmp');
 const FPS = 30;
 const FADE = 0.35;
+// The PDF viewer paints a blank page for a few seconds under the recorder.
+const PDF_PAINT_MS = 4500;
 const ENCODE = ['-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-an'];
 
 // drawtext needs a font file; the drive colon must be escaped inside the filter.
@@ -21,6 +24,28 @@ const FONT = ['C:/Windows/Fonts/segoeuib.ttf', 'C:/Windows/Fonts/arialbd.ttf', '
   (f) => existsSync(f)
 );
 const fontOpt = FONT ? `fontfile='${FONT.replace(':', '\\:')}':` : '';
+
+function durationMs(file) {
+  const res = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { encoding: 'utf8' });
+  const seconds = Number.parseFloat(res.stdout);
+  if (res.status !== 0 || !Number.isFinite(seconds)) throw new Error(`[compose] ffprobe could not read ${file}: ${res.stderr || res.error?.message}`);
+  return seconds * 1000;
+}
+
+/**
+ * Maps a role's wall-clock marks onto its video. The recorder's video clock
+ * drifts a few seconds over a 3-minute take, roughly linearly, so the marks
+ * are scaled by (video length / wall time until the context closed).
+ */
+export function videoClock(role, videoMs) {
+  const wallMs = role.marks.closing - role.start;
+  let scale = wallMs > 0 ? videoMs / wallMs : 1;
+  if (!(scale > 0.9 && scale < 1.1)) {
+    console.warn(`[compose] ignoring an implausible video/wall ratio of ${scale.toFixed(3)}`);
+    scale = 1;
+  }
+  return (name) => (role.marks[name] - role.start) * scale;
+}
 
 function ffmpeg(args) {
   const res = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { encoding: 'utf8' });
@@ -75,15 +100,15 @@ export async function compose() {
   const { patient, doctor, files } = timeline;
   if (!files?.patient || !files?.doctor) throw new Error('[compose] Missing raw recordings; run `npm run demo:record` first.');
   const required = [
-    ['patient', ['waiting', 'callConnected', 'callEnd', 'rxStart', 'end']],
-    ['doctor', ['callConnected', 'notes', 'callEnd', 'end']],
+    ['patient', ['waiting', 'callConnected', 'callEnd', 'rxStart', 'pdf', 'end', 'closing']],
+    ['doctor', ['callConnected', 'notes', 'notesSaved', 'callEnd', 'end', 'closing']],
   ];
   for (const [role, marks] of required) {
     for (const m of marks) if (!timeline[role].marks[m]) throw new Error(`[compose] timeline is missing ${role}.${m}; the recording did not finish.`);
   }
   // Origins are taken just before each page (and its video) is created.
-  const p = (name) => patient.marks[name] - patient.start;
-  const d = (name) => doctor.marks[name] - doctor.start;
+  const p = videoClock(patient, durationMs(files.patient));
+  const d = videoClock(doctor, durationMs(files.doctor));
 
   await rm(TMP_DIR, { recursive: true, force: true });
   await mkdir(TMP_DIR, { recursive: true });
@@ -93,15 +118,17 @@ export async function compose() {
   transcode(files.doctor, join(OUTPUT_DIR, 'medico.mp4'));
 
   // Wall-clock marks are shared, so the call window maps onto both recordings.
-  // The side-by-side shows the call itself; once the doctor starts writing
-  // notes and the prescription, her full-screen view is easier to read.
-  const callMs = Math.min(p('callEnd') - p('callConnected'), d('notes') - d('callConnected'));
+  // The side-by-side shows the call, including the doctor writing and saving
+  // the notes while they talk; for the prescription form her full-screen view
+  // is easier to read.
+  const callMs = Math.min(p('callEnd') - p('callConnected'), d('notesSaved') - d('callConnected'));
   const parts = [
     clip(files.patient, 0, p('waiting'), join(TMP_DIR, '1-paciente.mp4')),
     clip(files.doctor, 0, d('callConnected'), join(TMP_DIR, '2-medico.mp4')),
     sideBySide(files.patient, files.doctor, p('callConnected'), d('callConnected'), callMs, join(TMP_DIR, '3-llamada.mp4')),
-    clip(files.doctor, d('notes'), d('end'), join(TMP_DIR, '4-receta.mp4')),
-    clip(files.patient, p('rxStart'), p('end'), join(TMP_DIR, '5-paciente-receta.mp4')),
+    clip(files.doctor, d('notesSaved'), d('end'), join(TMP_DIR, '4-receta.mp4')),
+    clip(files.patient, p('rxStart'), p('pdf'), join(TMP_DIR, '5-paciente-receta.mp4')),
+    clip(files.patient, p('pdf') + PDF_PAINT_MS, p('end'), join(TMP_DIR, '6-receta-pdf.mp4')),
   ];
   const list = join(TMP_DIR, 'concat.txt');
   await writeFile(list, parts.map((f) => `file '${f.replaceAll('\\', '/')}'`).join('\n'));
