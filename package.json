@@ -15,7 +15,9 @@
     "demo:seed": "node demo/seed-local.mjs",
     "demo:record": "node demo/record.mjs",
     "demo:compose": "node demo/compose.mjs",
-    "demo:test": "node --test demo/lib/local-env.guard-test.mjs"
+    "demo:record:mobile": "node demo/record-mobile.mjs",
+    "demo:compose:mobile": "node demo/compose-mobile.mjs",
+    "demo:test": "node --test demo/lib/local-env.guard-test.mjs demo/lib/phone-layout.guard-test.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",

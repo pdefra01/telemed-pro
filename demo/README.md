@@ -5,13 +5,14 @@ immediate consultation, the doctor reviews her clinical history, attends her
 by video call (writing and saving the notes while they talk), issues a
 prescription, and the patient opens the prescription PDF from her dashboard.
 
-Outputs (1280x720, H.264, no audio) in `demo/output/`:
+Outputs (H.264, no audio) in `demo/output/`:
 
-| File | Content | Length |
-|------|---------|--------|
-| `paciente.mp4` | Patient browser, start to end | ~3 min |
-| `medico.mp4` | Doctor browser, start to end | ~2.5 min |
-| `consulta-completa.mp4` | Booking → clinical history → side-by-side call while the notes are written and saved → prescription → patient opens the PDF | ~3 min (170–190 s) |
+| File | Size | Content | Length |
+|------|------|---------|--------|
+| `paciente.mp4` | 1280x720 | Patient browser, start to end | ~3 min |
+| `medico.mp4` | 1280x720 | Doctor browser, start to end | ~2.5 min |
+| `consulta-completa.mp4` | 1280x720 | Booking → clinical history → side-by-side call while the notes are written and saved → prescription → patient opens the PDF | ~3 min (170–190 s) |
+| `paciente-celular.mp4` | 1080x1920 | The patient on her phone: booking → video call → leaves the room → «Mis Recetas» → receta PDF, inside a phone mockup with the Medinex logo and captions below the phone | ~2 min 15 s |
 
 `demo/output/` and `demo/.cache/` are git-ignored.
 
@@ -41,7 +42,9 @@ npm run demo:record    # seed, start LiveKit + server.js + Vite, record, compose
 | `npm run demo:livekit` | Starts a local LiveKit server in dev mode (`ws://127.0.0.1:7880`) |
 | `npm run demo:record` | Seeds, records both browsers, then composes the MP4s |
 | `npm run demo:compose` | Re-composes the MP4s from the last raw recording |
-| `npm run demo:test` | Guard and seed unit tests (no database needed) |
+| `npm run demo:record:mobile` | Seeds, records the patient on an emulated phone (the doctor still runs on desktop to drive the call), then composes `paciente-celular.mp4` |
+| `npm run demo:compose:mobile` | Re-composes `paciente-celular.mp4` from the last phone recording |
+| `npm run demo:test` | Guard, seed, timing and phone-layout unit tests (no database needed) |
 
 `demo:record` runs on its own: it seeds, starts LiveKit, `server.js` and Vite,
 and stops them at the end, also on failure or Ctrl+C. Ports 3000 and 3001 must
@@ -55,6 +58,30 @@ few seconds over a take, so each role's marks are scaled by its video length
 over the time until its context closed (`videoClock`). The blank first seconds
 of the PDF viewer are skipped (`PDF_PAINT_MS`). The final length varies a few
 seconds between runs.
+
+## Phone video
+
+`demo:record:mobile` is independent of `demo:record`: it writes
+`demo/output/raw-mobile/` and `timeline-mobile.json`, so each video can be
+re-recorded on its own. The doctor's desktop recording from this run is kept
+in `raw-mobile/` for debugging only.
+
+- The patient uses Playwright's `Pixel 7` profile (412x839, touch, mobile user
+  agent) and `tap()`; a grey touch dot replaces the click ripple.
+- Captions are not drawn in the app: `caption()` logs timed cues
+  (`installCaptions(context, label, { overlay: false })`), and
+  `compose-mobile.mjs` draws them below the phone (`captionTrack` maps them
+  onto the cuts). The background, frame, logo (`src/logo_medinex.jpeg`) and
+  caption images are rendered with Playwright from `demo/lib/phone-stage.mjs`.
+- Playwright records the page in CSS pixels, so the 412x839 screen is scaled
+  up (lanczos) to 612x1250 inside the mockup (`phoneLayout`).
+- The waiting time before the doctor joins and her paperwork after the call
+  are cut out. Calls longer than 75 s are cut in the middle.
+- An emulated phone shows a PDF on a 980 px desktop layout (tiny, with a
+  thumbnail sidebar). The recorder serves a small viewer page on the local
+  storage origin (`/__demo/receta`, Playwright only, not the app) that embeds
+  the PDF fitted to the phone width.
+- Set `DEMO_SHOTS_DIR=<dir>` to save a screenshot of each step.
 
 ## Use your own clips
 

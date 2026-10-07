@@ -25,7 +25,7 @@ const FONT = ['C:/Windows/Fonts/segoeuib.ttf', 'C:/Windows/Fonts/arialbd.ttf', '
 );
 const fontOpt = FONT ? `fontfile='${FONT.replace(':', '\\:')}':` : '';
 
-function durationMs(file) {
+export function durationMs(file) {
   const res = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { encoding: 'utf8' });
   const seconds = Number.parseFloat(res.stdout);
   if (res.status !== 0 || !Number.isFinite(seconds)) throw new Error(`[compose] ffprobe could not read ${file}: ${res.stderr || res.error?.message}`);
@@ -47,7 +47,7 @@ export function videoClock(role, videoMs) {
   return (name) => (role.marks[name] - role.start) * scale;
 }
 
-function ffmpeg(args) {
+export function ffmpeg(args) {
   const res = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { encoding: 'utf8' });
   if (res.status !== 0) throw new Error(`[compose] ffmpeg failed: ${res.stderr || res.error?.message}`);
 }

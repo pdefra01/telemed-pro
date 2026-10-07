@@ -3,7 +3,9 @@
 
 // Runs inside the page on every document load. The current caption lives in
 // sessionStorage so it survives the full reload the app does after booking.
-function overlayScript({ roleLabel }) {
+// With the overlay off (phone recordings) only the tap indicator is
+// installed; the compose step draws the captions below the phone instead.
+function overlayScript({ roleLabel, overlay, touch }) {
   const KEY = '__demoCaption';
   const STYLE = `
     #__demo-caption { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
@@ -19,15 +21,26 @@ function overlayScript({ roleLabel }) {
       margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid #34d399;
       background: rgba(52, 211, 153, 0.25); animation: __demo-ripple .7s ease-out forwards; }
     @keyframes __demo-ripple { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+    .__demo-click.touch { width: 46px; height: 46px; margin: -23px 0 0 -23px; border: 2px solid rgba(255, 255, 255, 0.9);
+      background: rgba(100, 116, 139, 0.55); box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.18);
+      animation: __demo-touch .65s ease-out forwards; }
+    @keyframes __demo-touch { 0% { transform: scale(.7); opacity: .95; } 45% { transform: scale(1); opacity: .9; }
+      100% { transform: scale(1.25); opacity: 0; } }
   `;
+
+  function ensureStyle() {
+    if (document.getElementById('__demo-style')) return;
+    const style = document.createElement('style');
+    style.id = '__demo-style';
+    style.textContent = STYLE;
+    document.head.appendChild(style);
+  }
 
   function ensure() {
     if (!document.body) return null;
+    ensureStyle();
     let box = document.getElementById('__demo-caption');
     if (!box) {
-      const style = document.createElement('style');
-      style.textContent = STYLE;
-      document.head.appendChild(style);
       box = document.createElement('div');
       box.id = '__demo-caption';
       box.innerHTML = '<span class="tag"></span><span class="text"></span>';
@@ -64,6 +77,7 @@ function overlayScript({ roleLabel }) {
   };
 
   const restore = () => {
+    if (!overlay) return;
     render(...saved());
     // React may replace body children on mount; keep the overlay attached.
     new MutationObserver(() => {
@@ -76,8 +90,9 @@ function overlayScript({ roleLabel }) {
   window.addEventListener(
     'pointerdown',
     (event) => {
+      ensureStyle();
       const dot = document.createElement('div');
-      dot.className = '__demo-click';
+      dot.className = touch ? '__demo-click touch' : '__demo-click';
       dot.style.left = `${event.clientX}px`;
       dot.style.top = `${event.clientY}px`;
       document.body.appendChild(dot);
@@ -87,9 +102,23 @@ function overlayScript({ roleLabel }) {
   );
 }
 
-/** Installs the overlay on every page the context opens. */
-export async function installCaptions(context, roleLabel) {
-  await context.addInitScript(overlayScript, { roleLabel });
+// Contexts whose captions are logged as timed cues instead of drawn in the page.
+const cueLogs = new WeakMap();
+
+/**
+ * Installs the overlay on every page the context opens. With
+ * { overlay: false } caption() logs { at, text } cues instead (read them with
+ * captionCues) for the compose step; { touch: true } shows a finger-tap
+ * indicator instead of the click ripple.
+ */
+export async function installCaptions(context, roleLabel, { overlay = true, touch = false } = {}) {
+  if (!overlay) cueLogs.set(context, []);
+  await context.addInitScript(overlayScript, { roleLabel, overlay, touch });
+}
+
+/** The cues logged for a context installed with { overlay: false }. */
+export function captionCues(context) {
+  return cueLogs.get(context) ?? [];
 }
 
 // Long enough to read a one-line caption on video without pausing it.
@@ -100,7 +129,9 @@ export const READ_MS = 3800;
  * { position: 'top' } when the bottom of the screen holds the action shown.
  */
 export async function caption(page, text, holdMs = READ_MS, { position = 'bottom' } = {}) {
-  await page.evaluate(([t, pos]) => window.__demoCaption?.(t, pos), [text, position]);
+  const cues = cueLogs.get(page.context());
+  if (cues) cues.push({ at: Date.now(), text });
+  else await page.evaluate(([t, pos]) => window.__demoCaption?.(t, pos), [text, position]);
   if (holdMs > 0) await page.waitForTimeout(holdMs);
 }
 

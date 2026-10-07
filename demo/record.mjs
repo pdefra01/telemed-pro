@@ -27,15 +27,15 @@ const repoRoot = join(here, '..');
 const CACHE_DIR = join(here, '.cache');
 export const OUTPUT_DIR = join(here, 'output');
 export const RAW_DIR = join(OUTPUT_DIR, 'raw');
-const LOG_DIR = join(OUTPUT_DIR, 'logs');
+export const LOG_DIR = join(OUTPUT_DIR, 'logs');
 
 const APP_PORT = 3000;
 const API_PORT = 3001;
-const BASE_URL = `http://127.0.0.1:${APP_PORT}`;
+export const BASE_URL = `http://127.0.0.1:${APP_PORT}`;
 const SIZE = { width: 1280, height: 720 };
 const CALL_HOLD_MS = 10_000; // per caption of plain call footage, before the doctor writes notes
 // Extra delay per key for pressSequentially; slowMo already slows every key.
-const TYPE = { slow: 90, normal: 30, fast: 10 };
+export const TYPE = { slow: 90, normal: 30, fast: 10 };
 
 // Demo-only: WhatsApp (WAHA) is not configured locally, so the server answers
 // 503 whatsapp_disabled. The doctor's browser gets the success response the
@@ -57,7 +57,7 @@ const PRESCRIPTION = [
   { med: 'Loratadina 10 mg', dose: '1 comp. por día por 5 días' },
 ];
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function isUp(url) {
   try {
@@ -95,7 +95,7 @@ function spawnLogged(name, args, env) {
 }
 
 /** Children of the local stack, with an idempotent stop() usable at any time. */
-function createStack() {
+export function createStack() {
   const children = [];
   let stopped = false;
   return {
@@ -114,7 +114,7 @@ function createStack() {
  * Ctrl+C during startup stops it too. Every child started so far is stopped
  * if any later step fails.
  */
-async function startStack(status, stack) {
+export async function startStack(status, stack) {
   const env = buildAppEnv(status);
   for (const key of ['VITE_SUPABASE_URL', 'SUPABASE_URL', 'VITE_LIVEKIT_URL', 'PUBLIC_APP_URL']) {
     assertLocalUrl(key, env[key]);
@@ -149,10 +149,14 @@ async function startStack(status, stack) {
   }
 }
 
-/** One Chromium process per role, each with its own fake camera clip. */
-// The headless shell has no PDF viewer (a PDF becomes a download); the full
-// Chromium in new headless mode renders it, so the patient uses that one.
-async function openRole(role, roleLabel, timeline, { channel } = {}) {
+/**
+ * One Chromium process per role, each with its own fake camera clip.
+ * The headless shell has no PDF viewer (a PDF becomes a download); the full
+ * Chromium in new headless mode renders it, so the patient uses that one.
+ * `contextOptions` overrides the desktop context (e.g. phone emulation) and
+ * `captions` is passed to installCaptions (e.g. cues instead of an overlay).
+ */
+export async function openRole(role, roleLabel, timeline, { channel, rawDir = RAW_DIR, videoSize = SIZE, contextOptions = {}, captions } = {}) {
   const browser = await chromium.launch({
     channel,
     headless: true,
@@ -167,12 +171,13 @@ async function openRole(role, roleLabel, timeline, { channel } = {}) {
   });
   const context = await browser.newContext({
     viewport: SIZE,
-    recordVideo: { dir: join(RAW_DIR, role), size: SIZE },
+    recordVideo: { dir: join(rawDir, role), size: videoSize },
     permissions: ['camera', 'microphone'],
     locale: 'es-AR',
     timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ...contextOptions,
   });
-  await installCaptions(context, roleLabel);
+  await installCaptions(context, roleLabel, captions);
 
   // Safety net: any request that leaves this machine for Supabase fails the run.
   const leaks = [];
@@ -193,7 +198,7 @@ async function openRole(role, roleLabel, timeline, { channel } = {}) {
   const assertNoLeaks = () => {
     if (leaks.length) throw new Error(`[record] ${role} tried to reach a remote backend: ${leaks[0]}`);
   };
-  return { role, browser, context, page, mark, assertNoLeaks };
+  return { role, rawDir, browser, context, page, mark, assertNoLeaks };
 }
 
 async function bothVideosPlaying(page) {
@@ -290,7 +295,7 @@ async function reviewHistory(page) {
   await page.waitForTimeout(600);
 }
 
-async function doctorAttends(doctor, patient) {
+export async function doctorAttends(doctor, patient) {
   const { page, mark, context } = doctor;
   doctor.whatsappMocked = 0;
   await context.route(WHATSAPP_ROUTE, (route) => {
@@ -426,10 +431,10 @@ async function patientSeesPrescription({ page, mark }, apiUrl) {
   mark('end');
 }
 
-async function closeRole(handle) {
+export async function closeRole(handle) {
   if (!handle) return null;
   const video = handle.page.video();
-  const target = join(RAW_DIR, `${handle.role}.webm`);
+  const target = join(handle.rawDir, `${handle.role}.webm`);
   try {
     // The video ends when its context closes: compose.mjs uses this mark to
     // correct the drift between the video clock and the wall-clock marks.
@@ -448,7 +453,7 @@ async function closeRole(handle) {
   }
 }
 
-async function screenshotOnError(handle) {
+export async function screenshotOnError(handle) {
   if (!handle) return;
   await handle.page.screenshot({ path: join(LOG_DIR, `error-${handle.role}.png`) }).catch(() => {});
 }
