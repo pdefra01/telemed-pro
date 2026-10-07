@@ -55,6 +55,19 @@ data. Never against production.
     fix: Playwright `page.route` fulfills that call with success; no app change.
   Route: delegated direct (writer trigger: record/compose/seed/README).
 
+- [x] T4 Stretch `consulta-completa.mp4` to ~3 min with real content, not
+  slower pauses (user choice 2026-10-06): doctor reviews the patient's
+  Historia Clínica before the call (seed a prior consultation), a longer call
+  where she writes the evolution while talking, and the patient opens the
+  receta PDF at the end (fix the `kong:8000` signed URL for local playback).
+  Route: delegated direct (writer: record/compose/seed).
+
+- [ ] T5 Patient mobile video (user request 2026-10-06): patient flow
+  (book → call → receta) recorded with Playwright mobile emulation (touch,
+  phone viewport), composed vertical 9:16 (1080x1920) with a phone mockup
+  centered on a Medinex-branded background (dark navy + teal, logo on top,
+  captions below the phone). Starts after T4 (same recorder files).
+
 ## Route
 - Delegated direct (writer; multi-file, needs iterative runs).
 - T1: delegated direct (writer trigger: 5+ non-trivial files; resumed after a
@@ -161,6 +174,34 @@ data. Never against production.
     never clicks it); caption slightly overlaps "CONFIRMAR TURNO"; brief blank
     patient dashboard load.
 
+- T4 done (delegated direct; writer interrupted once by an API session limit
+  and resumed with intact state). Commit `201742c` feat(demo): stretch the
+  demo to three minutes with history, evolution and receta PDF.
+  - Seed `priorConsultations(now)`: 2 prior completed visits (pharyngitis ~5
+    months ago, annual checkup ~6 weeks ago). Doctor opens "Expediente" →
+    Historia clínica; types and saves evolution ("Sincronización completa")
+    during the side-by-side call; fills "Reco."; patient opens the receta PDF
+    in full headless Chromium (`channel: 'chromium'`) with `kong:8000` URL
+    rewritten by `toLocalStorageUrl` (refuses non-local hosts). Compose scales
+    cuts by per-role video clock drift.
+  - Evidence (2026-10-06): `demo:test` 12/12 (parent re-ran: 12/12; RED for
+    `toLocalStorageUrl` and `priorConsultations`; `videoClock` test written
+    after code). `demo:record` 8 runs (7 ok; run 5 failed on stale dashboard,
+    fixed with one reload). Final: consulta-completa 176.6 s, paciente 180.9 s,
+    medico 144.6 s, 1280x720. DB: appointment completed, 1 record, 1
+    prescription + PDF; 2 prior visits intact. Parent checked `t4-final-171.jpg`
+    (receta PDF rendered).
+  - Teardown: supabase stop, docker desktop stop, wsl --shutdown; parent
+    confirmed 0 heavy processes.
+  - Review: medium, `slice_budget_reached` (437 lines); consent granted;
+    reliability lens approved and acknowledged (lineage
+    `review-bd252d77112cb8cc`). Boundary → `201742c`.
+  - Non-blocking follow-ups: WARNING `demo/seed-local.mjs:176-189` prior
+    records cleanup; SUGGESTION `demo/compose.mjs:124-132` cuts untested. App
+    cosmetic (out of scope): Historia clínica shows raw ISO dates and English
+    visit types ("CHECKUP") in `DoctorDashboard.tsx`.
+
 ## Next step
-- All tasks done. Optional: "Dra." title (app change), push/PR (user decision). Memory is tight (7.5 GB RAM): start local Supabase and LiveKit
+- T5 patient mobile 9:16 video. Optional: "Dra." title (app change),
+  push/PR (user decision). Memory is tight (7.5 GB RAM): start local Supabase and LiveKit
   only when recording; tear down after, including Docker/WSL.
