@@ -191,6 +191,22 @@ describe('DoctorDashboard - Consultation History', () => {
     expect(screen.getByText('Vicodin')).toBeInTheDocument();
   });
 
+  it('shows appointment dates as dd/mm/yyyy in the history list and summary modal', async () => {
+    vi.mocked(appointmentRepository.getDoctorAppointments).mockResolvedValue(mockAppointments);
+    vi.mocked(medicalRecordRepository.getRecordByAppointmentId).mockResolvedValue(mockRecord);
+    vi.mocked(prescriptionRepository.getPrescriptionByAppointmentId).mockResolvedValue(mockPrescription);
+
+    renderComponent();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Historial/i }));
+    expect(await screen.findByText('10/05/2024')).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Ver Resumen/i }));
+    await screen.findByRole('heading', { name: /Resumen/i });
+    expect((await screen.findAllByText('10/05/2024')).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/2024-05-10/)).not.toBeInTheDocument();
+  });
+
   it('shows empty messages when record or prescription are missing', async () => {
     vi.mocked(appointmentRepository.getDoctorAppointments).mockResolvedValue(mockAppointments);
     vi.mocked(medicalRecordRepository.getRecordByAppointmentId).mockResolvedValue(null);

@@ -18,6 +18,7 @@ import { notificationRepository } from '../../repositories/NotificationRepositor
 import { getBranding } from '../../config/branding';
 import { isSafeExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 import { toLocalDateStr, addDaysLocal } from '../../utils/localDate';
+import { formatHistoryDate } from '../../utils/clinicalHistoryFormat';
 import { formatDoctorName } from '../../utils/doctorName';
 
 interface Props {
@@ -445,7 +446,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                             <div className="flex-shrink-0 relative">
                                                 <div className="w-24 h-24 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-[0_10px_30px_rgba(16,185,129,0.3)] group-hover/card:scale-105 transition-transform duration-500">
                                                     <span className="text-3xl font-bold leading-none tracking-tighter">{dayStr}</span>
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest mt-1">{appt.date}</span>
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest mt-1">{formatHistoryDate(appt.date)}</span>
                                                 </div>
                                                 <div className="absolute -top-2 -right-2 w-5 h-5 bg-emerald-500 rounded-full border-4 border-slate-900 animate-pulse"></div>
                                             </div>
@@ -521,7 +522,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                         <p className="font-bold text-white group-hover:text-emerald-400 transition-colors uppercase tracking-tight">{record.diagnosis}</p>
                                                         <p className="text-xs text-slate-500 font-bold mt-1 tracking-wider uppercase">{formatDoctorName(record.doctorTitle, record.doctorName)}</p>
                                                     </div>
-                                                    <span className="text-[9px] font-bold text-slate-500 bg-white/5 px-3 py-1 rounded-full uppercase tracking-widest border border-white/5">{record.date}</span>
+                                                    <span className="text-[9px] font-bold text-slate-500 bg-white/5 px-3 py-1 rounded-full uppercase tracking-widest border border-white/5">{formatHistoryDate(record.date)}</span>
                                                 </div>
                                                 <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed italic">"{record.notes}"</p>
                                             </div>
@@ -559,7 +560,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                 <div className="flex-1">
                                                     <p className="font-bold text-white text-base tracking-tight">{formatDoctorName(prescription.doctorTitle, prescription.doctorName)}</p>
                                                     <p className="text-[10px] text-slate-500 font-bold mb-3 uppercase tracking-widest">{prescription.medications.length} Medicamentos</p>
-                                                    <span className="text-[9px] font-bold text-teal-400 bg-teal-400/10 px-3 py-1 rounded-full uppercase tracking-widest border border-teal-400/10">{prescription.date}</span>
+                                                    <span className="text-[9px] font-bold text-teal-400 bg-teal-400/10 px-3 py-1 rounded-full uppercase tracking-widest border border-teal-400/10">{formatHistoryDate(prescription.date)}</span>
                                                 </div>
                                                 {prescription.pdfUrl ? (
                                                     <a 
