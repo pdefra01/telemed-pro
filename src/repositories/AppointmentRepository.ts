@@ -111,10 +111,11 @@ export class AppointmentRepository {
    * en la capa de servicio, no acá.
    */
   async getCompletedConsultationFeesByPeriod(period: string): Promise<(number | null)[]> {
+    // The period is a local calendar month: from 00:00 local on the 1st up to
+    // (not including) 00:00 local on the next month's 1st, sent as UTC instants.
     const [year, month] = period.split('-').map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
-    const startDate = `${period}-01T00:00:00.000Z`;
-    const endDate = `${period}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(new Date(year, month, 1).getTime() - 1).toISOString();
 
     const { data, error } = await supabase
       .from('appointments')
