@@ -40,6 +40,7 @@ import { supabase } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
 import { validateExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 import { formatDoctorName } from '../../utils/doctorName';
+import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../utils/clinicalHistoryFormat';
 import '../../styles/animations.css';
 const WHATSAPP_ERROR_MESSAGES: Record<string, string> = {
   invalid_phone: 'El paciente no tiene un teléfono válido cargado.',
@@ -1081,8 +1082,8 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                       patientRecords.map((record) => (
                         <div key={record.id} className="p-5 rounded-3xl bg-white/[0.03] border border-white/5 hover:border-teal-500/20 transition-all group">
                           <div className="flex items-center justify-between mb-3">
-                            <span className="text-[9px] font-bold text-teal-400 uppercase tracking-widest px-3 py-1 bg-teal-500/10 rounded-full">{record.date}</span>
-                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{record.type}</span>
+                            <span className="text-[9px] font-bold text-teal-400 uppercase tracking-widest px-3 py-1 bg-teal-500/10 rounded-full">{formatHistoryDateTime(record.date)}</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{visitTypeLabel(record.type)}</span>
                           </div>
                           <h4 className="font-bold text-white mb-2 leading-tight group-hover:text-teal-400 transition-colors">{record.diagnosis}</h4>
                           <p className="text-xs text-slate-400 line-clamp-3 italic mb-4">"{record.notes}"</p>
@@ -1109,7 +1110,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                                doc.type === 'imaging' ? <ImageIcon size={18} /> : 
                                <FileGeneric size={18} />}
                             </div>
-                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">{doc.date}</span>
+                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">{formatHistoryDate(doc.date)}</span>
                           </div>
                           <h4 className="font-bold text-white mb-1 leading-tight group-hover:text-teal-400 transition-colors">{doc.title}</h4>
                           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-4">
