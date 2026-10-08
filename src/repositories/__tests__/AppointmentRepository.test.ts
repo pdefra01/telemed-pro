@@ -209,9 +209,25 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
 
       expect(supabaseMock.from).toHaveBeenCalledWith('appointments');
       expect(supabaseMock.eq).toHaveBeenCalledWith('status', 'completed');
-      expect(supabaseMock.gte).toHaveBeenCalledWith('scheduled_at', '2026-07-01T00:00:00.000Z');
-      expect(supabaseMock.lte).toHaveBeenCalledWith('scheduled_at', '2026-07-31T23:59:59.999Z');
+      // The period is the local calendar month (UTC-3 in tests): it starts at
+      // 00:00 local on the 1st and ends right before 00:00 local on the next 1st.
+      expect(supabaseMock.gte).toHaveBeenCalledWith('scheduled_at', '2026-07-01T03:00:00.000Z');
+      expect(supabaseMock.lte).toHaveBeenCalledWith('scheduled_at', '2026-08-01T02:59:59.999Z');
       expect(fees).toEqual([2000, null]);
+    });
+
+    it('rolls a December period over into the next year', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.gte.mockReturnValue(supabaseMock);
+      supabaseMock.lte = vi.fn().mockResolvedValue({ data: [], error: null });
+
+      await appointmentRepository.getCompletedConsultationFeesByPeriod('2026-12');
+
+      expect(supabaseMock.gte).toHaveBeenCalledWith('scheduled_at', '2026-12-01T03:00:00.000Z');
+      expect(supabaseMock.lte).toHaveBeenCalledWith('scheduled_at', '2027-01-01T02:59:59.999Z');
     });
 
     it('returns 0 (not null) for a doctor with an explicit $0 consultation fee configured', async () => {
