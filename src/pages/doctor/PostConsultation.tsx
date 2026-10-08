@@ -39,6 +39,7 @@ import { prescriptionRepository } from '../../repositories/PrescriptionRepositor
 import { supabase } from '../../services/supabase';
 import { Button } from '../../components/ui/Button';
 import { validateExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
+import { formatDoctorName } from '../../utils/doctorName';
 import '../../styles/animations.css';
 const WHATSAPP_ERROR_MESSAGES: Record<string, string> = {
   invalid_phone: 'El paciente no tiene un teléfono válido cargado.',
@@ -1089,7 +1090,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                             <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-bold text-teal-500">
                               {record.doctorName?.charAt(0)}
                             </div>
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Dr. {record.doctorName?.split(' ').pop()}</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{formatDoctorName(record.doctorTitle, record.doctorName)}</span>
                           </div>
                         </div>
                       ))

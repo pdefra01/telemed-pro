@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PharmacyProduct, Prescription } from '../../types';
+import { formatDoctorName } from '../../utils/doctorName';
 import { pharmacyRepository } from '../../repositories/PharmacyRepository';
 import { pharmacyOrderRepository } from '../../repositories/PharmacyOrderRepository';
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
@@ -191,7 +192,7 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-xs font-semibold text-teal-400 bg-teal-500/10 px-2.5 py-1 rounded-md border border-teal-500/20">
-                      Emitida por Dr. {rx.doctorName}
+                      Emitida por {formatDoctorName(rx.doctorTitle, rx.doctorName)}
                     </span>
                     <span className="text-xs text-slate-400">{rx.date}</span>
                   </div>

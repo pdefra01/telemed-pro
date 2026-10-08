@@ -1,4 +1,8 @@
 import { supabase } from '../services/supabase';
+import { normalizeProfessionalTitle } from '../utils/doctorName';
+
+// The doctor's current title, joined from their profile (the row only stores the name).
+const SELECT_WITH_DOCTOR_TITLE = '*, doctor:profiles!doctor_id(professional_title)';
 import { Prescription } from '../types';
 
 export class PrescriptionRepository {
@@ -21,7 +25,7 @@ export class PrescriptionRepository {
         medications: recordData.medications,
         notes: recordData.notes
       }])
-      .select()
+      .select(SELECT_WITH_DOCTOR_TITLE)
       .single();
 
     if (error) throw error;
@@ -32,6 +36,7 @@ export class PrescriptionRepository {
       patientId: data.patient_id,
       doctorId: data.doctor_id,
       doctorName: data.doctor_name,
+      doctorTitle: normalizeProfessionalTitle(data.doctor?.professional_title),
       date: data.date,
       status: data.status,
       digitalSignature: data.digital_signature,
@@ -47,7 +52,7 @@ export class PrescriptionRepository {
   async getPrescriptionsByPatientId(patientId: string): Promise<Prescription[]> {
     const { data, error } = await supabase
       .from('prescriptions')
-      .select('*')
+      .select(SELECT_WITH_DOCTOR_TITLE)
       .eq('patient_id', patientId)
       .order('date', { ascending: false });
 
@@ -59,6 +64,7 @@ export class PrescriptionRepository {
       patientId: item.patient_id,
       doctorId: item.doctor_id,
       doctorName: item.doctor_name,
+      doctorTitle: normalizeProfessionalTitle(item.doctor?.professional_title),
       date: item.date,
       status: item.status,
       digitalSignature: item.digital_signature,
@@ -74,7 +80,7 @@ export class PrescriptionRepository {
   async getPrescriptionByAppointmentId(appointmentId: string): Promise<Prescription | null> {
     const { data, error } = await supabase
       .from('prescriptions')
-      .select('*')
+      .select(SELECT_WITH_DOCTOR_TITLE)
       .eq('appointment_id', appointmentId)
       .maybeSingle();
 
@@ -87,6 +93,7 @@ export class PrescriptionRepository {
       patientId: data.patient_id,
       doctorId: data.doctor_id,
       doctorName: data.doctor_name,
+      doctorTitle: normalizeProfessionalTitle(data.doctor?.professional_title),
       date: data.date,
       status: data.status,
       digitalSignature: data.digital_signature,

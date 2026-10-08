@@ -18,6 +18,7 @@ import { medicalRecordRepository } from '../repositories/MedicalRecordRepository
 import { useToast } from '../context/ToastContext';
 import { getBranding } from '../config/branding';
 import { formatHistoryDate } from '../utils/clinicalHistoryFormat';
+import { formatDoctorName } from '../utils/doctorName';
 import { 
   Save, 
   CheckCircle, 
@@ -237,7 +238,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                     <h1 className="text-sm sm:text-base font-bold text-white tracking-tight leading-none">
                       {isDoctor
                         ? (appointment?.patientName || 'Cargando Paciente...')
-                        : (appointment?.doctorName ? `Dr. ${appointment.doctorName}` : 'Cargando profesional...')}
+                        : (appointment?.doctorName ? formatDoctorName(appointment.doctorTitle, appointment.doctorName) : 'Cargando profesional...')}
                     </h1>
                     {!isDoctor && (
                       <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px] font-medium leading-none">
@@ -656,7 +657,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               </div>
               <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.4em] mb-3">Atención Profesional</p>
               <h3 className="text-2xl font-bold text-white tracking-tight">
-                {appointment?.doctorName ? `Dr. ${appointment.doctorName}` : 'Profesional Médico'}
+                {appointment?.doctorName ? formatDoctorName(appointment.doctorTitle, appointment.doctorName) : 'Profesional Médico'}
               </h3>
               <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-[0.2em]">
                 {appointment?.doctorSpecialty || 'Medicina General'}
@@ -819,7 +820,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                             </div>
                             <div>
                               <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Médico Tratante</p>
-                              <p className="text-[10px] font-bold text-white uppercase">{record.doctorName || 'Dr. Desconocido'}</p>
+                              <p className="text-[10px] font-bold text-white uppercase">{formatDoctorName(record.doctorTitle, record.doctorName) || 'Profesional desconocido'}</p>
                             </div>
                           </div>
                           <Button variant="outline" className="h-10 px-4 text-[9px] border-white/10 hover:bg-white/5 tracking-widest font-bold uppercase">

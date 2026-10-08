@@ -328,3 +328,25 @@ describe('PatientDashboard obra social prescription link', () => {
     expect(screen.queryByRole('link', { name: /Ver receta de obra social/i })).toBeNull();
   });
 });
+
+describe('PatientDashboard doctor title', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(doctorRepository.getSpecialties).mockResolvedValue([]);
+    vi.mocked(appointmentRepository.getPatientAppointments).mockResolvedValue([]);
+  });
+
+  it("shows each doctor's own title on records and prescriptions", async () => {
+    vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValue([
+      { id: 'mr-1', patientId: 'p1', date: '2026-06-01', diagnosis: 'Rinitis', notes: 'Control', doctorName: 'Lucía Fernández', doctorTitle: 'Dra.', type: 'consultation' },
+    ] as any);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([
+      { id: 'rx-1', patientId: 'p1', doctorName: 'Sergio Dib', medications: [], date: '2026-06-01', status: 'active', digitalSignature: '', expirationDate: '2026-07-01' },
+    ] as any);
+
+    renderWithRouter(<PatientDashboard user={MOCK_PATIENT} />);
+
+    expect(await screen.findByText('Dra. Lucía Fernández')).toBeDefined();
+    expect(await screen.findByText('Dr. Sergio Dib')).toBeDefined();
+  });
+});

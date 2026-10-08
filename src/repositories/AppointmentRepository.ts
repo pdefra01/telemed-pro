@@ -2,6 +2,7 @@ import { supabase } from '../services/supabase';
 import { Appointment } from '../types';
 import { generateUUID } from '../utils/uuid';
 import { toLocalDateStr } from '../utils/localDate';
+import { normalizeProfessionalTitle } from '../utils/doctorName';
 import { affiliateRepository } from './AffiliateRepository';
 
 export class AppointmentRepository {
@@ -31,7 +32,7 @@ export class AppointmentRepository {
       .from('appointments')
       .select(`
         *,
-        doctor:profiles!doctor_id(full_name)
+        doctor:profiles!doctor_id(full_name, professional_title)
       `)
       .eq('patient_id', patientId)
       .not('status', 'in', '(cancelled,no_show,completed)')
@@ -48,6 +49,7 @@ export class AppointmentRepository {
       patientName: "", // Se llena desde Auth/App context
       doctorId: row.doctor_id,
       doctorName: row.doctor?.full_name || "Doctor",
+      doctorTitle: normalizeProfessionalTitle(row.doctor?.professional_title),
       date: toLocalDateStr(new Date(row.scheduled_at)),
       time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       status: row.status,
@@ -324,7 +326,7 @@ export class AppointmentRepository {
       .select(`
         *,
         patient:profiles!patient_id(full_name),
-        doctor:profiles!doctor_id(full_name, specialty, license_number)
+        doctor:profiles!doctor_id(full_name, professional_title, specialty, license_number)
       `)
       .eq('id', appointmentId)
       .single();
@@ -341,6 +343,7 @@ export class AppointmentRepository {
       patientName: data.patient?.full_name || "Paciente",
       doctorId: data.doctor_id,
       doctorName: data.doctor?.full_name || "Doctor",
+      doctorTitle: normalizeProfessionalTitle(data.doctor?.professional_title),
       doctorSpecialty: data.doctor?.specialty || "",
       doctorLicense: data.doctor?.license_number || "",
       date: toLocalDateStr(new Date(data.scheduled_at)),

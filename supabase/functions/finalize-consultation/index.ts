@@ -2,6 +2,16 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { PDFDocument, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1'
 
+// Local copy of src/utils/doctorName.ts (edge functions cannot import from src):
+// a missing/unknown title reads as "Dr."; a title typed into the name is dropped.
+const LEADING_TITLE = /^(?:dr\/a|dra|dr)\.?\s+/i
+function formatDoctorName(title: unknown, fullName: string | null | undefined): string {
+  const name = String(fullName ?? '').trim().replace(LEADING_TITLE, '').trim()
+  if (!name || /^(?:dr\/a|dra|dr)\.?$/i.test(name)) return ''
+  const safeTitle = title === 'Dra.' ? 'Dra.' : 'Dr.'
+  return `${safeTitle} ${name.replace(/\s+/g, ' ')}`
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -48,14 +58,18 @@ serve(async (req) => {
       throw new Error('Turno no encontrado')
     }
 
-    // 2. Get Doctor Info (for the records)
+    // 2. Get Doctor Info (for the records). '*' instead of a column list so the
+    // function keeps working on a database without professional_title yet.
     const { data: doctor, error: docError } = await supabase
       .from('profiles')
-      .select('full_name, specialty, license_number')
+      .select('*')
       .eq('id', appointment.doctor_id)
       .single()
 
     if (docError) throw docError
+
+    const doctorDisplayName = formatDoctorName(doctor.professional_title, doctor.full_name)
+    const isFemaleTitle = doctorDisplayName.startsWith('Dra.')
 
     // 3. Create Medical Record
     const { error: recordError } = await supabase
@@ -124,7 +138,7 @@ serve(async (req) => {
       currentY -= 30
       page.drawText('DATOS DEL PROFESIONAL', { x: 50, y: currentY, size: 8, font: helveticaBold, color: primaryColor })
       currentY -= 15
-      page.drawText(`Dr/a: ${doctor.full_name}`, { x: 50, y: currentY, size: 11, font: helveticaFont, color: textColor })
+      page.drawText(`Nombre: ${doctorDisplayName}`, { x: 50, y: currentY, size: 11, font: helveticaFont, color: textColor })
       page.drawText(`Matrícula: ${doctor.license_number || 'En trámite'}`, { x: 300, y: currentY, size: 11, font: helveticaFont, color: textColor })
       page.drawText(`Especialidad: ${doctor.specialty || 'Clínica Médica'}`, { x: 50, y: currentY - 15, size: 10, font: helveticaFont, color: rgb(0.4, 0.4, 0.4) })
 
@@ -224,7 +238,7 @@ serve(async (req) => {
 
     // 4e. Mock WhatsApp API - Envío de receta y recomendaciones estructuradas (siempre se envía al finalizar)
     const patientPhone = appointment.patient.phone || "No especificado";
-    let messageBody = `¡Hola ${appointment.patient.full_name}! Tu consulta con el Dr. ${doctor.full_name} ha finalizado.\n\n` +
+    let messageBody = `¡Hola ${appointment.patient.full_name}! Tu consulta con ${isFemaleTitle ? 'la' : 'el'} ${doctorDisplayName} ha finalizado.\n\n` +
       `📝 Diagnóstico: ${diagnosis}\n` +
       `📌 Indicaciones: ${notes || 'Sin indicaciones adicionales.'}\n\n`;
     
@@ -249,7 +263,7 @@ serve(async (req) => {
     const notificationPayload = {
       user_id: appointment.patient_id,
       title: "Consulta Finalizada",
-      message: `El Dr. ${doctor.full_name} ha finalizado tu consulta. Ya podés revisar tu receta y resumen médico.`,
+      message: `${isFemaleTitle ? 'La' : 'El'} ${doctorDisplayName} ha finalizado tu consulta. Ya podés revisar tu receta y resumen médico.`,
       type: "success",
       link: pdfUrl || "/dashboard/medical-records"
     }
