@@ -58,5 +58,11 @@ element on screen and never cover status text with the self-view.
   - Caveat: doctor at phone width only checked by resizing a desktop session
     (notes panel open state is read once at mount).
 
+  - Review: medium, under_budget (94 lines); PR slice reviewed on user
+    consent: reliability lens approved and acknowledged (lineage
+    `review-5b8451ed20696054`). Suggestions only: VideoRoom.tsx:323 fixed
+    placeholder padding, :288 hidden connection status on phones, :223-224
+    sm band (640-1024 px) not verified.
+
 ## Next step
-- Review assess, push/PR (user decision).
+- Done; merged via PR (user decision 2026-10-08).
