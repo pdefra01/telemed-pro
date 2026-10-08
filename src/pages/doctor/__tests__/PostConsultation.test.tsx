@@ -487,4 +487,43 @@ describe('PostConsultation Page', () => {
       }
     );
   });
+
+  describe('patient vault (Bóveda Médica)', () => {
+    it('shows record and document dates on the local day and the visit type in Spanish', async () => {
+      (medicalRecordRepository.getRecordsByPatientId as any).mockResolvedValue([
+        {
+          id: 'rec-1',
+          patientId: 'patient-123',
+          doctorId: 'doctor-1',
+          doctorName: 'Lucía Fernández',
+          doctorTitle: 'Dra.',
+          date: '2026-08-26T19:30:00+00:00',
+          type: 'checkup',
+          diagnosis: 'Rinitis alérgica estacional',
+          notes: 'Control anual',
+        },
+      ]);
+      (medicalDocumentRepository.getDocumentsByPatientId as any).mockResolvedValue([
+        { id: 'doc-1', patientId: 'patient-123', title: 'Hemograma', type: 'lab_result', date: '2026-08-26', url: 'https://example.test/doc.pdf' },
+      ]);
+
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.click(screen.getByRole('button', { name: /Ver Bóveda Médica/i }));
+
+      await waitFor(() => expect(screen.getByText('26/08/2026 16:30')).toBeDefined());
+      expect(screen.getByText('Chequeo General')).toBeDefined();
+      expect(screen.queryByText('2026-08-26T19:30:00+00:00')).toBeNull();
+      expect(screen.queryByText('checkup')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: /Estudios/i }));
+      await waitFor(() => expect(screen.getByText('26/08/2026')).toBeDefined());
+      expect(screen.queryByText('2026-08-26')).toBeNull();
+    });
+  });
 });
