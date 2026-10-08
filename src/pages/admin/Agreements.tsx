@@ -264,7 +264,7 @@ const Agreements: React.FC = () => {
                 <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 group-hover:scale-110 transition-transform duration-300">
                   <Building2 size={24} />
                 </div>
-                <div className="flex space-x-2 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <div className="flex space-x-2">
                   <button 
                     onClick={() => document.getElementById(`import-${agreement.id}`)?.click()}
                     className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-emerald-400 transition-colors"

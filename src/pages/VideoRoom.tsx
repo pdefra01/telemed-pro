@@ -550,7 +550,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                         <div key={idx} className="group relative bg-slate-900/60 border border-blue-500/10 hover:border-blue-500/30 rounded-xl p-3 transition-all">
                           <button
                             onClick={() => setPrescription(prescription.filter((_, i) => i !== idx))}
-                            className="absolute top-2 right-2 w-6 h-6 bg-red-500/10 hover:bg-red-500/30 border border-red-500/20 rounded-lg flex items-center justify-center text-red-400 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500/10 hover:bg-red-500/30 border border-red-500/20 rounded-lg flex items-center justify-center text-red-400 transition-all"
                           >
                             <Trash2 size={10} />
                           </button>
