@@ -17,6 +17,7 @@ import { appointmentRepository } from '../repositories/AppointmentRepository';
 import { medicalRecordRepository } from '../repositories/MedicalRecordRepository';
 import { useToast } from '../context/ToastContext';
 import { getBranding } from '../config/branding';
+import { formatHistoryDate } from '../utils/clinicalHistoryFormat';
 import { 
   Save, 
   CheckCircle, 
@@ -799,7 +800,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1 block">Consulta Finalizada</span>
-                            <h4 className="text-lg font-bold text-white tracking-tight">{new Date(record.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}</h4>
+                            <h4 className="text-lg font-bold text-white tracking-tight">{formatHistoryDate(record.date)}</h4>
                           </div>
                           <div className="px-3 py-1.5 bg-slate-900 border border-white/10 rounded-xl">
                             <span className="text-[10px] font-mono text-slate-400 uppercase">{record.id.substring(0, 8)}</span>

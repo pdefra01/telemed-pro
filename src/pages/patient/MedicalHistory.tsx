@@ -15,6 +15,7 @@ import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRep
 import { familyMemberRepository } from '../../repositories/FamilyMemberRepository';
 import { verifyPrescription } from '../../utils/crypto';
 import { isSafeExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
+import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../utils/clinicalHistoryFormat';
 
 interface Props {
     user: Patient;
@@ -232,7 +233,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 <div className="flex items-center bg-white/5 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner self-start md:self-auto flex-shrink-0">
                                                     <Calendar size={16} className="text-emerald-500 mr-2 sm:mr-3" />
                                                     <span className="text-slate-200 text-xs sm:text-sm font-bold uppercase tracking-widest">
-                                                        {new Date(record.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        {formatHistoryDate(record.date)}
                                                     </span>
                                                 </div>
                                             </div>
@@ -249,7 +250,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                         record.type === 'consultation' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
                                                         record.type === 'checkup' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
                                                     }`}>
-                                                        {record.type === 'consultation' ? 'Consulta Médica' : record.type === 'checkup' ? 'Chequeo General' : 'Atención Urgente'}
+                                                        {visitTypeLabel(record.type)}
                                                     </span>
                                                     {record.attachments && record.attachments.length > 0 && (
                                                         <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-white/5 px-2.5 sm:px-3 py-1.5 rounded-full border border-white/5">
@@ -327,7 +328,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                     </div>
                                                     <div className="space-y-1 text-right">
                                                         <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Fecha Emisión</p>
-                                                        <p className="text-xs sm:text-sm font-bold text-slate-200">{new Date(presc.date).toLocaleDateString('es-AR')}</p>
+                                                        <p className="text-xs sm:text-sm font-bold text-slate-200">{formatHistoryDate(presc.date)}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -336,7 +337,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                                 <Button
                                                     onClick={() => {
                                                         const medsInfo = presc.medications.map(m => `- ${m.name}: ${m.instructions} (Cant: ${m.quantity})`).join('\n');
-                                                        handleDownload(`Receta-${presc.id.slice(0,8)}.txt`, `RECETA DIGITAL MEDINEX\n\nMedicamentos:\n${medsInfo}\n\nMédico: ${presc.doctorName}\nFecha: ${presc.date}\nFirma: ${presc.digitalSignature}`);
+                                                        handleDownload(`Receta-${presc.id.slice(0,8)}.txt`, `RECETA DIGITAL MEDINEX\n\nMedicamentos:\n${medsInfo}\n\nMédico: ${presc.doctorName}\nFecha: ${formatHistoryDate(presc.date)}\nFirma: ${presc.digitalSignature}`);
                                                     }}
                                                     className="flex-1 bg-white/5 border-white/10 text-white hover:bg-emerald-600 hover:border-emerald-500 h-11 sm:h-12 rounded-xl sm:rounded-2xl transition-all font-bold text-[10px] sm:text-xs uppercase tracking-widest"
                                                     icon={<Download size={14} />}
@@ -430,7 +431,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                             <h4 className="font-bold text-white text-lg sm:text-xl leading-tight mb-4 flex-1 group-hover:text-emerald-400 transition-colors tracking-tight relative z-10 truncate">{doc.title}</h4>
                                             
                                             <div className="flex flex-wrap items-center text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] gap-x-4 sm:gap-x-6 gap-y-2 mb-6 sm:mb-8 pt-4 sm:pt-6 border-t border-white/5 relative z-10">
-                                                <span className="flex items-center"><Calendar size={12} className="mr-1.5 sm:mr-2 text-emerald-500" /> {new Date(doc.date).toLocaleDateString()}</span>
+                                                <span className="flex items-center"><Calendar size={12} className="mr-1.5 sm:mr-2 text-emerald-500" /> {formatHistoryDate(doc.date)}</span>
                                                 <span className="flex items-center"><Hash size={12} className="mr-1.5 sm:mr-2 text-emerald-500" /> {doc.type.split('_')[0]}</span>
                                             </div>
 
@@ -498,7 +499,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Fecha de Atención</span>
                                 <p className="text-white font-semibold flex items-center gap-2 text-base">
                                     <Calendar size={18} className="text-emerald-400" />
-                                    {selectedRecord.date}
+                                    {formatHistoryDateTime(selectedRecord.date)}
                                 </p>
                             </div>
                         </div>
@@ -529,7 +530,7 @@ const MedicalHistory: React.FC<Props> = ({ user }) => {
                         <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-white/10">
                             <Button
                                 variant="outline"
-                                onClick={() => handleDownload(`reporte_${selectedRecord.id.slice(0, 8)}.txt`, `REPORTE MÉDICO COMPLETO\n========================\nID Turno: ${selectedRecord.id}\nFecha: ${selectedRecord.date}\nPaciente: ${user.name}\nMédico: ${selectedRecord.doctorName}\nDiagnóstico: ${selectedRecord.diagnosis}\n\nEvolución y Notas:\n${selectedRecord.notes}`)}
+                                onClick={() => handleDownload(`reporte_${selectedRecord.id.slice(0, 8)}.txt`, `REPORTE MÉDICO COMPLETO\n========================\nID Turno: ${selectedRecord.id}\nFecha: ${formatHistoryDateTime(selectedRecord.date)}\nPaciente: ${user.name}\nMédico: ${selectedRecord.doctorName}\nDiagnóstico: ${selectedRecord.diagnosis}\n\nEvolución y Notas:\n${selectedRecord.notes}`)}
                                 className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 font-bold py-3 px-6 rounded-xl"
                             >
                                 <Download size={16} className="mr-2" /> Descargar Informe

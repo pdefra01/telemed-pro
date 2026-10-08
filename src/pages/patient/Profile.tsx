@@ -15,6 +15,7 @@ import { familyMemberRepository } from '../../repositories/FamilyMemberRepositor
 import { ContactValidationModal } from '../../components/ui/ContactValidationModal';
 
 import { getBranding } from '../../config/branding';
+import { toLocalDateStr } from '../../utils/localDate';
 
 interface ProfileProps {
   user: Patient;
@@ -404,7 +405,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
                       type="date"
                       value={birthDate}
                       onChange={(e) => setBirthDate(e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
+                      max={toLocalDateStr()}
                       className="w-full pl-11 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all [color-scheme:dark]"
                     />
                   </div>
@@ -515,7 +516,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
                       type="date"
                       value={newMemberBirthDate}
                       onChange={(e) => setNewMemberBirthDate(e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
+                      max={toLocalDateStr()}
                       className="w-full pl-10 pr-4 py-3 bg-slate-950/60 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all [color-scheme:dark] font-medium"
                     />
                   </div>

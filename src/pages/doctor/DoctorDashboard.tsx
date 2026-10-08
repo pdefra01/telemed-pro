@@ -15,6 +15,7 @@ import { FileText as FileIcon, File as FileGeneric, Image as ImageIcon, FlaskCon
 import { supabase } from '../../services/supabase';
 import { playArrivalSound } from '../../utils/audio';
 import { toLocalDateStr } from '../../utils/localDate';
+import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../utils/clinicalHistoryFormat';
 
 interface Props {
     user: Doctor;
@@ -824,8 +825,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                         {patientRecords.map((record) => (
                                             <article key={record.id} className="bg-white/[0.03] rounded-xl p-4 sm:p-5 border border-white/5">
                                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
-                                                    <span className="text-xs font-bold text-slate-300">{record.date}</span>
-                                                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{record.type}</span>
+                                                    <span className="text-xs font-bold text-slate-300">{formatHistoryDateTime(record.date)}</span>
+                                                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{visitTypeLabel(record.type)}</span>
                                                     <span className="text-xs text-slate-500 sm:ml-auto">Dr. {record.doctorName?.split(' ').pop()}</span>
                                                 </div>
                                                 <h4 className="font-bold text-white text-lg leading-snug">{record.diagnosis}</h4>
@@ -854,7 +855,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                 <div className="min-w-0 flex-1">
                                                     <h4 className="text-sm font-bold text-white truncate">{doc.title}</h4>
                                                     <p className="text-xs text-slate-500">
-                                                        {doc.type === 'lab_result' ? 'Laboratorio' : doc.type === 'imaging' ? 'Imagen' : 'Documentación'} · {doc.date}
+                                                        {doc.type === 'lab_result' ? 'Laboratorio' : doc.type === 'imaging' ? 'Imagen' : 'Documentación'} · {formatHistoryDate(doc.date)}
                                                     </p>
                                                 </div>
                                                 <a
