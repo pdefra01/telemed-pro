@@ -220,20 +220,20 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
         </div>
 
         {/* HUD OVERLAY */}
-        <div className="absolute top-0 left-0 right-0 z-30 p-8 flex justify-between items-start pointer-events-none">
-          <div className="flex items-center gap-4 pointer-events-auto">
-            <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-4 rounded-3xl flex items-center gap-4 shadow-2xl">
-              <div className={`w-12 h-12 ${isDoctor ? 'bg-teal-500/20 text-teal-400' : 'bg-emerald-500/20 text-emerald-400'} rounded-2xl flex items-center justify-center relative border border-white/5`}>
+        <div className="absolute top-0 left-0 right-0 z-30 p-3 sm:p-8 flex justify-between items-start gap-2 sm:gap-0 pointer-events-none">
+          <div className="flex flex-col items-start sm:flex-row sm:items-center gap-2 sm:gap-4 min-w-0 sm:min-w-[auto] pointer-events-auto">
+            <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-3 sm:p-4 rounded-2xl sm:rounded-3xl flex items-center gap-3 sm:gap-4 shadow-2xl max-w-full min-w-0 sm:max-w-none sm:min-w-[auto]">
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 ${isDoctor ? 'bg-teal-500/20 text-teal-400' : 'bg-emerald-500/20 text-emerald-400'} rounded-2xl flex items-center justify-center relative border border-white/5`}>
                 <Video size={24} />
                 <span className={`absolute -top-1 -right-1 w-3.5 h-3.5 ${isMicrophoneEnabled ? 'bg-emerald-500' : 'bg-red-500'} rounded-full border-[3px] border-slate-900 animate-pulse`}></span>
               </div>
-              <div>
-                <p className={`text-[9px] font-bold ${isDoctor ? 'text-teal-500' : 'text-emerald-500'} uppercase tracking-[0.25em] leading-none mb-2`}>
+              <div className="min-w-0 sm:min-w-[auto]">
+                <p className={`text-[9px] font-bold ${isDoctor ? 'text-teal-500' : 'text-emerald-500'} uppercase tracking-[0.15em] sm:tracking-[0.25em] leading-none mb-2`}>
                   {isDoctor ? 'MÉDICO EN LÍNEA' : 'PROFESIONAL EN LÍNEA'}
                 </p>
                 <div className="flex items-center gap-3">
-                  <div>
-                    <h1 className="text-base font-bold text-white tracking-tight leading-none">
+                  <div className="min-w-0 sm:min-w-[auto]">
+                    <h1 className="text-sm sm:text-base font-bold text-white tracking-tight leading-none">
                       {isDoctor
                         ? (appointment?.patientName || 'Cargando Paciente...')
                         : (appointment?.doctorName ? `Dr. ${appointment.doctorName}` : 'Cargando profesional...')}
@@ -267,7 +267,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
 
 
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
                     <Shield size={10} className="text-emerald-500" />
                     <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest">SECURE</span>
                   </div>
@@ -275,7 +275,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               </div>
             </div>
 
-            <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 px-6 py-4 rounded-3xl flex items-center gap-4 shadow-2xl">
+            <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 px-4 py-2.5 sm:px-6 sm:py-4 rounded-2xl sm:rounded-3xl flex items-center gap-3 sm:gap-4 shadow-2xl">
               <Clock size={16} className="text-slate-500" />
               <div className="flex flex-col">
                 <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">DURACIÓN</span>
@@ -284,8 +284,8 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3 pointer-events-auto">
-            <div className="bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-4 rounded-3xl flex items-center gap-8 shadow-2xl">
+          <div className="flex items-center gap-3 shrink-0 sm:shrink pointer-events-auto">
+            <div className="hidden sm:flex bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-4 rounded-3xl items-center gap-8 shadow-2xl">
               <div className="flex flex-col items-center">
                 <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">CONEXIÓN</span>
                 <div className="flex items-center gap-2">
@@ -303,7 +303,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               </div>
             </div>
 
-            <button onClick={() => navigate(-1)} className="w-14 h-16 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white backdrop-blur-3xl border border-red-500/20 rounded-[1.5rem] flex items-center justify-center transition-all duration-500 group shadow-2xl">
+            <button onClick={() => navigate(-1)} className="w-11 h-11 sm:w-14 sm:h-16 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white backdrop-blur-3xl border border-red-500/20 rounded-2xl sm:rounded-[1.5rem] flex items-center justify-center transition-all duration-500 group shadow-2xl">
               <X size={24} className="group-hover:rotate-90 transition-transform duration-500" />
             </button>
           </div>
@@ -320,7 +320,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               <VideoTrack trackRef={remoteVideoTrack} className="w-full h-full object-cover transition-all duration-500" />
             ) : (
               // PLACEHOLDER: Si el otro participante aún no se conecta
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 p-8 text-center select-none">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 px-6 pt-36 pb-60 sm:p-8 text-center select-none">
                 <div className="relative mb-6">
                   <div className="w-24 h-24 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20 shadow-2xl relative">
                     <UserIcon className="text-emerald-400 animate-pulse" size={40} />
@@ -338,7 +338,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
 
             {/* 2. LOCAL VIDEO MINIATURE (Vos - Flotante y responsiva) */}
             {isCameraEnabled && localVideoTrack ? (
-              <div className="absolute bottom-24 right-4 sm:bottom-28 sm:right-6 w-28 h-40 sm:w-36 sm:h-48 rounded-2xl overflow-hidden border border-white/20 shadow-2xl z-20 transition-all duration-300 hover:scale-105 active:scale-95 bg-slate-900">
+              <div className="absolute bottom-24 right-4 sm:bottom-28 sm:right-6 w-24 h-32 sm:w-36 sm:h-48 rounded-2xl overflow-hidden border border-white/20 shadow-2xl z-20 transition-all duration-300 hover:scale-105 active:scale-95 bg-slate-900">
                 <VideoTrack trackRef={localVideoTrack} className="w-full h-full object-cover" />
                 <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md border border-white/10 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
@@ -347,7 +347,7 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
               </div>
             ) : (
               // Si la cámara local está desactivada
-              <div className="absolute bottom-24 right-4 sm:bottom-28 sm:right-6 w-28 h-40 sm:w-36 sm:h-48 rounded-2xl border border-dashed border-white/10 bg-slate-900/60 backdrop-blur-md z-20 flex flex-col items-center justify-center gap-2">
+              <div className="absolute bottom-24 right-4 sm:bottom-28 sm:right-6 w-24 h-32 sm:w-36 sm:h-48 rounded-2xl border border-dashed border-white/10 bg-slate-900/60 backdrop-blur-md z-20 flex flex-col items-center justify-center gap-2">
                 <div className="p-2 bg-red-500/20 text-red-400 rounded-xl border border-red-500/20">
                   <VideoOff size={16} />
                 </div>
