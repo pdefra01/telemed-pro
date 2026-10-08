@@ -740,7 +740,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                 <h4 className="text-xl font-bold text-white tracking-tight">{apt.patientName}</h4>
                                                 <div className="flex items-center gap-6 mt-2">
                                                     <span className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                                        <Calendar size={12} className="text-blue-500" /> {apt.date}
+                                                        <Calendar size={12} className="text-blue-500" /> {formatHistoryDate(apt.date)}
                                                     </span>
                                                     <span className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                                         <Clock size={12} className="text-blue-500" /> {apt.time}
@@ -891,7 +891,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             <div className="flex flex-wrap items-baseline gap-x-3 min-w-0" title={`Protocolo ${selectedAppointment.id}`}>
                                 <h3 className="font-bold text-xl text-white tracking-tight">Resumen clínico</h3>
                                 <span className="font-bold text-xl text-emerald-400 tracking-tight truncate">{selectedAppointment.patientName}</span>
-                                <span className="text-xs text-slate-500">{selectedAppointment.date}</span>
+                                <span className="text-xs text-slate-500">{formatHistoryDate(selectedAppointment.date)}</span>
                             </div>
                             <button
                                 onClick={() => setSelectedAppointment(null)}

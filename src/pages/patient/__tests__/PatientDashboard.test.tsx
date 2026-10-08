@@ -350,3 +350,31 @@ describe('PatientDashboard doctor title', () => {
     expect(await screen.findByText('Dr. Sergio Dib')).toBeDefined();
   });
 });
+
+describe('PatientDashboard date display', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(doctorRepository.getSpecialties).mockResolvedValue([]);
+  });
+
+  it('shows appointment, record and prescription dates as dd/mm/yyyy on the local day', async () => {
+    vi.mocked(appointmentRepository.getPatientAppointments).mockResolvedValue([
+      { id: 'appt-1', patientId: 'p1', doctorId: 'd1', doctorName: 'Lucía Fernández', date: '2026-10-07', time: '21:00', status: 'confirmed', type: 'video' },
+    ] as any);
+    vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValue([
+      { id: 'mr-1', patientId: 'p1', date: '2026-08-26T19:30:00+00:00', diagnosis: 'Rinitis', notes: 'Control', doctorName: 'Lucía Fernández', doctorTitle: 'Dra.', type: 'checkup' },
+    ] as any);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([
+      { id: 'rx-1', patientId: 'p1', doctorName: 'Sergio Dib', medications: [], date: '2026-06-01', status: 'active', digitalSignature: '', expirationDate: '2026-07-01' },
+    ] as any);
+
+    renderWithRouter(<PatientDashboard user={MOCK_PATIENT} />);
+
+    expect(await screen.findByText('07/10/2026')).toBeDefined();
+    expect(await screen.findByText('26/08/2026')).toBeDefined();
+    expect(await screen.findByText('01/06/2026')).toBeDefined();
+    expect(screen.queryByText('2026-10-07')).toBeNull();
+    expect(screen.queryByText('2026-08-26T19:30:00+00:00')).toBeNull();
+    expect(screen.queryByText('2026-06-01')).toBeNull();
+  });
+});
