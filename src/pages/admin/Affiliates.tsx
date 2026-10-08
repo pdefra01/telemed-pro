@@ -510,7 +510,7 @@ const Affiliates: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-8 py-5 text-right">
-                      <div className="flex justify-end space-x-3 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300">
+                      <div className="flex justify-end space-x-3">
                         {!patient.isActive && patient.planStatus !== 'suspended' && (
                           <button 
                             onClick={() => handleActivate(patient.id)} 
