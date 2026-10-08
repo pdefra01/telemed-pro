@@ -606,7 +606,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogin }) => {
                     onClick={() => handleRemoveMember(member.id)}
                     disabled={removingId === member.id}
                     title="Eliminar familiar"
-                    className="ml-4 w-9 h-9 flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 flex-shrink-0 disabled:opacity-40"
+                    className="ml-4 w-9 h-9 flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 flex-shrink-0 disabled:opacity-40"
                   >
                     {removingId === member.id ? (
                       <Loader2 size={14} className="animate-spin" />

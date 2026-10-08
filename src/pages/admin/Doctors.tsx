@@ -286,7 +286,7 @@ const Doctors: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-8 py-5 text-right">
-                    <div className="flex justify-end space-x-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="flex justify-end space-x-3 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300">
                       <button
                         onClick={() => navigate(`/doctor-attendance?doctorId=${doc.id}`)}
                         className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5"
