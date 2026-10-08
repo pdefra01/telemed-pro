@@ -9,7 +9,8 @@ import {
 import { useToast } from '../../context/ToastContext';
 import { doctorRepository } from '../../repositories/DoctorRepository';
 import { supabase } from '../../services/supabase';
-import { Doctor, DaySchedule } from '../../types';
+import { Doctor, DaySchedule, ProfessionalTitle } from '../../types';
+import { PROFESSIONAL_TITLES, DEFAULT_PROFESSIONAL_TITLE, formatDoctorName } from '../../utils/doctorName';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 
 // Glass Card for Table Container
@@ -32,6 +33,7 @@ const Doctors: React.FC = () => {
   const [resetPasswordDoc, setResetPasswordDoc] = useState<Doctor | null>(null);
   const [activeTab, setActiveTab] = useState<'personal' | 'accreditation' | 'contract' | 'agenda'>('personal');
   const [formData, setFormData] = useState({
+    professionalTitle: DEFAULT_PROFESSIONAL_TITLE as ProfessionalTitle,
     name: '',
     email: '',
     specialty: 'Clínica Médica',
@@ -84,6 +86,7 @@ const Doctors: React.FC = () => {
     setEditId(null);
     setActiveTab('personal');
     setFormData({
+      professionalTitle: DEFAULT_PROFESSIONAL_TITLE,
       name: '',
       email: '',
       specialty: 'Clínica Médica',
@@ -108,10 +111,10 @@ const Doctors: React.FC = () => {
     try {
       if (editId) {
         await doctorRepository.updateDoctor(editId, formData);
-        toast(`Ficha del Dr. ${formData.name} actualizada`, "success");
+        toast(`Ficha de ${formatDoctorName(formData.professionalTitle, formData.name)} actualizada`, "success");
       } else {
         await doctorRepository.createDoctor(formData);
-        toast(`Ficha del Dr. ${formData.name} registrada`, "success");
+        toast(`Ficha de ${formatDoctorName(formData.professionalTitle, formData.name)} registrada`, "success");
       }
       setShowModal(false);
       loadDoctors();
@@ -127,6 +130,7 @@ const Doctors: React.FC = () => {
     setEditId(doctor.id);
     setActiveTab('personal');
     setFormData({
+      professionalTitle: doctor.professionalTitle || DEFAULT_PROFESSIONAL_TITLE,
       name: doctor.name || '',
       email: doctor.email || '',
       specialty: doctor.specialty || 'Clínica Médica',
@@ -376,15 +380,30 @@ const Doctors: React.FC = () => {
               {/* TAB 1: DATOS PERSONALES */}
               {activeTab === 'personal' && (
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Nombre y Apellido Completo</label>
-                    <input
-                      type="text" required
-                      placeholder="Ej: Dr. Alejandro Magno"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
-                      value={formData.name}
-                      onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    />
+                  <div className="grid grid-cols-[7rem_1fr] gap-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="doctor-professional-title" className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Título</label>
+                      <select
+                        id="doctor-professional-title"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors appearance-none"
+                        value={formData.professionalTitle}
+                        onChange={e => setFormData({ ...formData, professionalTitle: e.target.value as ProfessionalTitle })}
+                      >
+                        {PROFESSIONAL_TITLES.map(title => (
+                          <option key={title} value={title} className="bg-[#0f172a]">{title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Nombre y Apellido Completo</label>
+                      <input
+                        type="text" required
+                        placeholder="Ej: Alejandro Magno"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-3.5 text-white outline-none focus:border-emerald-500/50 transition-colors"
+                        value={formData.name}
+                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

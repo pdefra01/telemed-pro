@@ -13,6 +13,7 @@ export const DEMO = {
   doctor: {
     email: 'lucia.fernandez.demo@example.com',
     password: 'DemoMedinex2026!',
+    professionalTitle: 'Dra.',
     firstName: 'Lucía',
     lastName: 'Fernández',
     specialty: 'Clínica Médica',
@@ -131,9 +132,9 @@ export async function seedLocal(status = readLocalSupabaseStatus(repoRoot)) {
       `update public.profiles set
          role = 'doctor', first_name = $2, last_name = $3, specialty = $4,
          license_number = $5, availability = $6::jsonb, is_active = true,
-         is_verified = true, rating = 4.9
+         is_verified = true, rating = 4.9, professional_title = $7
        where id = $1`,
-      [doctorId, doctor.firstName, doctor.lastName, doctor.specialty, doctor.licenseNumber, JSON.stringify(availabilityAround(new Date()))]
+      [doctorId, doctor.firstName, doctor.lastName, doctor.specialty, doctor.licenseNumber, JSON.stringify(availabilityAround(new Date())), doctor.professionalTitle]
     );
     expectOneRow(doctorUpdate, 'doctor');
 

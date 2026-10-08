@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import { Doctor, DaySchedule } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { normalizeProfessionalTitle } from '../utils/doctorName';
 import { authRepository } from './AuthRepository';
 
 export class DoctorRepository {
@@ -143,7 +144,8 @@ export class DoctorRepository {
       .from('profiles')
       .update({ 
         specialty: data.specialty || 'Clínica Médica', 
-        availability: data.availability || [] 
+        availability: data.availability || [],
+        professional_title: normalizeProfessionalTitle(data.professionalTitle)
       })
       .eq('id', json.id);
 
@@ -167,6 +169,7 @@ export class DoctorRepository {
   async updateDoctor(id: string, data: Partial<Doctor>): Promise<Doctor> {
     const profileData: any = {};
     if (data.name !== undefined) profileData.full_name = data.name;
+    if (data.professionalTitle !== undefined) profileData.professional_title = normalizeProfessionalTitle(data.professionalTitle);
     if (data.email !== undefined) profileData.email = data.email;
     if (data.specialty !== undefined) profileData.specialty = data.specialty;
     if (data.availability !== undefined) profileData.availability = data.availability;
@@ -236,6 +239,7 @@ export class DoctorRepository {
     return {
       id: row.id,
       name: row.full_name,
+      professionalTitle: normalizeProfessionalTitle(row.professional_title),
       email: row.email || '',
       role: 'doctor',
       specialty: row.specialty || 'General',

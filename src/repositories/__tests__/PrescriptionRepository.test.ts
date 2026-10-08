@@ -48,6 +48,22 @@ describe('PrescriptionRepository (TDD)', () => {
     });
   });
 
+  describe('doctor title', () => {
+    it("joins the doctor's current professional title and falls back to Dr.", async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.maybeSingle
+        .mockResolvedValueOnce({ data: { id: 'rx-1', doctor_name: 'Lucía Fernández', doctor: { professional_title: 'Dra.' } }, error: null })
+        .mockResolvedValueOnce({ data: { id: 'rx-2', doctor_name: 'Sergio Dib', doctor: null }, error: null });
+
+      const first = await repository.getPrescriptionByAppointmentId('app-1');
+      const second = await repository.getPrescriptionByAppointmentId('app-2');
+
+      expect(supabaseMock.select).toHaveBeenCalledWith('*, doctor:profiles!doctor_id(professional_title)');
+      expect(first?.doctorTitle).toBe('Dra.');
+      expect(second?.doctorTitle).toBe('Dr.');
+    });
+  });
+
   describe('createPrescription', () => {
     it('should insert a new prescription into Supabase', async () => {
       const newPrescriptionData = {

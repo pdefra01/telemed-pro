@@ -16,6 +16,7 @@ import { supabase } from '../../services/supabase';
 import { playArrivalSound } from '../../utils/audio';
 import { toLocalDateStr } from '../../utils/localDate';
 import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../utils/clinicalHistoryFormat';
+import { formatDoctorName } from '../../utils/doctorName';
 
 interface Props {
     user: Doctor;
@@ -827,7 +828,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
                                                     <span className="text-xs font-bold text-slate-300">{formatHistoryDateTime(record.date)}</span>
                                                     <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{visitTypeLabel(record.type)}</span>
-                                                    <span className="text-xs text-slate-500 sm:ml-auto">Dr. {record.doctorName?.split(' ').pop()}</span>
+                                                    <span className="text-xs text-slate-500 sm:ml-auto">{formatDoctorName(record.doctorTitle, record.doctorName)}</span>
                                                 </div>
                                                 <h4 className="font-bold text-white text-lg leading-snug">{record.diagnosis}</h4>
                                                 {record.notes && (

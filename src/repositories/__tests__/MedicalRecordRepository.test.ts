@@ -45,6 +45,19 @@ describe('MedicalRecordRepository (TDD)', () => {
       expect(supabaseMock.eq).toHaveBeenCalledWith('appointment_id', 'app-1');
     });
 
+    it("joins the doctor's current professional title", async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.maybeSingle.mockResolvedValue({
+        data: { id: 'mr-1', doctor_name: 'Lucía Fernández', doctor: { professional_title: 'Dra.' } },
+        error: null,
+      });
+
+      const record = await repository.getRecordByAppointmentId('app-1');
+
+      expect(supabaseMock.select).toHaveBeenCalledWith('*, doctor:profiles!doctor_id(professional_title)');
+      expect(record?.doctorTitle).toBe('Dra.');
+    });
+
     it('should return null if no record is found', async () => {
       const supabaseMock = supabase as any;
       supabaseMock.maybeSingle.mockResolvedValue({ data: null, error: null });

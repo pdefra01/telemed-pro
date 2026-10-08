@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   normalizeArgentinePhone,
   buildPrescriptionMessage,
+  buildIndicationsMessage,
+  buildExternalPrescriptionMessage,
+  formatDoctorName,
   buildPaymentLinkMessage,
   createWahaClient,
   sendPrescriptionViaWhatsApp,
@@ -33,6 +36,39 @@ describe('normalizeArgentinePhone', () => {
 
   it('keeps a valid non-Argentine international number as digits', () => {
     expect(normalizeArgentinePhone('+598 99 123 456')).toBe('59899123456');
+  });
+});
+
+describe('formatDoctorName (server)', () => {
+  it.each([
+    ['Dra.', 'Lucía Fernández', 'Dra. Lucía Fernández'],
+    ['Dr.', 'Sergio Dib', 'Dr. Sergio Dib'],
+    [undefined, 'Sergio Dib', 'Dr. Sergio Dib'],
+    ['Lic.', 'Sergio Dib', 'Dr. Sergio Dib'],
+    ['Dra.', 'Dr. Lucía Fernández', 'Dra. Lucía Fernández'],
+    ['Dra.', 'Dr/a Ana Ruiz', 'Dra. Ana Ruiz'],
+    ['Dr.', 'Drago Pérez', 'Dr. Drago Pérez'],
+    ['Dra.', '', ''],
+  ])('formats (%s, %s) as %s', (title, name, expected) => {
+    expect(formatDoctorName(title, name)).toBe(expected);
+  });
+});
+
+describe('doctor title in WhatsApp messages', () => {
+  it('uses "la Dra." for a female professional', () => {
+    expect(buildPrescriptionMessage({ doctorName: 'Lucía Fernández', doctorTitle: 'Dra.' })).toContain(
+      'tu consulta con la Dra. Lucía Fernández.'
+    );
+    expect(
+      buildExternalPrescriptionMessage({ doctorName: 'Lucía Fernández', doctorTitle: 'Dra.', url: 'https://x.example' })
+    ).toContain('tu consulta con la Dra. Lucía Fernández.');
+    expect(buildIndicationsMessage({ doctorName: 'Lucía Fernández', doctorTitle: 'Dra.', indications: 'Reposo' })).toContain(
+      'Indicaciones de tu consulta con Dra. Lucía Fernández:'
+    );
+  });
+
+  it('keeps "el Dr." when the title is missing', () => {
+    expect(buildPrescriptionMessage({ doctorName: 'Sergio Dib' })).toContain('tu consulta con el Dr. Sergio Dib.');
   });
 });
 
@@ -295,6 +331,7 @@ describe('sendPrescriptionViaWhatsApp', () => {
   function createSupabaseStub({
     prescription = PRESCRIPTION,
     patient = PATIENT,
+    doctor = null,
     lastSent = null,
     lastDelivery = null,
     followInserts = false,
@@ -306,13 +343,15 @@ describe('sendPrescriptionViaWhatsApp', () => {
     let failuresLeft = prescriptionSelectFailures;
     const from = (table) => {
       let onlySent = false;
+      let idFilter = null;
       const chain = {
         select: (columns) => {
           if (table === 'prescriptions') prescriptionSelects.push(columns);
           return chain;
         },
-        eq: (column) => {
+        eq: (column, value) => {
           if (column === 'status') onlySent = true;
+          if (column === 'id') idFilter = value;
           return chain;
         },
         order: () => chain,
@@ -325,7 +364,10 @@ describe('sendPrescriptionViaWhatsApp', () => {
             }
             return { data: prescription, error: null };
           }
-          if (table === 'profiles') return { data: patient, error: null };
+          if (table === 'profiles') {
+            if (prescription && idFilter === prescription.doctor_id) return { data: doctor, error: null };
+            return { data: patient, error: null };
+          }
           if (table === 'prescription_deliveries') {
             const latest = followInserts && inserts.length ? inserts[inserts.length - 1] : lastDelivery;
             return { data: onlySent ? lastSent : latest, error: null };
@@ -388,6 +430,21 @@ describe('sendPrescriptionViaWhatsApp', () => {
     expect(inserts).toEqual([
       expect.objectContaining({ prescription_id: 'rx-1', status: 'sent', requested_by: 'doc-1' }),
     ]);
+  });
+
+  it("names the doctor with their own title in the caption and indications", async () => {
+    const { ctx, waha } = setup({
+      db: {
+        prescription: { ...PRESCRIPTION, doctor_name: 'Lucía Fernández', notes: 'Reposo 48 horas' },
+        doctor: { professional_title: 'Dra.' },
+      },
+    });
+
+    const result = await run(ctx);
+
+    expect(result.status).toBe(200);
+    expect(waha.sendFile.mock.calls[0][0].caption).toContain('con la Dra. Lucía Fernández.');
+    expect(waha.sendText.mock.calls[0][0].text).toContain('con Dra. Lucía Fernández:');
   });
 
   it('mints a fresh signed URL from a legacy row that only has pdf_url', async () => {

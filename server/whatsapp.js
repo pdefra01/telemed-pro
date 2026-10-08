@@ -54,13 +54,32 @@ export function normalizeArgentinePhone(raw) {
   return national ? `549${national}` : null;
 }
 
+// Server copy of src/utils/doctorName.ts (the server cannot import from src):
+// a missing/unknown title reads as "Dr."; a title typed into the name is dropped.
+const PROFESSIONAL_TITLES = ['Dr.', 'Dra.'];
+const LEADING_TITLE = /^(?:dr\/a|dra|dr)\.?\s+/i;
+
+export function formatDoctorName(title, fullName) {
+  const name = String(fullName ?? '').trim().replace(LEADING_TITLE, '').trim();
+  if (!name || /^(?:dr\/a|dra|dr)\.?$/i.test(name)) return '';
+  const safeTitle = PROFESSIONAL_TITLES.includes(title) ? title : 'Dr.';
+  return `${safeTitle} ${name.replace(/\s+/g, ' ')}`;
+}
+
+/** "el Dr. X" / "la Dra. X", or the neutral "tu médico" when there is no name. */
+function doctorWithArticle(doctorTitle, doctorName) {
+  const formatted = formatDoctorName(doctorTitle, doctorName);
+  if (!formatted) return 'tu médico';
+  return `${formatted.startsWith('Dra.') ? 'la' : 'el'} ${formatted}`;
+}
+
 /**
  * Generic, link-free message that accompanies the prescription PDF. The PDF is
  * attached, so the text carries no URL, and it never includes phone numbers.
  */
-export function buildPrescriptionMessage({ patientName, doctorName } = {}) {
+export function buildPrescriptionMessage({ patientName, doctorName, doctorTitle } = {}) {
   const greeting = patientName ? `Hola ${patientName},` : 'Hola,';
-  const doctor = doctorName ? `el Dr. ${doctorName}` : 'tu médico';
+  const doctor = doctorWithArticle(doctorTitle, doctorName);
   return (
     `${greeting} te enviamos la receta electrónica de tu consulta con ${doctor}.\n\n` +
     'La encontrás adjunta en este mensaje. Si tenés alguna consulta, respondé por la plataforma.'
@@ -163,17 +182,17 @@ function extractUsableIndications(notes) {
 }
 
 /** Text message carrying the doctor's non-medication indications. */
-export function buildIndicationsMessage({ doctorName, indications } = {}) {
-  const doctor = doctorName ? `Dr. ${doctorName}` : 'tu médico';
+export function buildIndicationsMessage({ doctorName, doctorTitle, indications } = {}) {
+  const doctor = formatDoctorName(doctorTitle, doctorName) || 'tu médico';
   return `Indicaciones de tu consulta con ${doctor}:
 
 ${indications}`;
 }
 
 /** Text message carrying the insurer (obra social) prescription download link. */
-export function buildExternalPrescriptionMessage({ patientName, doctorName, url } = {}) {
+export function buildExternalPrescriptionMessage({ patientName, doctorName, doctorTitle, url } = {}) {
   const greeting = patientName ? `Hola ${patientName},` : 'Hola,';
-  const doctor = doctorName ? `el Dr. ${doctorName}` : 'tu médico';
+  const doctor = doctorWithArticle(doctorTitle, doctorName);
   return (
     `${greeting} te enviamos la receta de tu obra social de tu consulta con ${doctor}.
 
@@ -278,6 +297,14 @@ export async function sendPrescriptionViaWhatsApp(
   const phone = normalizeArgentinePhone(patient?.phone);
   if (!phone) return fail(422, 'invalid_phone');
 
+  // Tolerant lookup: a missing row or column (migration not applied yet) reads as "Dr.".
+  const { data: doctorProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('professional_title')
+    .eq('id', prescription.doctor_id)
+    .maybeSingle();
+  const doctorTitle = doctorProfile?.professional_title;
+
   if (!(await waha.isSessionReady())) return fail(503, 'session_not_ready');
 
   let bytes = null;
@@ -304,6 +331,7 @@ export async function sendPrescriptionViaWhatsApp(
         text: buildExternalPrescriptionMessage({
           patientName: patient?.full_name,
           doctorName: prescription.doctor_name,
+          doctorTitle,
           url: externalUrl,
         }),
       });
@@ -316,6 +344,7 @@ export async function sendPrescriptionViaWhatsApp(
         caption: buildPrescriptionMessage({
           patientName: patient?.full_name,
           doctorName: prescription.doctor_name,
+          doctorTitle,
         }),
       });
       pdfSent = true;
@@ -323,7 +352,7 @@ export async function sendPrescriptionViaWhatsApp(
     if (indications) {
       await waha.sendText({
         phone,
-        text: buildIndicationsMessage({ doctorName: prescription.doctor_name, indications }),
+        text: buildIndicationsMessage({ doctorName: prescription.doctor_name, doctorTitle, indications }),
       });
     }
   } catch (err) {

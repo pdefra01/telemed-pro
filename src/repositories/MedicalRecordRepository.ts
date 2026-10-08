@@ -1,4 +1,8 @@
 import { supabase } from '../services/supabase';
+import { normalizeProfessionalTitle } from '../utils/doctorName';
+
+// The doctor's current title, joined from their profile (the row only stores the name).
+const SELECT_WITH_DOCTOR_TITLE = '*, doctor:profiles!doctor_id(professional_title)';
 import { MedicalRecord } from '../types';
 
 export class MedicalRecordRepository {
@@ -22,7 +26,7 @@ export class MedicalRecordRepository {
         type: recordData.type || 'consultation',
         attachments: recordData.attachments || []
       }])
-      .select()
+      .select(SELECT_WITH_DOCTOR_TITLE)
       .single();
 
     if (error) throw error;
@@ -33,6 +37,7 @@ export class MedicalRecordRepository {
       patientId: data.patient_id,
       doctorId: data.doctor_id,
       doctorName: data.doctor_name,
+      doctorTitle: normalizeProfessionalTitle(data.doctor?.professional_title),
       date: data.created_at,
       diagnosis: data.diagnosis,
       notes: data.notes,
@@ -44,7 +49,7 @@ export class MedicalRecordRepository {
   async getRecordsByPatientId(patientId: string): Promise<MedicalRecord[]> {
     const { data, error } = await supabase
       .from('medical_records')
-      .select('*')
+      .select(SELECT_WITH_DOCTOR_TITLE)
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false });
 
@@ -56,6 +61,7 @@ export class MedicalRecordRepository {
       patientId: item.patient_id,
       doctorId: item.doctor_id,
       doctorName: item.doctor_name,
+      doctorTitle: normalizeProfessionalTitle(item.doctor?.professional_title),
       date: item.created_at,
       diagnosis: item.diagnosis,
       notes: item.notes,
@@ -67,7 +73,7 @@ export class MedicalRecordRepository {
   async getRecordByAppointmentId(appointmentId: string): Promise<MedicalRecord | null> {
     const { data, error } = await supabase
       .from('medical_records')
-      .select('*')
+      .select(SELECT_WITH_DOCTOR_TITLE)
       .eq('appointment_id', appointmentId)
       .maybeSingle();
 
@@ -80,6 +86,7 @@ export class MedicalRecordRepository {
       patientId: data.patient_id,
       doctorId: data.doctor_id,
       doctorName: data.doctor_name,
+      doctorTitle: normalizeProfessionalTitle(data.doctor?.professional_title),
       date: data.created_at,
       diagnosis: data.diagnosis,
       notes: data.notes,

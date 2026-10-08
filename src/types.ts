@@ -63,8 +63,12 @@ export interface DaySchedule {
   slots: string[]; // e.g. ['09:00', '10:00']
 }
 
+/** Professional title shown before a doctor's name. DB: profiles.professional_title. */
+export type ProfessionalTitle = 'Dr.' | 'Dra.';
+
 export interface Doctor extends User {
   role: 'doctor';
+  professionalTitle?: ProfessionalTitle;
   specialty: string;
   rating: number; // Deprecated in favor of metrics.starRating but kept for compatibility
   reviewCount: number;
@@ -88,6 +92,8 @@ export interface Appointment {
   patientName: string;
   doctorId: string;
   doctorName: string;
+  /** The doctor's professional title; absent reads as "Dr.". */
+  doctorTitle?: ProfessionalTitle;
   date: string;
   time: string;
   status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
@@ -112,6 +118,8 @@ export interface MedicalRecord {
   diagnosis: string;
   notes: string;
   doctorName: string;
+  /** The doctor's professional title; absent reads as "Dr.". */
+  doctorTitle?: ProfessionalTitle;
   type: 'consultation' | 'emergency' | 'checkup';
   attachments?: string[];
 }
@@ -122,6 +130,8 @@ export interface Prescription {
   patientId: string;
   doctorId?: string;
   doctorName: string;
+  /** The doctor's professional title; absent reads as "Dr.". */
+  doctorTitle?: ProfessionalTitle;
   medications: {
     name: string;
     instructions: string;

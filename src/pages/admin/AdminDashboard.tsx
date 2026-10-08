@@ -12,6 +12,7 @@ import {
 import { dashboardRepository, AdminMetrics, WeeklyStat } from '../../repositories/DashboardRepository';
 import { doctorRepository } from '../../repositories/DoctorRepository';
 import { Doctor } from '../../types';
+import { formatDoctorName } from '../../utils/doctorName';
 import { supabase } from '../../services/supabase';
 
 const OCC_COLORS = {
@@ -178,7 +179,7 @@ const AdminDashboard: React.FC = () => {
           >
             <option value="global">🌐 Red Clínica Global (Todos los Médicos)</option>
             {doctorsList.map((doc) => (
-              <option key={doc.id} value={doc.id}>Dr. {doc.name} — {doc.specialty}</option>
+              <option key={doc.id} value={doc.id}>{formatDoctorName(doc.professionalTitle, doc.name)} — {doc.specialty}</option>
             ))}
           </select>
         </div>

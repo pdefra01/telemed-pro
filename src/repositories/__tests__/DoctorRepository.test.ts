@@ -10,6 +10,8 @@ vi.mock('../../services/supabase', () => ({
     eq: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
+    update: vi.fn().mockReturnThis(),
+    single: vi.fn(),
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-token' } } }),
     },
@@ -39,6 +41,55 @@ describe('DoctorRepository (TDD)', () => {
       expect(doctors[0].name).toBe('Dr. House');
       expect(supabaseMock.from).toHaveBeenCalledWith('profiles');
       expect(supabaseMock.eq).toHaveBeenCalledWith('specialty', 'Diagnóstico');
+    });
+  });
+
+  describe('professional title', () => {
+    it('maps professional_title and falls back to Dr. when missing or invalid', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.order.mockResolvedValue({
+        data: [
+          { id: 'd1', full_name: 'Lucía Fernández', professional_title: 'Dra.' },
+          { id: 'd2', full_name: 'Sergio Dib', professional_title: null },
+          { id: 'd3', full_name: 'Ana Ruiz', professional_title: 'Lic.' },
+        ],
+        error: null,
+      });
+
+      const doctors = await repository.getAllDoctors();
+
+      expect(doctors.map((d) => d.professionalTitle)).toEqual(['Dra.', 'Dr.', 'Dr.']);
+    });
+
+    it('persists the title on update', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.single.mockResolvedValue({
+        data: { id: 'd1', full_name: 'Lucía Fernández', professional_title: 'Dra.' },
+        error: null,
+      });
+
+      const doctor = await repository.updateDoctor('d1', { professionalTitle: 'Dra.' });
+
+      expect(supabaseMock.update).toHaveBeenCalledWith({ professional_title: 'Dra.' });
+      expect(doctor.professionalTitle).toBe('Dra.');
+    });
+
+    it('persists the title chosen on create', async () => {
+      const supabaseMock = supabase as any;
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'd1' }),
+      } as Response);
+      supabaseMock.single.mockResolvedValue({
+        data: { id: 'd1', full_name: 'Lucía Fernández', professional_title: 'Dra.' },
+        error: null,
+      });
+
+      await repository.createDoctor({
+        email: 'l@test.com', name: 'Lucía Fernández', specialty: 'Clínica Médica', password: 'pw', professionalTitle: 'Dra.',
+      });
+
+      expect(supabaseMock.update).toHaveBeenCalledWith(expect.objectContaining({ professional_title: 'Dra.' }));
     });
   });
 
