@@ -210,6 +210,40 @@ describe('DoctorDashboard - Consultation History', () => {
     expect(screen.getByText(/Sin prescripciones en esta consulta/i)).toBeInTheDocument();
   });
 
+  it('shows Historia clínica dates on the local day in dd/mm/yyyy and visit types in Spanish', async () => {
+    vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValue([
+      {
+        appointment_id: 'appt-queue-1',
+        patient_id: 'pat1',
+        patient_name: 'John Wilson',
+        patient_avatar: null,
+        patient_plan: null,
+        doctor_id: 'doc1',
+        scheduled_at: '2026-08-26T19:30:00Z',
+        status: 'confirmed',
+        consultation_metadata: {},
+      },
+    ] as any);
+    vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValue([
+      { ...mockRecord, date: '2026-08-26T19:30:00+00:00', type: 'checkup' },
+    ]);
+    vi.mocked(medicalDocumentRepository.getDocumentsByPatientId).mockResolvedValue([
+      { id: 'doc-1', patientId: 'pat1', name: 'Hemograma', type: 'lab_result', url: 'x', date: '2026-08-26' } as any,
+    ]);
+
+    renderComponent();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+
+    expect(await screen.findByText('26/08/2026 16:30')).toBeInTheDocument();
+    expect(screen.getByText('Chequeo General')).toBeInTheDocument();
+    expect(screen.queryByText('2026-08-26T19:30:00+00:00')).not.toBeInTheDocument();
+    expect(screen.queryByText('checkup')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Estudios/i }));
+    expect(await screen.findByText(/Laboratorio · 26\/08\/2026/)).toBeInTheDocument();
+  });
+
   it('never fabricates "Plan Global" in the queue when patient_plan is null (same fallback bug fixed elsewhere in AuthRepository)', async () => {
     vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValue([
       {
