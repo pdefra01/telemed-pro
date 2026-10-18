@@ -15,7 +15,8 @@ import {
 import { activateAdhesion } from './server/adhesionActivation.js';
 import { autoActivateAdhesion } from './server/adhesionAutoActivation.js';
 import { releaseStuckActivation } from './server/adhesionActivationRecovery.js';
-import { createActivateAdhesionLimiter } from './server/rateLimits.js';
+import { createActivateAdhesionLimiter, createDniUploadUrlsLimiter } from './server/rateLimits.js';
+import { createDniUploadUrls, cleanupOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS } from './server/adhesionDniPhotos.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
@@ -1185,6 +1186,19 @@ app.post('/api/adhesion/:id/activate', activateAdhesionLimiter, async (req, res)
 });
 
 /**
+ * POST /api/adhesion/dni-upload-urls
+ * Public (the adhesion form has no session). Reserves the adhesion request id
+ * and returns signed upload URLs for the titular's DNI photos, the only way
+ * to write to the private bucket (server/adhesionDniPhotos.js).
+ * Rate-limited per client IP (server/rateLimits.js).
+ */
+const dniUploadUrlsLimiter = createDniUploadUrlsLimiter();
+app.post('/api/adhesion/dni-upload-urls', dniUploadUrlsLimiter, async (req, res) => {
+  const { status, body } = await createDniUploadUrls({ supabaseAdmin }, req.body);
+  res.status(status).json(body);
+});
+
+/**
  * GET /api/advisor/stats
  * Devuelve indicadores de ventas y comisiones acumuladas del asesor comercial autenticado
  */
@@ -1543,3 +1557,15 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`📁 Sirviendo archivos estáticos desde: ${distPath}`);
   }
 });
+
+// Hourly sweep of DNI photo folders that never got an adhesion row.
+if (supabaseAdmin) {
+  const sweepOrphanDniPhotos = () =>
+    cleanupOrphanDniPhotos({ supabaseAdmin })
+      .then(({ removed }) => {
+        if (removed.length) console.log(`[dni-photos] Removed ${removed.length} orphan file(s).`);
+      })
+      .catch((err) => console.error('[dni-photos] Orphan cleanup failed:', err?.message || err));
+  sweepOrphanDniPhotos();
+  setInterval(sweepOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS).unref();
+}

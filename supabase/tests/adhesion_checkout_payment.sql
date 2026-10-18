@@ -4,6 +4,11 @@
 BEGIN;
 SELECT no_plan();
 
+-- The anon insert below references DNI photos; the trigger requires them to exist.
+INSERT INTO storage.objects (bucket_id, name) VALUES
+  ('adhesion-documents', 'c1c1c1c1-0000-0000-0000-000000000002/front.jpg'),
+  ('adhesion-documents', 'c1c1c1c1-0000-0000-0000-000000000002/back.jpg');
+
 SELECT has_column('public', 'adhesion_requests', 'mp_checkout_preference_id', 'has mp_checkout_preference_id');
 SELECT has_column('public', 'adhesion_requests', 'mp_payment_id', 'has mp_payment_id');
 SELECT has_column('public', 'adhesion_requests', 'payment_status', 'has payment_status');

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AdhesionRepository, AdhesionRequest, DniPhotos, DNI_PHOTOS_BUCKET, DNI_PHOTOS_REQUIRED_MESSAGE, DNI_PHOTOS_TYPE_MESSAGE } from '../AdhesionRepository';
+import { AdhesionRepository, AdhesionRequest, DniPhotos, DNI_PHOTOS_BUCKET, DNI_PHOTOS_REQUIRED_MESSAGE, DNI_PHOTOS_TYPE_MESSAGE, DNI_PHOTOS_UPLOAD_MESSAGE } from '../AdhesionRepository';
 import { supabase } from '../../services/supabase';
 
 vi.mock('../../services/supabase', () => {
@@ -44,6 +44,21 @@ const dniPhotos: DniPhotos = {
   back: new Blob(['back'], { type: 'image/png' })
 };
 
+const SERVER_ADHESION_ID = 'adhesion-1';
+
+/** Answers POST /api/adhesion/dni-upload-urls the way server/adhesionDniPhotos.js does. */
+const uploadUrlsResponse = (init?: RequestInit) => {
+  const { front, back } = JSON.parse(String(init?.body));
+  return {
+    ok: true,
+    json: async () => ({
+      adhesionRequestId: SERVER_ADHESION_ID,
+      front: { path: `${SERVER_ADHESION_ID}/front.${front}`, token: 'tok-front' },
+      back: { path: `${SERVER_ADHESION_ID}/back.${back}`, token: 'tok-back' }
+    })
+  } as Response;
+};
+
 describe('AdhesionRepository', () => {
   let repository: AdhesionRepository;
   let uploadMock: ReturnType<typeof vi.fn>;
@@ -51,51 +66,57 @@ describe('AdhesionRepository', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    // Default fetch: the upload-URL endpoint answers like the server, every
+    // other call (check-duplicates) passes. Tests queue their own answers
+    // with mockResolvedValueOnce, which run before this implementation.
+    vi.spyOn(window, 'fetch').mockImplementation(async (url, init) =>
+      url === '/api/adhesion/dni-upload-urls'
+        ? uploadUrlsResponse(init)
+        : ({ ok: true, json: async () => ({ ok: true }) } as Response)
+    );
     uploadMock = vi.fn().mockResolvedValue({ data: {}, error: null });
-    vi.mocked(supabase.storage.from).mockReturnValue({ upload: uploadMock } as any);
+    vi.mocked(supabase.storage.from).mockReturnValue({ uploadToSignedUrl: uploadMock } as any);
     repository = new AdhesionRepository();
   });
 
   describe('titular DNI photos', () => {
-    const stubDuplicateCheckOk = () =>
-      vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true }) } as Response);
-
-    it('uploads front and back to the private bucket under the row id and stores both paths', async () => {
-      vi.stubGlobal('crypto', { randomUUID: () => 'adhesion-dni-1' });
-      stubDuplicateCheckOk();
+    it('reserves the id server-side, uploads both sides with the signed tokens and stores both paths', async () => {
       const insertMock = vi.fn().mockResolvedValue({ error: null });
       vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
       const result = await repository.submitApplication(buildRequest(), dniPhotos);
 
-      expect(result).toEqual({ id: 'adhesion-dni-1' });
+      expect(result).toEqual({ id: SERVER_ADHESION_ID });
+      expect(window.fetch).toHaveBeenCalledWith('/api/adhesion/dni-upload-urls', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ front: 'jpg', back: 'png' })
+      }));
       expect(supabase.storage.from).toHaveBeenCalledWith(DNI_PHOTOS_BUCKET);
-      expect(uploadMock).toHaveBeenCalledWith('adhesion-dni-1/front.jpg', dniPhotos.front, { contentType: 'image/jpeg', upsert: false });
-      expect(uploadMock).toHaveBeenCalledWith('adhesion-dni-1/back.png', dniPhotos.back, { contentType: 'image/png', upsert: false });
+      expect(uploadMock).toHaveBeenCalledWith('adhesion-1/front.jpg', 'tok-front', dniPhotos.front, { contentType: 'image/jpeg' });
+      expect(uploadMock).toHaveBeenCalledWith('adhesion-1/back.png', 'tok-back', dniPhotos.back, { contentType: 'image/png' });
       expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({
-        id: 'adhesion-dni-1',
-        titular_dni_front_path: 'adhesion-dni-1/front.jpg',
-        titular_dni_back_path: 'adhesion-dni-1/back.png'
+        id: SERVER_ADHESION_ID,
+        titular_dni_front_path: 'adhesion-1/front.jpg',
+        titular_dni_back_path: 'adhesion-1/back.png'
       }));
       expect(uploadMock.mock.invocationCallOrder[1]).toBeLessThan(insertMock.mock.invocationCallOrder[0]);
     });
 
-    it('rejects a submission missing either side without uploading or inserting', async () => {
-      stubDuplicateCheckOk();
+    it('rejects a submission missing either side without requesting upload URLs or inserting', async () => {
       const insertMock = vi.fn().mockResolvedValue({ error: null });
       vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
-      await expect(repository.submitApplication(buildRequest())).rejects.toThrow(DNI_PHOTOS_REQUIRED_MESSAGE);
+      await expect(repository.submitApplication(buildRequest(), undefined as unknown as DniPhotos)).rejects.toThrow(DNI_PHOTOS_REQUIRED_MESSAGE);
       await expect(
         repository.submitApplication(buildRequest(), { front: dniPhotos.front } as DniPhotos)
       ).rejects.toThrow(DNI_PHOTOS_REQUIRED_MESSAGE);
 
+      expect(window.fetch).not.toHaveBeenCalledWith('/api/adhesion/dni-upload-urls', expect.anything());
       expect(uploadMock).not.toHaveBeenCalled();
       expect(insertMock).not.toHaveBeenCalled();
     });
 
-    it('rejects a non-image file without uploading or inserting', async () => {
-      stubDuplicateCheckOk();
+    it('rejects a non-image file without requesting upload URLs or inserting', async () => {
       const insertMock = vi.fn().mockResolvedValue({ error: null });
       vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
@@ -103,19 +124,29 @@ describe('AdhesionRepository', () => {
         repository.submitApplication(buildRequest(), { front: dniPhotos.front, back: new Blob(['x'], { type: 'application/pdf' }) })
       ).rejects.toThrow(DNI_PHOTOS_TYPE_MESSAGE);
 
+      expect(window.fetch).not.toHaveBeenCalledWith('/api/adhesion/dni-upload-urls', expect.anything());
+      expect(uploadMock).not.toHaveBeenCalled();
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('surfaces the server error (e.g. 429 rate limit) and does not upload or insert', async () => {
+      vi.mocked(window.fetch)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) } as Response)
+        .mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({ error: 'Demasiados intentos de carga del DNI.' }) } as Response);
+      const insertMock = vi.fn().mockResolvedValue({ error: null });
+      vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+      await expect(repository.submitApplication(buildRequest(), dniPhotos)).rejects.toThrow('Demasiados intentos de carga del DNI.');
       expect(uploadMock).not.toHaveBeenCalled();
       expect(insertMock).not.toHaveBeenCalled();
     });
 
     it('does not insert the request when an upload fails', async () => {
-      stubDuplicateCheckOk();
       uploadMock.mockResolvedValueOnce({ data: null, error: { message: 'mime type not allowed' } });
       const insertMock = vi.fn().mockResolvedValue({ error: null });
       vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
-      await expect(repository.submitApplication(buildRequest(), dniPhotos)).rejects.toThrow(
-        'No se pudieron subir las fotos del DNI. Reintentá.'
-      );
+      await expect(repository.submitApplication(buildRequest(), dniPhotos)).rejects.toThrow(DNI_PHOTOS_UPLOAD_MESSAGE);
       expect(insertMock).not.toHaveBeenCalled();
     });
 
@@ -132,8 +163,6 @@ describe('AdhesionRepository', () => {
   });
 
   it('calls POST /api/adhesion/check-duplicates before inserting the adhesion request', async () => {
-    vi.stubGlobal('crypto', { randomUUID: () => 'adhesion-1' });
-
     const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ok: true })
@@ -161,9 +190,9 @@ describe('AdhesionRepository', () => {
     // check-duplicates must be called before the insert
     expect(fetchSpy.mock.invocationCallOrder[0]).toBeLessThan(insertMock.mock.invocationCallOrder[0]);
 
-    // The id is generated client-side (no SELECT policy exists for the anon
-    // role, so the caller cannot rely on a post-insert .select().single())
-    // and returned so the caller (AdhesionForm.tsx) can create the
+    // The id is reserved server-side with the DNI upload URLs (no SELECT
+    // policy exists for the anon role, so the caller cannot rely on a
+    // post-insert .select().single()) and returned so the caller (AdhesionForm.tsx) can create the
     // débito-automático MP preapproval against it.
     expect(result).toEqual({ id: 'adhesion-1' });
 

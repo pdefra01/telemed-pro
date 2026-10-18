@@ -8,53 +8,42 @@ SELECT has_column('public', 'adhesion_requests', 'titular_dni_front_path', 'fron
 SELECT has_column('public', 'adhesion_requests', 'titular_dni_back_path', 'back path column exists');
 SELECT is((SELECT public FROM storage.buckets WHERE id = 'adhesion-documents'), false, 'bucket is private');
 
+-- Objects as the server leaves them after signed uploads (service role / owner).
+INSERT INTO storage.objects (bucket_id, name) VALUES
+  ('adhesion-documents', '0f8fad5b-d9cb-469f-a165-70867728950e/front.jpg'),
+  ('adhesion-documents', '0f8fad5b-d9cb-469f-a165-70867728950e/back.png'),
+  ('adhesion-documents', '2c5ea4c0-4067-11e9-8bad-9b1deb4d3b7d/back.png');
+
 -- ================================================================
--- anon: insert only, and only well-formed names
+-- anon: no direct access to the bucket at all
 -- ================================================================
 SET LOCAL ROLE anon;
 
-SELECT lives_ok(
-  $$INSERT INTO storage.objects (bucket_id, name) VALUES ('adhesion-documents', '0f8fad5b-d9cb-469f-a165-70867728950e/front.jpg')$$,
-  'anon can upload a front photo under a uuid folder'
-);
-SELECT lives_ok(
-  $$INSERT INTO storage.objects (bucket_id, name) VALUES ('adhesion-documents', '0f8fad5b-d9cb-469f-a165-70867728950e/back.png')$$,
-  'anon can upload a back photo under a uuid folder'
-);
 SELECT throws_ok(
-  $$INSERT INTO storage.objects (bucket_id, name) VALUES ('adhesion-documents', '0f8fad5b-d9cb-469f-a165-70867728950e/script.html')$$,
-  '42501', NULL, 'anon cannot upload an arbitrary file name'
-);
-SELECT throws_ok(
-  $$INSERT INTO storage.objects (bucket_id, name) VALUES ('adhesion-documents', 'not-a-uuid/front.jpg')$$,
-  '42501', NULL, 'anon cannot upload outside a uuid folder'
-);
-SELECT throws_ok(
-  $$INSERT INTO storage.objects (bucket_id, name) VALUES ('medical-documents', '0f8fad5b-d9cb-469f-a165-70867728950e/front.jpg')$$,
-  '42501', NULL, 'the policy does not open other buckets to anon'
+  $$INSERT INTO storage.objects (bucket_id, name) VALUES ('adhesion-documents', '1b4e28ba-2fa1-41d2-883f-0016d3cca427/front.jpg')$$,
+  '42501', NULL, 'anon cannot upload directly (only through server-signed URLs)'
 );
 SELECT is(
   (SELECT count(*) FROM storage.objects WHERE bucket_id = 'adhesion-documents'),
   0::bigint,
-  'anon cannot read uploaded DNI photos'
+  'anon cannot read DNI photos'
 );
 SELECT is_empty(
   $$UPDATE storage.objects SET name = '0f8fad5b-d9cb-469f-a165-70867728950e/front.png' WHERE bucket_id = 'adhesion-documents' RETURNING id$$,
-  'anon cannot overwrite uploaded DNI photos'
+  'anon cannot overwrite DNI photos'
 );
+
 RESET ROLE;
 
 -- Direct SQL deletes are blocked by storage.protect_delete() for every role,
--- so the delete guarantee is asserted on the policy set instead: the only
--- policies touching this bucket are the anon/authenticated INSERT and the
--- admin SELECT.
+-- so the write guarantee is asserted on the policy set instead: the only
+-- policy touching this bucket is the admin SELECT.
 SELECT results_eq(
   $$SELECT cmd::text FROM pg_policies
     WHERE schemaname = 'storage' AND tablename = 'objects'
-      AND (qual LIKE '%adhesion-documents%' OR with_check LIKE '%adhesion-documents%')
-    ORDER BY cmd$$,
-  $$VALUES ('INSERT'), ('SELECT')$$,
-  'no UPDATE or DELETE policy exists for the DNI photos bucket'
+      AND (qual LIKE '%adhesion-documents%' OR with_check LIKE '%adhesion-documents%')$$,
+  $$VALUES ('SELECT')$$,
+  'no write policy exists for the DNI photos bucket'
 );
 
 -- ================================================================
@@ -81,15 +70,16 @@ SELECT is(
 SELECT set_config('request.jwt.claims', '{"sub":"c1c1c1c1-0000-0000-0000-000000000001","role":"authenticated"}', true);
 SELECT is(
   (SELECT count(*) FROM storage.objects WHERE bucket_id = 'adhesion-documents'),
-  2::bigint,
+  3::bigint,
   'an admin can read DNI photos'
 );
 
 RESET ROLE;
 
 -- ================================================================
--- adhesion_requests: public inserts must carry both photo paths
+-- adhesion_requests: public inserts must reference both uploaded photos
 -- ================================================================
+-- format() args: id, dni (also builds a unique phone), front path, back path.
 CREATE TEMP TABLE dni_row_sql AS SELECT $sql$
   INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address,
     titular_locality, titular_neighborhood, titular_email, titular_phone, titular_civil_status,
@@ -103,7 +93,7 @@ SET LOCAL ROLE anon;
 SELECT lives_ok(
   format((SELECT tpl FROM dni_row_sql), '0f8fad5b-d9cb-469f-a165-70867728950e', '30123401',
     quote_literal('0f8fad5b-d9cb-469f-a165-70867728950e/front.jpg'), quote_literal('0f8fad5b-d9cb-469f-a165-70867728950e/back.png')),
-  'anon can submit a request with both photos under its own folder'
+  'anon can submit a request whose two photos are uploaded under its own folder'
 );
 SELECT throws_ok(
   format((SELECT tpl FROM dni_row_sql), '2c5ea4c0-4067-11e9-8bad-9b1deb4d3b7d', '30123402', 'NULL',
@@ -112,13 +102,18 @@ SELECT throws_ok(
 );
 SELECT throws_ok(
   format((SELECT tpl FROM dni_row_sql), '2c5ea4c0-4067-11e9-8bad-9b1deb4d3b7d', '30123403',
+    quote_literal('2c5ea4c0-4067-11e9-8bad-9b1deb4d3b7d/front.jpg'), quote_literal('2c5ea4c0-4067-11e9-8bad-9b1deb4d3b7d/back.png')),
+  '23514', NULL, 'anon cannot reference a photo that was never uploaded'
+);
+SELECT throws_ok(
+  format((SELECT tpl FROM dni_row_sql), '2c5ea4c0-4067-11e9-8bad-9b1deb4d3b7d', '30123404',
     quote_literal('0f8fad5b-d9cb-469f-a165-70867728950e/front.jpg'), quote_literal('0f8fad5b-d9cb-469f-a165-70867728950e/back.png')),
   '23514', NULL, 'anon cannot point a request at another request''s photos'
 );
 RESET ROLE;
 
 SELECT lives_ok(
-  format((SELECT tpl FROM dni_row_sql), '3d6f4a10-0000-4000-8000-000000000001', '30123404', 'NULL', 'NULL'),
+  format((SELECT tpl FROM dni_row_sql), '3d6f4a10-0000-4000-8000-000000000001', '30123405', 'NULL', 'NULL'),
   'server-side inserts (postgres/service role) are not constrained'
 );
 SELECT lives_ok(

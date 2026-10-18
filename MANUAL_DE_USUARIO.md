@@ -32,6 +32,8 @@ Desde la sección **Mi Perfil**, el afiliado titular puede mantener actualizada 
 | Familiar prepago semestral (6 + 1 meses) | $239.994 |
 | Familiar prepago anual (12 + 2 meses) | $479.988 |
 
+**Fotos del DNI del titular (obligatorio)**: en el paso 1 hay que subir una foto del **frente** y otra del **dorso** del DNI (JPG, PNG o WEBP; desde el celular se puede sacar la foto en el momento). Sin las dos no se puede avanzar. Las fotos se guardan en un espacio privado: solo los administradores las ven, al abrir **Revisar** en **Afiliados > Solicitudes de Adhesión (QR)**, con un link que vence a los 10 minutos. Si una carga de fotos no termina en una solicitud, el sistema borra esas fotos automáticamente pasadas 24 horas.
+
 **Alta con Mercado Pago (obligatorio)**: toda adhesión termina en un paso de Mercado Pago, sea cual sea el plan o la opción de pago. La afiliación no se completa si no se puede crear el link de pago: el formulario muestra un error y un botón **Reintentar**, que repite solo la llamada a Mercado Pago para la misma solicitud (nunca genera una solicitud nueva). Al finalizar, el paso de éxito muestra **Ir a pagar con Mercado Pago**.
 
 | Opción de pago | Qué se crea en Mercado Pago |
