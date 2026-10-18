@@ -57,47 +57,68 @@ export async function createDniUploadUrls({ supabaseAdmin, generateId = randomUU
  * Deletes DNI photo folders that have no adhesion_requests row (failed
  * submits, abandoned forms, requests deleted by an admin) once every file in
  * the folder is older than `minAgeMs`, so an in-flight submission is never
- * touched.
+ * touched. Only `<uuid>/` folders holding plain files are considered: any
+ * other root entry (e.g. something uploaded by hand) is left alone, and a
+ * folder that fails is logged and skipped so it never blocks the rest.
  *
- * @returns {Promise<{ removed: string[] }>} the removed object paths
+ * @returns {Promise<{ removed: string[], failed: string[] }>} removed object
+ *   paths, and folder ids that errored this run
  */
 export async function cleanupOrphanDniPhotos({ supabaseAdmin }, { now = new Date(), minAgeMs = ORPHAN_MIN_AGE_MS } = {}) {
   const bucket = supabaseAdmin.storage.from(DNI_PHOTOS_BUCKET);
   const removed = [];
+  const failed = [];
 
   // Removed folders vanish from the listing, so the next page starts after
   // the folders that were kept, not after a full page.
   for (let offset = 0; ;) {
-    const { data: folders, error: listError } = await bucket.list('', { limit: LIST_PAGE_SIZE, offset });
+    const { data: entries, error: listError } = await bucket.list('', { limit: LIST_PAGE_SIZE, offset });
     if (listError) throw listError;
-    if (!folders?.length) break;
+    if (!entries?.length) break;
 
-    const folderIds = folders.map((entry) => entry.name);
-    const { data: rows, error: rowsError } = await supabaseAdmin
-      .from('adhesion_requests')
-      .select('id')
-      .in('id', folderIds);
-    if (rowsError) throw rowsError;
-    const linked = new Set((rows || []).map((row) => row.id));
-    let removedFolders = 0;
-
-    for (const folderId of folderIds) {
-      if (linked.has(folderId)) continue;
-      const { data: files, error: filesError } = await bucket.list(folderId);
-      if (filesError) throw filesError;
-      const paths = (files || []).map((file) => `${folderId}/${file.name}`);
-      const allOld = (files || []).every((file) => now.getTime() - new Date(file.created_at).getTime() >= minAgeMs);
-      if (!paths.length || !allOld) continue;
-
-      const { error: removeError } = await bucket.remove(paths);
-      if (removeError) throw removeError;
-      removed.push(...paths);
-      removedFolders += 1;
+    const folderIds = entries.map((entry) => entry.name).filter((name) => UUID_PATTERN.test(name));
+    const linked = new Set();
+    if (folderIds.length) {
+      const { data: rows, error: rowsError } = await supabaseAdmin
+        .from('adhesion_requests')
+        .select('id')
+        .in('id', folderIds);
+      if (rowsError) throw rowsError;
+      for (const row of rows || []) linked.add(row.id);
     }
 
-    if (folders.length < LIST_PAGE_SIZE) break;
-    offset += folders.length - removedFolders;
+    let removedFolders = 0;
+    for (const folderId of folderIds) {
+      if (linked.has(folderId)) continue;
+      try {
+        if (await removeOrphanFolder(bucket, folderId, now, minAgeMs, removed)) removedFolders += 1;
+      } catch (err) {
+        console.error(`[adhesionDniPhotos] Skipping folder ${folderId}:`, err?.message || err);
+        failed.push(folderId);
+      }
+    }
+
+    if (entries.length < LIST_PAGE_SIZE) break;
+    offset += entries.length - removedFolders;
   }
 
-  return { removed };
+  return { removed, failed };
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** @returns {Promise<boolean>} whether the folder was emptied */
+async function removeOrphanFolder(bucket, folderId, now, minAgeMs, removed) {
+  const { data: files, error: filesError } = await bucket.list(folderId);
+  if (filesError) throw filesError;
+  // Nested folders come back with a null id; that is not a layout we write.
+  if (!files?.length || files.some((file) => !file.id)) return false;
+  const allOld = files.every((file) => now.getTime() - new Date(file.created_at).getTime() >= minAgeMs);
+  if (!allOld) return false;
+
+  const paths = files.map((file) => `${folderId}/${file.name}`);
+  const { error: removeError } = await bucket.remove(paths);
+  if (removeError) throw removeError;
+  removed.push(...paths);
+  return true;
 }

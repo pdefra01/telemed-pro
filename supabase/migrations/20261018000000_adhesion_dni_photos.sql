@@ -40,33 +40,28 @@ using (
 -- carry both photos, stored under the row's own folder and actually uploaded.
 -- Server-side roles (service role, postgres: seeds, tests, backfills) are not
 -- constrained. INSERT only, so admin approve/reject UPDATEs on older rows keep
--- working. The trigger runs as the inserting role so current_user tells who
--- is submitting; only the object lookup below is SECURITY DEFINER, because
--- anon has no read access to storage.objects.
-create or replace function public.adhesion_dni_photo_count(front_path text, back_path text)
-returns integer
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select count(*)::integer from storage.objects
-  where bucket_id = 'adhesion-documents' and name in (front_path, back_path);
-$$;
-revoke execute on function public.adhesion_dni_photo_count(text, text) from public;
-grant execute on function public.adhesion_dni_photo_count(text, text) to anon, authenticated;
-
+-- working. SECURITY DEFINER so the trigger can look up storage.objects, which
+-- anon cannot read; the submitting role comes from the `role` setting (the
+-- one PostgREST sets with SET ROLE), which a definer function does not change,
+-- unlike current_user. No helper is exposed, so anon gets no RPC to probe
+-- which objects exist.
 create or replace function public.require_adhesion_dni_photos()
 returns trigger
 language plpgsql
+security definer
+set search_path = ''
 as $$
 begin
-  if current_user in ('anon', 'authenticated') and (
+  if current_setting('role') in ('anon', 'authenticated') and (
     new.titular_dni_front_path is null
     or new.titular_dni_back_path is null
     or new.titular_dni_front_path !~ ('^' || new.id::text || '/front\.(jpg|png|webp)$')
     or new.titular_dni_back_path !~ ('^' || new.id::text || '/back\.(jpg|png|webp)$')
-    or public.adhesion_dni_photo_count(new.titular_dni_front_path, new.titular_dni_back_path) <> 2
+    or (
+      select count(*) from storage.objects
+      where bucket_id = 'adhesion-documents'
+        and name in (new.titular_dni_front_path, new.titular_dni_back_path)
+    ) <> 2
   ) then
     raise exception 'Las fotos del DNI del titular (frente y dorso) son obligatorias.'
       using errcode = '23514';
@@ -74,6 +69,7 @@ begin
   return new;
 end;
 $$;
+revoke execute on function public.require_adhesion_dni_photos() from public, anon, authenticated;
 
 drop trigger if exists require_adhesion_dni_photos on public.adhesion_requests;
 create trigger require_adhesion_dni_photos

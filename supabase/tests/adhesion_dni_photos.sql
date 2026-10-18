@@ -7,6 +7,11 @@ SELECT no_plan();
 SELECT has_column('public', 'adhesion_requests', 'titular_dni_front_path', 'front path column exists');
 SELECT has_column('public', 'adhesion_requests', 'titular_dni_back_path', 'back path column exists');
 SELECT is((SELECT public FROM storage.buckets WHERE id = 'adhesion-documents'), false, 'bucket is private');
+SELECT hasnt_function('public', 'adhesion_dni_photo_count', 'no RPC lets anon probe which DNI photos exist');
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.require_adhesion_dni_photos()', 'EXECUTE'),
+  'anon cannot call the trigger function directly'
+);
 
 -- Objects as the server leaves them after signed uploads (service role / owner).
 INSERT INTO storage.objects (bucket_id, name) VALUES

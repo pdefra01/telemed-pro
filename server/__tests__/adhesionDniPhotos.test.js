@@ -67,11 +67,15 @@ describe('createDniUploadUrls', () => {
   });
 });
 
+/** Deterministic folder ids: the sweep only considers `<uuid>/` folders. */
+const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
 /**
- * In-memory bucket: `folders` maps folder id -> files ({ name, created_at });
- * `rowIds` are the adhesion_requests ids that exist.
+ * In-memory bucket: `folders` maps folder name -> entries ({ name, id,
+ * created_at }); `rowIds` are the adhesion_requests ids that exist.
+ * `failingFolders` make list(folder) return an error.
  */
-function buildCleanupAdmin(folders, rowIds) {
+function buildCleanupAdmin(folders, rowIds, { failingFolders = [] } = {}) {
   const store = new Map(Object.entries(folders));
   const remove = vi.fn(async (paths) => {
     for (const path of paths) {
@@ -87,6 +91,7 @@ function buildCleanupAdmin(folders, rowIds) {
       const names = [...store.keys()].sort().slice(offset, offset + limit);
       return { data: names.map((name) => ({ name, id: null })), error: null };
     }
+    if (failingFolders.includes(prefix)) return { data: null, error: new Error(`list ${prefix} failed`) };
     return { data: store.get(prefix) || [], error: null };
   });
   const inIds = vi.fn(async (_column, ids) => ({
@@ -97,30 +102,31 @@ function buildCleanupAdmin(folders, rowIds) {
     storage: { from: () => ({ list, remove }) },
     from: vi.fn(() => ({ select: () => ({ in: inIds }) })),
   };
-  return { supabaseAdmin, store, remove };
+  return { supabaseAdmin, store, remove, inIds };
 }
 
 const photos = (createdAt) => [
-  { name: 'front.jpg', created_at: createdAt },
-  { name: 'back.jpg', created_at: createdAt },
+  { name: 'front.jpg', id: 'obj-front', created_at: createdAt },
+  { name: 'back.jpg', id: 'obj-back', created_at: createdAt },
 ];
 
 describe('cleanupOrphanDniPhotos', () => {
   it('removes old folders without a row and keeps linked or recent ones', async () => {
+    const [orphanOld, orphanRecent, linked] = [uuid(1), uuid(2), uuid(3)];
     const { supabaseAdmin, store } = buildCleanupAdmin(
-      { 'orphan-old': photos(OLD), 'orphan-recent': photos(RECENT), linked: photos(OLD) },
-      ['linked']
+      { [orphanOld]: photos(OLD), [orphanRecent]: photos(RECENT), [linked]: photos(OLD) },
+      [linked]
     );
 
-    const { removed } = await cleanupOrphanDniPhotos({ supabaseAdmin }, { now: NOW });
+    const result = await cleanupOrphanDniPhotos({ supabaseAdmin }, { now: NOW });
 
-    expect(removed).toEqual(['orphan-old/front.jpg', 'orphan-old/back.jpg']);
-    expect([...store.keys()].sort()).toEqual(['linked', 'orphan-recent']);
+    expect(result).toEqual({ removed: [`${orphanOld}/front.jpg`, `${orphanOld}/back.jpg`], failed: [] });
+    expect([...store.keys()].sort()).toEqual([orphanRecent, linked].sort());
   });
 
   it('keeps a folder when any file in it is still recent', async () => {
     const { supabaseAdmin, remove } = buildCleanupAdmin(
-      { half: [{ name: 'front.jpg', created_at: OLD }, { name: 'back.jpg', created_at: RECENT }] },
+      { [uuid(1)]: [{ name: 'front.jpg', id: 'a', created_at: OLD }, { name: 'back.jpg', id: 'b', created_at: RECENT }] },
       []
     );
 
@@ -130,8 +136,8 @@ describe('cleanupOrphanDniPhotos', () => {
 
   it('reaches every page even while removing folders from earlier pages', async () => {
     const folders = {};
-    for (let i = 0; i < 250; i += 1) folders[`f${String(i).padStart(3, '0')}`] = photos(OLD);
-    const keep = ['f010', 'f150', 'f249'];
+    for (let i = 0; i < 250; i += 1) folders[uuid(i)] = photos(OLD);
+    const keep = [uuid(10), uuid(150), uuid(249)];
     const { supabaseAdmin, store } = buildCleanupAdmin(folders, keep);
 
     const { removed } = await cleanupOrphanDniPhotos({ supabaseAdmin }, { now: NOW });
@@ -140,7 +146,46 @@ describe('cleanupOrphanDniPhotos', () => {
     expect([...store.keys()].sort()).toEqual(keep);
   });
 
-  it('propagates storage errors', async () => {
+  it('ignores non-uuid root entries without querying them or blocking the sweep', async () => {
+    const orphan = uuid(7);
+    const { supabaseAdmin, store, inIds } = buildCleanupAdmin(
+      { 'manual-upload.png': [], 'zz-notes': photos(OLD), [orphan]: photos(OLD) },
+      []
+    );
+
+    const { removed } = await cleanupOrphanDniPhotos({ supabaseAdmin }, { now: NOW });
+
+    expect(removed).toEqual([`${orphan}/front.jpg`, `${orphan}/back.jpg`]);
+    expect(inIds).toHaveBeenCalledWith('id', [orphan]);
+    expect([...store.keys()].sort()).toEqual(['manual-upload.png', 'zz-notes']);
+  });
+
+  it('skips a failing folder and still cleans the ones after it', async () => {
+    const [broken, orphan] = [uuid(1), uuid(2)];
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { supabaseAdmin, store } = buildCleanupAdmin(
+      { [broken]: photos(OLD), [orphan]: photos(OLD) },
+      [],
+      { failingFolders: [broken] }
+    );
+
+    const result = await cleanupOrphanDniPhotos({ supabaseAdmin }, { now: NOW });
+
+    expect(result).toEqual({ removed: [`${orphan}/front.jpg`, `${orphan}/back.jpg`], failed: [broken] });
+    expect([...store.keys()]).toEqual([broken]);
+  });
+
+  it('leaves a folder that contains a nested folder untouched', async () => {
+    const { supabaseAdmin, remove } = buildCleanupAdmin(
+      { [uuid(1)]: [...photos(OLD), { name: 'nested', id: null, created_at: null }] },
+      []
+    );
+
+    expect((await cleanupOrphanDniPhotos({ supabaseAdmin }, { now: NOW })).removed).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('propagates a root listing error so the next run retries', async () => {
     const supabaseAdmin = {
       storage: { from: () => ({ list: async () => ({ data: null, error: new Error('list failed') }) }) },
     };
