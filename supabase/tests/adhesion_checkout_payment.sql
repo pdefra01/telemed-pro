@@ -4,6 +4,11 @@
 BEGIN;
 SELECT no_plan();
 
+-- The anon insert below references DNI photos; the trigger requires them to exist.
+INSERT INTO storage.objects (bucket_id, name) VALUES
+  ('adhesion-documents', 'c1c1c1c1-0000-0000-0000-000000000002/front.jpg'),
+  ('adhesion-documents', 'c1c1c1c1-0000-0000-0000-000000000002/back.jpg');
+
 SELECT has_column('public', 'adhesion_requests', 'mp_checkout_preference_id', 'has mp_checkout_preference_id');
 SELECT has_column('public', 'adhesion_requests', 'mp_payment_id', 'has mp_payment_id');
 SELECT has_column('public', 'adhesion_requests', 'payment_status', 'has payment_status');
@@ -34,11 +39,13 @@ SET LOCAL ROLE anon;
 INSERT INTO public.adhesion_requests
   (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality,
    titular_neighborhood, titular_email, titular_phone, titular_civil_status, payment_method, signature_base64,
-   payment_status, mp_payment_id, paid_at, mp_checkout_preference_id)
+   payment_status, mp_payment_id, paid_at, mp_checkout_preference_id,
+   titular_dni_front_path, titular_dni_back_path)
 VALUES
   ('c1c1c1c1-0000-0000-0000-000000000002', 'Forger', '30999777', '1980-01-01', 'Calle 1', 'Loc',
    'Barrio', 'f@example.com', '1155559999', 'single', 'cash', 'sig',
-   'approved', 'fake', now(), 'fake-pref');
+   'approved', 'fake', now(), 'fake-pref',
+   'c1c1c1c1-0000-0000-0000-000000000002/front.jpg', 'c1c1c1c1-0000-0000-0000-000000000002/back.jpg');
 RESET ROLE;
 
 SELECT is((SELECT payment_status FROM public.adhesion_requests WHERE id = 'c1c1c1c1-0000-0000-0000-000000000002'),

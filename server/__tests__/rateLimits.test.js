@@ -4,7 +4,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { ACTIVATE_ADHESION_RATE_LIMIT, createActivateAdhesionLimiter } from '../rateLimits.js';
+import {
+  ACTIVATE_ADHESION_RATE_LIMIT,
+  createActivateAdhesionLimiter,
+  DNI_UPLOAD_URLS_RATE_LIMIT,
+  createDniUploadUrlsLimiter,
+} from '../rateLimits.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverSource = () => readFileSync(resolve(__dirname, '..', '..', 'server.js'), 'utf-8');
@@ -58,6 +63,22 @@ describe('activate adhesion rate limit', () => {
   });
 });
 
+describe('DNI upload URLs rate limit', () => {
+  it('defaults to 10 requests per 15 minutes', () => {
+    expect(DNI_UPLOAD_URLS_RATE_LIMIT).toEqual({ windowMs: 15 * 60 * 1000, limit: 10 });
+  });
+
+  it('answers 429 with a Spanish JSON error once a client IP exceeds the limit', async () => {
+    const post = await startApp(createDniUploadUrlsLimiter({ limit: 1 }));
+
+    expect((await post('203.0.113.7')).status).toBe(200);
+    const blocked = await post('203.0.113.7');
+    expect(blocked.status).toBe(429);
+    expect((await blocked.json()).error).toMatch(/Demasiados intentos de carga del DNI/);
+    expect((await post('198.51.100.9')).status).toBe(200);
+  });
+});
+
 describe('server.js wiring (source)', () => {
   it('trusts exactly one proxy hop (Coolify/Traefik)', () => {
     expect(serverSource()).toMatch(/app\.set\(\s*['"]trust proxy['"]\s*,\s*1\s*\)/);
@@ -70,5 +91,13 @@ describe('server.js wiring (source)', () => {
       /app\.post\(\s*['"]\/api\/adhesion\/:id\/activate['"]\s*,\s*activateAdhesionLimiter\s*,\s*async\s*\(\s*req\s*,\s*res\s*\)/
     );
     expect(source.match(/activateAdhesionLimiter\b/g)).toHaveLength(2);
+  });
+
+  it('applies the DNI limiter to POST /api/adhesion/dni-upload-urls', () => {
+    const source = serverSource();
+    expect(source).toMatch(/const\s+dniUploadUrlsLimiter\s*=\s*createDniUploadUrlsLimiter\(\s*\)/);
+    expect(source).toMatch(
+      /app\.post\(\s*['"]\/api\/adhesion\/dni-upload-urls['"]\s*,\s*dniUploadUrlsLimiter\s*,\s*async\s*\(\s*req\s*,\s*res\s*\)/
+    );
   });
 });

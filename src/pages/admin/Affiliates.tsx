@@ -75,6 +75,18 @@ const Affiliates: React.FC = () => {
   const [requests, setRequests] = useState<AdhesionRequest[]>([]);
   const [isRequestsLoading, setIsRequestsLoading] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<AdhesionRequest | null>(null);
+  const [dniPhotoUrls, setDniPhotoUrls] = useState<{ front: string | null; back: string | null } | null>(null);
+
+  // DNI photos live in a private bucket: sign fresh URLs each time a request is opened.
+  useEffect(() => {
+    setDniPhotoUrls(null);
+    if (!selectedRequest || (!selectedRequest.titular_dni_front_path && !selectedRequest.titular_dni_back_path)) return;
+    let isCurrent = true;
+    adhesionRepository.getDniPhotoUrls(selectedRequest)
+      .then((urls) => { if (isCurrent) setDniPhotoUrls(urls); })
+      .catch(() => { if (isCurrent) setDniPhotoUrls({ front: null, back: null }); });
+    return () => { isCurrent = false; };
+  }, [selectedRequest]);
   const [promoterFilter, setPromoterFilter] = useState<string>('all');
 
   useEffect(() => {
@@ -1089,6 +1101,37 @@ const Affiliates: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* DNI photos */}
+              <div className="space-y-4">
+                <h4 className="text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText size={14} />
+                  Fotos del DNI
+                </h4>
+                {!selectedRequest.titular_dni_front_path && !selectedRequest.titular_dni_back_path ? (
+                  <p className="text-xs text-slate-500">Esta solicitud no tiene fotos del DNI cargadas.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {([['front', 'Frente'], ['back', 'Dorso']] as const).map(([side, label]) => {
+                      const url = dniPhotoUrls?.[side];
+                      return (
+                        <div key={side} className="bg-slate-950 border border-white/10 rounded-2xl p-3 flex flex-col items-center gap-2">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase self-start">{label}</span>
+                          {url ? (
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="w-full">
+                              <img src={url} alt={`DNI ${label} del titular`} className="w-full max-h-48 object-contain rounded-xl" />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-500 h-24 flex items-center">
+                              {dniPhotoUrls ? 'No se pudo cargar la imagen.' : 'Cargando...'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Section 5: Signature and Consents */}

@@ -3,15 +3,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User, CreditCard, Users, HeartPulse, FileText, CheckCircle2,
   ArrowLeft, ArrowRight, Plus, Trash2, ShieldAlert, Sparkles, Loader2, RefreshCw,
-  MessageCircle, Copy, Mail, AlertCircle
+  MessageCircle, Copy, Mail, AlertCircle, Camera
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
-import { adhesionRepository, AdhesionRequest, type ActivationResult } from '../repositories/AdhesionRepository';
+import { adhesionRepository, AdhesionRequest, DNI_PHOTOS_REQUIRED_MESSAGE, type ActivationResult } from '../repositories/AdhesionRepository';
 import { producerRepository } from '../repositories/ProducerRepository';
 import { planRepository } from '../repositories/PlanRepository';
 import { systemSettingsRepository } from '../repositories/SystemSettingsRepository';
 import { Plan } from '../types';
 import { billingDayLabel, DEFAULT_BILLING_DAYS, RECOMMENDED_BILLING_DAY } from '../utils/billingDays';
+import { compressImage } from '../utils/compressImage';
+
+// Explicit types (not image/*) so iOS hands over a JPEG instead of HEIC.
+const DNI_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 import logoMedinex from '../logo_medinex.jpeg';
 
 // Email OTP verification is ON unless VITE_EMAIL_VERIFICATION_REQUIRED is
@@ -288,6 +292,30 @@ export const AdhesionForm: React.FC = () => {
     setPlan(prev => ({ ...prev, kind }));
     if (kind === 'individual') setFamilyMembers([]);
   };
+
+  // Titular's DNI photos (mandatory). Compressed only at submit time, so the
+  // step 1 validation never waits on image processing.
+  const [dniPhotos, setDniPhotos] = useState<{ front: File | null; back: File | null }>({ front: null, back: null });
+  const [dniPreviews, setDniPreviews] = useState<{ front: string | null; back: string | null }>({ front: null, back: null });
+
+  const selectDniPhoto = (side: 'front' | 'back', file: File | undefined) => {
+    if (!file) return;
+    if (!DNI_PHOTO_TYPES.includes(file.type)) {
+      toast("Seleccioná una imagen JPG, PNG o WEBP del DNI", "warning");
+      return;
+    }
+    setDniPhotos(prev => ({ ...prev, [side]: file }));
+    const preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
+    setDniPreviews(prev => ({ ...prev, [side]: preview }));
+  };
+
+  // Frees each replaced preview, and the remaining ones on unmount.
+  useEffect(() => () => {
+    if (dniPreviews.front && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(dniPreviews.front);
+  }, [dniPreviews.front]);
+  useEffect(() => () => {
+    if (dniPreviews.back && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(dniPreviews.back);
+  }, [dniPreviews.back]);
 
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [newFamilyMember, setNewFamilyMember] = useState({
@@ -623,6 +651,10 @@ export const AdhesionForm: React.FC = () => {
         toast("Por favor verificá tu correo electrónico antes de avanzar", "warning");
         return;
       }
+      if (!dniPhotos.front || !dniPhotos.back) {
+        toast(DNI_PHOTOS_REQUIRED_MESSAGE, "warning");
+        return;
+      }
     }
 
     if (step === 2) {
@@ -739,7 +771,11 @@ export const AdhesionForm: React.FC = () => {
         email_verified: EMAIL_VERIFICATION_REQUIRED ? isEmailVerified : true
       };
 
-      const { id: adhesionRequestId } = await adhesionRepository.submitApplication(payload);
+      const [front, back] = await Promise.all([
+        compressImage(dniPhotos.front!),
+        compressImage(dniPhotos.back!),
+      ]);
+      const { id: adhesionRequestId } = await adhesionRepository.submitApplication(payload, { front, back });
 
       // The adhesion row exists from here on: a failure below must only repeat
       // the Mercado Pago call for this same id, never the application submit.
@@ -1046,6 +1082,37 @@ export const AdhesionForm: React.FC = () => {
                     El código de promotor no es válido o ya no está activo. Podés dejarlo en blanco o ingresar uno nuevo.
                   </p>
                 )}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Fotos del DNI del titular *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([['front', 'Frente'], ['back', 'Dorso']] as const).map(([side, label]) => (
+                    <label
+                      key={side}
+                      className="relative flex flex-col items-center justify-center gap-2 h-40 bg-white/5 border border-dashed border-white/15 rounded-2xl cursor-pointer hover:border-emerald-400/50 transition-colors overflow-hidden"
+                    >
+                      {dniPreviews[side] ? (
+                        <img src={dniPreviews[side]!} alt={`DNI ${label}`} className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                      ) : (
+                        <Camera size={24} className="text-slate-400" />
+                      )}
+                      <span className="relative z-10 text-xs font-bold text-white bg-slate-900/70 px-3 py-1 rounded-full">
+                        {dniPhotos[side] ? `${label} cargado · Cambiar` : `Subir ${label.toLowerCase()}`}
+                      </span>
+                      <input
+                        type="file"
+                        accept={DNI_PHOTO_TYPES.join(',')}
+                        aria-label={`Foto DNI ${label.toLowerCase()}`}
+                        className="sr-only"
+                        onChange={(e) => {
+                          selectDniPhoto(side, e.target.files?.[0]);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="text-slate-500 text-xs mt-2">Sacá una foto o elegila de tu galería. Que se lean bien los datos.</p>
               </div>
             </div>
 

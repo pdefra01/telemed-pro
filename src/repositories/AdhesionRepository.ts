@@ -30,6 +30,9 @@ export interface AdhesionRequest {
   consent_data_treatment: boolean;
   consent_promotions: boolean;
   signature_base64: string;
+  /** Storage paths in the private `adhesion-documents` bucket. */
+  titular_dni_front_path?: string | null;
+  titular_dni_back_path?: string | null;
   status?: 'pending' | 'approved' | 'rejected';
   promoter_id?: string;
   email_verified?: boolean;
@@ -53,6 +56,22 @@ export type ActivationResult =
   | { status: 'pending_review'; httpStatus: number; error: string }
   | { status: 'failed'; httpStatus?: number; error: string };
 
+/** Titular's DNI photos, required by the public adhesion form. */
+export interface DniPhotos {
+  front: Blob;
+  back: Blob;
+}
+
+export const DNI_PHOTOS_BUCKET = 'adhesion-documents';
+export const DNI_PHOTOS_REQUIRED_MESSAGE = 'Cargá las fotos del DNI del titular (frente y dorso).';
+export const DNI_PHOTOS_TYPE_MESSAGE = 'Las fotos del DNI deben ser imágenes JPG, PNG o WEBP.';
+export const DNI_PHOTOS_UPLOAD_MESSAGE = 'No se pudieron subir las fotos del DNI. Reintentá.';
+const DNI_PHOTO_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
 const ACTIVATION_FAILED_MESSAGE = 'No se pudo activar la cuenta automáticamente.';
 
 export class AdhesionRepository {
@@ -63,7 +82,7 @@ export class AdhesionRepository {
    * D-F) — the profile does not exist yet at this point in the flow, so
    * `adhesion_request_id` is the only stable handle available.
    */
-  async submitApplication(data: AdhesionRequest): Promise<{ id: string }> {
+  async submitApplication(data: AdhesionRequest, dniPhotos: DniPhotos): Promise<{ id: string }> {
     // Pre-insert duplicate check (DNI + CUIL + titular phone, plus family size by plan) against affiliates, family members
     // and pending requests, for the titular and every family member.
     const checkResponse = await fetch('/api/adhesion/check-duplicates', {
@@ -127,14 +146,24 @@ export class AdhesionRepository {
       throw new Error('El DNI debe contener entre 7 y 8 dígitos numéricos sin espacios ni puntos.');
     }
 
-    // The anon client has no SELECT policy on adhesion_requests (only
-    // "Admins can view adhesion requests" — see
+    // DNI photos are mandatory (front and back), checked before any upload so
+    // a missing or unsupported file never leaves half the pair in storage.
+    if (!dniPhotos?.front || !dniPhotos?.back) {
+      throw new Error(DNI_PHOTOS_REQUIRED_MESSAGE);
+    }
+    if (!DNI_PHOTO_EXTENSIONS[dniPhotos.front.type] || !DNI_PHOTO_EXTENSIONS[dniPhotos.back.type]) {
+      throw new Error(DNI_PHOTOS_TYPE_MESSAGE);
+    }
+
+    // The id comes from the server, which reserves it together with the photo
+    // upload URLs. The anon client has no SELECT policy on adhesion_requests
+    // (only "Admins can view adhesion requests" — see
     // supabase/migrations/20260718000000_create_adhesion_requests.sql:38-46),
     // and Postgres RLS applies the SELECT policy to an INSERT's RETURNING
-    // clause too. Generating the id client-side and skipping .select() avoids
-    // depending on a SELECT permission the anon role does not have
-    // (Judgment Day Round 1 finding).
-    const generatedId = crypto.randomUUID();
+    // clause too, so the insert below never relies on .select()
+    // (Judgment Day Round 1 finding). Photos are uploaded before the row
+    // exists; the DB trigger checks they are there.
+    const { id: generatedId, frontPath, backPath } = await this.uploadDniPhotos(dniPhotos);
 
     const { error } = await supabase
       .from('adhesion_requests')
@@ -168,6 +197,8 @@ export class AdhesionRepository {
         consent_data_treatment: data.consent_data_treatment,
         consent_promotions: data.consent_promotions,
         signature_base64: data.signature_base64,
+        titular_dni_front_path: frontPath,
+        titular_dni_back_path: backPath,
         status: 'pending',
         promoter_id: validatedPromoterId,
         email_verified: data.email_verified || false,
@@ -180,6 +211,58 @@ export class AdhesionRepository {
     }
 
     return { id: generatedId };
+  }
+
+  /**
+   * Reserves the adhesion id server-side and uploads both photos through the
+   * one-time signed URLs it returns (the bucket has no anon write policy).
+   */
+  private async uploadDniPhotos(dniPhotos: DniPhotos): Promise<{ id: string; frontPath: string; backPath: string }> {
+    const response = await fetch('/api/adhesion/dni-upload-urls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        front: DNI_PHOTO_EXTENSIONS[dniPhotos.front.type],
+        back: DNI_PHOTO_EXTENSIONS[dniPhotos.back.type],
+      }),
+    }).catch(() => null);
+    const body: any = response ? await response.json().catch(() => ({})) : {};
+    if (!response?.ok || !body?.adhesionRequestId || !body?.front?.token || !body?.back?.token) {
+      throw new Error(typeof body?.error === 'string' && body.error ? body.error : DNI_PHOTOS_UPLOAD_MESSAGE);
+    }
+
+    const bucket = supabase.storage.from(DNI_PHOTOS_BUCKET);
+    const results = await Promise.all([
+      bucket.uploadToSignedUrl(body.front.path, body.front.token, dniPhotos.front, { contentType: dniPhotos.front.type }),
+      bucket.uploadToSignedUrl(body.back.path, body.back.token, dniPhotos.back, { contentType: dniPhotos.back.type }),
+    ]);
+    const failed = results.find((result) => result.error);
+    if (failed) {
+      console.error('Error uploading DNI photos:', failed.error);
+      throw new Error(DNI_PHOTOS_UPLOAD_MESSAGE);
+    }
+    return { id: body.adhesionRequestId, frontPath: body.front.path, backPath: body.back.path };
+  }
+
+  /**
+   * Short-lived signed URLs for the titular's DNI photos (admins only, the
+   * bucket is private). A side without a stored path comes back as null.
+   */
+  async getDniPhotoUrls(request: Pick<AdhesionRequest, 'titular_dni_front_path' | 'titular_dni_back_path'>): Promise<{ front: string | null; back: string | null }> {
+    const sign = async (path?: string | null): Promise<string | null> => {
+      if (!path) return null;
+      const { data, error } = await supabase.storage.from(DNI_PHOTOS_BUCKET).createSignedUrl(path, 600);
+      if (error || !data?.signedUrl) {
+        console.error('Error signing DNI photo URL:', error);
+        return null;
+      }
+      return data.signedUrl;
+    };
+    const [front, back] = await Promise.all([
+      sign(request.titular_dni_front_path),
+      sign(request.titular_dni_back_path),
+    ]);
+    return { front, back };
   }
 
   /**

@@ -14,6 +14,11 @@
 BEGIN;
 SELECT no_plan();
 
+-- The anon insert below references DNI photos; the trigger requires them to exist.
+INSERT INTO storage.objects (bucket_id, name) VALUES
+  ('adhesion-documents', 'c1c1c1c1-0000-0000-0000-000000000009/front.jpg'),
+  ('adhesion-documents', 'c1c1c1c1-0000-0000-0000-000000000009/back.jpg');
+
 SELECT has_column('public', 'adhesion_requests', 'mp_paid_amount', 'has mp_paid_amount');
 SELECT has_column('public', 'adhesion_requests', 'ledger_posted_at', 'has ledger_posted_at');
 
@@ -169,10 +174,11 @@ SET LOCAL ROLE anon;
 INSERT INTO public.adhesion_requests
   (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality,
    titular_neighborhood, titular_email, titular_phone, titular_civil_status, payment_method, signature_base64,
-   mp_paid_amount, ledger_posted_at)
+   mp_paid_amount, ledger_posted_at, titular_dni_front_path, titular_dni_back_path)
 VALUES
   ('c1c1c1c1-0000-0000-0000-000000000009', 'Forger', '31000009', '1980-01-01', 'Calle 1', 'Loc',
-   'Barrio', 'f@example.com', '1155559999', 'single', 'cash', 'sig', 999, now());
+   'Barrio', 'f@example.com', '1155559999', 'single', 'cash', 'sig', 999, now(),
+   'c1c1c1c1-0000-0000-0000-000000000009/front.jpg', 'c1c1c1c1-0000-0000-0000-000000000009/back.jpg');
 RESET ROLE;
 SELECT is((SELECT coalesce(mp_paid_amount::text, '') || coalesce(ledger_posted_at::text, '')
   FROM public.adhesion_requests WHERE id = 'c1c1c1c1-0000-0000-0000-000000000009'),

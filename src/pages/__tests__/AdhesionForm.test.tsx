@@ -9,6 +9,7 @@ import { planRepository } from '../../repositories/PlanRepository';
 
 // Mock AdhesionRepository and PlanRepository
 vi.mock('../../repositories/AdhesionRepository', () => ({
+  DNI_PHOTOS_REQUIRED_MESSAGE: 'Cargá las fotos del DNI del titular (frente y dorso).',
   adhesionRepository: {
     submitApplication: vi.fn(),
     activateApplication: vi.fn()
@@ -65,7 +66,10 @@ const renderFormWithPromoter = (code: string) =>
     </MemoryRouter>
   );
 
-const fillTitularStep1 = (options?: { skipCuil?: boolean; cuilValue?: string }) => {
+const dniFront = new File(['front'], 'dni-frente.jpg', { type: 'image/jpeg' });
+const dniBack = new File(['back'], 'dni-dorso.jpg', { type: 'image/jpeg' });
+
+const fillTitularStep1 = (options?: { skipCuil?: boolean; cuilValue?: string; dniPhotos?: 'both' | 'front-only' | 'none' }) => {
   fireEvent.change(screen.getByPlaceholderText('Juan'), { target: { value: 'Juan' } });
   fireEvent.change(screen.getByPlaceholderText('Pérez'), { target: { value: 'Pérez' } });
   fireEvent.change(screen.getByPlaceholderText('Sin puntos ni espacios'), { target: { value: '30123456' } });
@@ -85,6 +89,13 @@ const fillTitularStep1 = (options?: { skipCuil?: boolean; cuilValue?: string }) 
   fireEvent.change(screen.getByPlaceholderText('Centro'), { target: { value: 'Centro' } });
   fireEvent.change(screen.getByPlaceholderText('nombre@ejemplo.com'), { target: { value: 'juan@test.com' } });
   fireEvent.change(screen.getByPlaceholderText('3416123456'), { target: { value: '3416123456' } });
+  const photos = options?.dniPhotos ?? 'both';
+  if (photos !== 'none') {
+    fireEvent.change(screen.getByLabelText('Foto DNI frente'), { target: { files: [dniFront] } });
+  }
+  if (photos === 'both') {
+    fireEvent.change(screen.getByLabelText('Foto DNI dorso'), { target: { files: [dniBack] } });
+  }
 };
 
 /**
@@ -175,6 +186,29 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
     );
   });
 
+  it('blocks advancing to Step 2 until both DNI photos are uploaded', () => {
+    renderForm();
+    fillTitularStep1({ dniPhotos: 'front-only' });
+
+    next();
+
+    expect(mockToast).toHaveBeenCalledWith('Cargá las fotos del DNI del titular (frente y dorso).', 'warning');
+    expect(screen.getByLabelText('Foto DNI dorso')).toBeInTheDocument();
+  });
+
+  it('rejects a DNI photo that is not JPG, PNG or WEBP', () => {
+    renderForm();
+    fillTitularStep1({ dniPhotos: 'front-only' });
+    fireEvent.change(screen.getByLabelText('Foto DNI dorso'), {
+      target: { files: [new File(['heic'], 'dni.heic', { type: 'image/heic' })] }
+    });
+
+    next();
+
+    expect(mockToast).toHaveBeenCalledWith('Seleccioná una imagen JPG, PNG o WEBP del DNI', 'warning');
+    expect(mockToast).toHaveBeenCalledWith('Cargá las fotos del DNI del titular (frente y dorso).', 'warning');
+  });
+
   it('blocks advancing to Step 2 when the titular CUIL has an invalid format', () => {
     renderForm();
     fillTitularStep1({ cuilValue: '123' });
@@ -185,6 +219,24 @@ describe('AdhesionForm - CUIL field and duplicate-rejection handling', () => {
       'El CUIL debe tener 11 dígitos, con o sin guiones (formato NN-DDDDDDDD-C)',
       'warning'
     );
+  });
+
+  it('submits both DNI photos alongside the application payload', async () => {
+    vi.mocked(adhesionRepository.submitApplication).mockRejectedValueOnce(new Error('stop here'));
+
+    const { container } = renderForm();
+    await advanceToSignatureStep();
+    fireEvent.click(screen.getByLabelText(/Autorizo el tratamiento de mis datos personales/i));
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    fireEvent.mouseDown(canvas);
+    fireEvent.mouseUp(canvas);
+    fireEvent.click(screen.getByRole('button', { name: /Enviar Solicitud/i }));
+
+    await waitFor(() => expect(adhesionRepository.submitApplication).toHaveBeenCalled());
+    const [payload, photos] = vi.mocked(adhesionRepository.submitApplication).mock.calls[0] as any[];
+    expect(payload.titular_dni).toBe('30123456');
+    // jsdom cannot decode images, so compressImage hands back the originals.
+    expect(photos).toEqual({ front: dniFront, back: dniBack });
   });
 
   it('surfaces the duplicate-check conflict message via toast when submitApplication is rejected', async () => {
