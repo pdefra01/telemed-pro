@@ -45,6 +45,9 @@ using (
 -- one PostgREST sets with SET ROLE), which a definer function does not change,
 -- unlike current_user. No helper is exposed, so anon gets no RPC to probe
 -- which objects exist.
+-- An earlier draft of this migration exposed a lookup helper to anon.
+drop function if exists public.adhesion_dni_photo_count(text, text);
+
 create or replace function public.require_adhesion_dni_photos()
 returns trigger
 language plpgsql
