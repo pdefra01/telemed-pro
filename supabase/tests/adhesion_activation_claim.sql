@@ -38,11 +38,13 @@ SET LOCAL ROLE anon;
 INSERT INTO public.adhesion_requests
   (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality,
    titular_neighborhood, titular_email, titular_phone, titular_civil_status, payment_method, signature_base64,
-   activation_claimed_at, activated_at, activation_source)
+   activation_claimed_at, activated_at, activation_source,
+   titular_dni_front_path, titular_dni_back_path)
 VALUES
   ('a7a7a7a7-0000-0000-0000-000000000002', 'Forger', '30999222', '1980-01-01', 'Calle 1', 'Loc',
    'Barrio', 'forge-act@example.com', '1155552222', 'single', 'cash', 'sig',
-   now(), now(), 'admin');
+   now(), now(), 'admin',
+   'a7a7a7a7-0000-0000-0000-000000000002/front.jpg', 'a7a7a7a7-0000-0000-0000-000000000002/back.jpg');
 RESET ROLE;
 
 SELECT is((SELECT coalesce(activation_claimed_at::text, '') || coalesce(activated_at::text, '') || coalesce(activation_source, '')

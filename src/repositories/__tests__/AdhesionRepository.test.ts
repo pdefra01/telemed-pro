@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AdhesionRepository, AdhesionRequest } from '../AdhesionRepository';
+import { AdhesionRepository, AdhesionRequest, DniPhotos, DNI_PHOTOS_BUCKET, DNI_PHOTOS_REQUIRED_MESSAGE, DNI_PHOTOS_TYPE_MESSAGE } from '../AdhesionRepository';
 import { supabase } from '../../services/supabase';
 
 vi.mock('../../services/supabase', () => {
   return {
     supabase: {
       from: vi.fn(),
+      storage: {
+        from: vi.fn()
+      },
       auth: {
         getSession: vi.fn()
       }
@@ -36,13 +39,96 @@ const buildRequest = (overrides: Partial<AdhesionRequest> = {}): AdhesionRequest
   ...overrides
 });
 
+const dniPhotos: DniPhotos = {
+  front: new Blob(['front'], { type: 'image/jpeg' }),
+  back: new Blob(['back'], { type: 'image/png' })
+};
+
 describe('AdhesionRepository', () => {
   let repository: AdhesionRepository;
+  let uploadMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    uploadMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+    vi.mocked(supabase.storage.from).mockReturnValue({ upload: uploadMock } as any);
     repository = new AdhesionRepository();
+  });
+
+  describe('titular DNI photos', () => {
+    const stubDuplicateCheckOk = () =>
+      vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: true }) } as Response);
+
+    it('uploads front and back to the private bucket under the row id and stores both paths', async () => {
+      vi.stubGlobal('crypto', { randomUUID: () => 'adhesion-dni-1' });
+      stubDuplicateCheckOk();
+      const insertMock = vi.fn().mockResolvedValue({ error: null });
+      vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+      const result = await repository.submitApplication(buildRequest(), dniPhotos);
+
+      expect(result).toEqual({ id: 'adhesion-dni-1' });
+      expect(supabase.storage.from).toHaveBeenCalledWith(DNI_PHOTOS_BUCKET);
+      expect(uploadMock).toHaveBeenCalledWith('adhesion-dni-1/front.jpg', dniPhotos.front, { contentType: 'image/jpeg', upsert: false });
+      expect(uploadMock).toHaveBeenCalledWith('adhesion-dni-1/back.png', dniPhotos.back, { contentType: 'image/png', upsert: false });
+      expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'adhesion-dni-1',
+        titular_dni_front_path: 'adhesion-dni-1/front.jpg',
+        titular_dni_back_path: 'adhesion-dni-1/back.png'
+      }));
+      expect(uploadMock.mock.invocationCallOrder[1]).toBeLessThan(insertMock.mock.invocationCallOrder[0]);
+    });
+
+    it('rejects a submission missing either side without uploading or inserting', async () => {
+      stubDuplicateCheckOk();
+      const insertMock = vi.fn().mockResolvedValue({ error: null });
+      vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+      await expect(repository.submitApplication(buildRequest())).rejects.toThrow(DNI_PHOTOS_REQUIRED_MESSAGE);
+      await expect(
+        repository.submitApplication(buildRequest(), { front: dniPhotos.front } as DniPhotos)
+      ).rejects.toThrow(DNI_PHOTOS_REQUIRED_MESSAGE);
+
+      expect(uploadMock).not.toHaveBeenCalled();
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-image file without uploading or inserting', async () => {
+      stubDuplicateCheckOk();
+      const insertMock = vi.fn().mockResolvedValue({ error: null });
+      vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+      await expect(
+        repository.submitApplication(buildRequest(), { front: dniPhotos.front, back: new Blob(['x'], { type: 'application/pdf' }) })
+      ).rejects.toThrow(DNI_PHOTOS_TYPE_MESSAGE);
+
+      expect(uploadMock).not.toHaveBeenCalled();
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('does not insert the request when an upload fails', async () => {
+      stubDuplicateCheckOk();
+      uploadMock.mockResolvedValueOnce({ data: null, error: { message: 'mime type not allowed' } });
+      const insertMock = vi.fn().mockResolvedValue({ error: null });
+      vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
+
+      await expect(repository.submitApplication(buildRequest(), dniPhotos)).rejects.toThrow(
+        'No se pudieron subir las fotos del DNI. Reintentá.'
+      );
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('signs both stored paths and returns null for a missing side', async () => {
+      const createSignedUrl = vi.fn().mockResolvedValue({ data: { signedUrl: 'https://signed/front' }, error: null });
+      vi.mocked(supabase.storage.from).mockReturnValue({ createSignedUrl } as any);
+
+      const urls = await repository.getDniPhotoUrls({ titular_dni_front_path: 'id/front.jpg', titular_dni_back_path: null });
+
+      expect(urls).toEqual({ front: 'https://signed/front', back: null });
+      expect(createSignedUrl).toHaveBeenCalledTimes(1);
+      expect(createSignedUrl).toHaveBeenCalledWith('id/front.jpg', 600);
+    });
   });
 
   it('calls POST /api/adhesion/check-duplicates before inserting the adhesion request', async () => {
@@ -57,7 +143,7 @@ describe('AdhesionRepository', () => {
     vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
     const request = buildRequest();
-    const result = await repository.submitApplication(request);
+    const result = await repository.submitApplication(request, dniPhotos);
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion/check-duplicates', expect.objectContaining({
       method: 'POST',
@@ -94,7 +180,7 @@ describe('AdhesionRepository', () => {
     vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
     const request = buildRequest();
-    await repository.submitApplication(request);
+    await repository.submitApplication(request, dniPhotos);
 
     expect(supabase.from).toHaveBeenCalledWith('adhesion_requests');
     expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -129,7 +215,7 @@ describe('AdhesionRepository', () => {
 
     const request = buildRequest();
 
-    await expect(repository.submitApplication(request)).rejects.toThrow(
+    await expect(repository.submitApplication(request, dniPhotos)).rejects.toThrow(
       'Titular: Este DNI ya se encuentra afiliado a Medinex.'
     );
 
@@ -158,7 +244,7 @@ describe('AdhesionRepository', () => {
     const insertMock = vi.fn().mockResolvedValue({ error: null });
     vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
-    await expect(repository.submitApplication(buildRequest())).rejects.toThrow(
+    await expect(repository.submitApplication(buildRequest(), dniPhotos)).rejects.toThrow(
       'Titular: El telefono ya esta registrado en otro afiliado o solicitud pendiente.'
     );
     expect(insertMock).not.toHaveBeenCalled();
@@ -174,7 +260,7 @@ describe('AdhesionRepository', () => {
     const insertMock = vi.fn().mockResolvedValue({ error: null });
     vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
-    await expect(repository.submitApplication(buildRequest({ plan_type: 'individual' }))).rejects.toThrow(
+    await expect(repository.submitApplication(buildRequest({ plan_type: 'individual' }), dniPhotos)).rejects.toThrow(
       'El plan Individual no admite integrantes adicionales.'
     );
     expect(insertMock).not.toHaveBeenCalled();
@@ -212,7 +298,7 @@ describe('AdhesionRepository', () => {
 
     const request = buildRequest();
 
-    await expect(repository.submitApplication(request)).rejects.toThrow(
+    await expect(repository.submitApplication(request, dniPhotos)).rejects.toThrow(
       'Titular: Este DNI ya se encuentra afiliado a Medinex. Familiar María Pérez: Ya existe una solicitud pendiente con este CUIL.'
     );
 
@@ -244,7 +330,7 @@ describe('AdhesionRepository', () => {
 
     const request = buildRequest({ promoter_id: 'PROMO_INACTIVE' });
 
-    await expect(repository.submitApplication(request)).rejects.toThrow(
+    await expect(repository.submitApplication(request, dniPhotos)).rejects.toThrow(
       'El código de promotor ingresado no es válido o no está activo.'
     );
 
@@ -277,7 +363,7 @@ describe('AdhesionRepository', () => {
     );
 
     const request = buildRequest({ promoter_id: 'PROMO_UNVERIFIABLE' });
-    await repository.submitApplication(request);
+    await repository.submitApplication(request, dniPhotos);
 
     expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ promoter_id: null }));
     // The caller's own object must not have been mutated as a side effect
@@ -298,7 +384,7 @@ describe('AdhesionRepository', () => {
 
     const request = buildRequest({ titular_dni: '123ABC45' });
 
-    await expect(repository.submitApplication(request)).rejects.toThrow(
+    await expect(repository.submitApplication(request, dniPhotos)).rejects.toThrow(
       /DNI debe contener entre 7 y 8 dígitos/
     );
     expect(insertMock).not.toHaveBeenCalled();
@@ -314,7 +400,7 @@ describe('AdhesionRepository', () => {
     vi.mocked(supabase.from).mockReturnValue({ insert: insertMock } as any);
 
     const request = buildRequest({ titular_dni: '  30123456  ' });
-    await repository.submitApplication(request);
+    await repository.submitApplication(request, dniPhotos);
 
     expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ titular_dni: '30123456' }));
   });
@@ -330,7 +416,7 @@ describe('AdhesionRepository', () => {
 
     const request = buildRequest();
 
-    await expect(repository.submitApplication(request)).rejects.toThrow('insert failed');
+    await expect(repository.submitApplication(request, dniPhotos)).rejects.toThrow('insert failed');
   });
 
   describe('approveApplication (D7 — sends the session Bearer token)', () => {
