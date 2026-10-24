@@ -10,6 +10,7 @@ import { systemSettingsRepository } from '../../repositories/SystemSettingsRepos
 import { officeLocationRepository } from '../../repositories/OfficeLocationRepository';
 import { useToast } from '../../context/ToastContext';
 import { TaxConfiguration, OfficeLocation } from '../../types';
+import { DEFAULT_MAX_SESSION_HOURS, resolveMaxSessionHours } from '../../utils/sessionExpiry';
 
 const GlassCard: React.FC<{
   children: React.ReactNode;
@@ -39,10 +40,10 @@ const OCCSettings: React.FC = () => {
   const [newOffice, setNewOffice] = useState({ name: '', latitude: 0, longitude: 0, radiusMeters: 150 });
 
   const [sessionPolicy, setSessionPolicy] = useState<{
-    [role: string]: { timeoutMinutes: number; persistent: boolean };
+    [role: string]: { timeoutMinutes: number; persistent: boolean; maxSessionHours?: number };
   }>({
     admin: { timeoutMinutes: 15, persistent: false },
-    doctor: { timeoutMinutes: 30, persistent: false },
+    doctor: { timeoutMinutes: 30, persistent: false, maxSessionHours: DEFAULT_MAX_SESSION_HOURS.doctor },
     advisor: { timeoutMinutes: 30, persistent: false },
     patient: { timeoutMinutes: 0, persistent: true }
   });
@@ -291,7 +292,7 @@ const OCCSettings: React.FC = () => {
           </h3>
           <GlassCard className="p-6">
             <p className="text-slate-400 text-sm mb-6 italic">
-              Configurá la expiración por inactividad y persistencia de las sesiones según el rol.
+              Configurá la expiración por inactividad, la duración máxima y la persistencia de las sesiones según el rol.
             </p>
             
             <div className="space-y-6">
@@ -334,6 +335,23 @@ const OCCSettings: React.FC = () => {
                           className="w-14 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white text-xs font-mono text-center focus:outline-none focus:border-emerald-500/50"
                         />
                         <span className="text-xs text-slate-400">min de inactividad (0 = desact.)</span>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-slate-400">Duración máxima:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={resolveMaxSessionHours(sessionPolicy, role)}
+                          onChange={(e) => {
+                            setSessionPolicy({
+                              ...sessionPolicy,
+                              [role]: { ...roleConfig, maxSessionHours: parseInt(e.target.value) || 0 }
+                            });
+                          }}
+                          className="w-14 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white text-xs font-mono text-center focus:outline-none focus:border-emerald-500/50"
+                        />
+                        <span className="text-xs text-slate-400">horas desde el ingreso (0 = sin límite)</span>
                       </div>
                     </div>
                   </div>
