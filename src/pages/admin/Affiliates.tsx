@@ -88,6 +88,7 @@ const Affiliates: React.FC = () => {
     return () => { isCurrent = false; };
   }, [selectedRequest]);
   const [promoterFilter, setPromoterFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended'>('active');
 
   useEffect(() => {
     loadAffiliates();
@@ -364,6 +365,13 @@ const Affiliates: React.FC = () => {
 
   const selectedClaimState = getActivationClaimState(selectedRequest);
 
+  // Same status derivation as the "Estado de Cuenta" badge.
+  const affiliateStatus = (p: typeof affiliates[number]) =>
+    p.isActive ? 'active' : p.planStatus === 'suspended' ? 'suspended' : 'pending';
+  const filteredAffiliates = statusFilter === 'all'
+    ? affiliates
+    : affiliates.filter(p => affiliateStatus(p) === statusFilter);
+
   const filteredRequests = promoterFilter === 'all'
     ? requests
     : requests.filter(r => (r.promoter_id?.trim().toUpperCase() || 'SIN_PROMOTOR') === promoterFilter);
@@ -378,6 +386,18 @@ const Affiliates: React.FC = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+          <select
+            id="affiliate-status-filter"
+            aria-label="Filtrar por estado"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            className="px-4 py-3 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none text-white text-sm cursor-pointer [&>option]:bg-slate-900"
+          >
+            <option value="active">Activos</option>
+            <option value="pending">Pendientes</option>
+            <option value="suspended">Suspendidos</option>
+            <option value="all">Todos los estados</option>
+          </select>
           <div className="relative group flex-1 sm:flex-initial">
             <input
               type="text"
@@ -475,9 +495,9 @@ const Affiliates: React.FC = () => {
               <tbody className="divide-y divide-white/5">
                 {isLoading ? (
                   <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-500 italic animate-pulse">Sincronizando padrón de afiliados...</td></tr>
-                ) : affiliates.length === 0 ? (
-                  <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-500 italic">No se encontraron registros en la base de datos.</td></tr>
-                ) : affiliates.map((patient) => (
+                ) : filteredAffiliates.length === 0 ? (
+                  <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-500 italic">{affiliates.length === 0 ? 'No se encontraron registros en la base de datos.' : 'No hay afiliados con ese estado.'}</td></tr>
+                ) : filteredAffiliates.map((patient) => (
                   <tr key={patient.id} className="group hover:bg-white/5 transition-all duration-200">
                     <td className="px-8 py-5">
                       <div className="flex items-center">

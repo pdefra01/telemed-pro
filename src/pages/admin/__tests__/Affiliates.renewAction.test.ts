@@ -10,6 +10,7 @@ const basePatient: Patient = {
   name: 'Juan Pérez',
   email: 'juan@test.com',
   role: 'patient',
+  isActive: true,
   planStatus: 'active',
   paymentStatus: 'current',
   currentPeriodQuotaUsed: 0,
