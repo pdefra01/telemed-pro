@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { User, Patient, Doctor } from './types';
 import Auth from './pages/Auth';
@@ -44,6 +44,7 @@ import { ToastProvider, useToast } from './context/ToastContext';
 
 import { authRepository } from './repositories/AuthRepository';
 import { supabase } from './services/supabase';
+import { getSessionExpiryReason, resolveMaxSessionHours } from './utils/sessionExpiry';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 // Error Boundary simple para capturar errores de renderizado
@@ -89,24 +90,43 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
-// Componente para manejar la inactividad de sesión según el rol
+// Session timestamps, kept next to `medinex_user` (same storage per role policy).
+const SESSION_STARTED_KEY = 'medinex_session_started_at';
+const LAST_ACTIVITY_KEY = 'medinex_last_activity_at';
+const SESSION_CHECK_INTERVAL_MS = 30 * 1000;
+const ACTIVITY_WRITE_THROTTLE_MS = 15 * 1000;
+
+const sessionStoreFor = (): Storage => (sessionStorage.getItem('medinex_user') ? sessionStorage : localStorage);
+
+const readTimestamp = (store: Storage, key: string): number | null => {
+  const value = Number(store.getItem(key));
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+
+const clearSessionTimestamps = () => {
+  [sessionStorage, localStorage].forEach((store) => {
+    store.removeItem(SESSION_STARTED_KEY);
+    store.removeItem(LAST_ACTIVITY_KEY);
+  });
+};
+
+// Componente para manejar la expiración de sesión según el rol: inactividad y
+// duración máxima, medidas con la hora real (ver utils/sessionExpiry.ts).
 const SessionTimeoutHandler: React.FC<{ user: User | null; onLogout: () => void }> = ({ user, onLogout }) => {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!user) {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      return;
-    }
+    if (!user) return;
 
-    // Cargar política de inactividad
+    // Cargar política de inactividad y duración máxima
     let timeoutMinutes = 0;
+    let maxSessionHours = resolveMaxSessionHours(null, user.role);
     try {
       const cached = localStorage.getItem('medinex_session_policy') || sessionStorage.getItem('medinex_session_policy');
       if (cached) {
         const policy = JSON.parse(cached);
         timeoutMinutes = policy[user.role]?.timeoutMinutes || 0;
+        maxSessionHours = resolveMaxSessionHours(policy, user.role);
       } else {
         // Fallback defaults
         if (user.role === 'admin' || user.role === 'advisor') timeoutMinutes = 15;
@@ -116,30 +136,68 @@ const SessionTimeoutHandler: React.FC<{ user: User | null; onLogout: () => void 
       console.error("Error reading timeout from policy:", e);
     }
 
-    if (timeoutMinutes <= 0) {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      return;
-    }
+    if (timeoutMinutes <= 0 && maxSessionHours <= 0) return;
 
-    const timeoutMs = timeoutMinutes * 60 * 1000;
+    // Sessions opened before this code shipped have no timestamps: start counting now.
+    const store = sessionStoreFor();
+    const now = Date.now();
+    if (readTimestamp(store, SESSION_STARTED_KEY) === null) store.setItem(SESSION_STARTED_KEY, String(now));
+    if (readTimestamp(store, LAST_ACTIVITY_KEY) === null) store.setItem(LAST_ACTIVITY_KEY, String(now));
 
-    const resetTimer = () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => {
-        console.log(`[SessionTimeoutHandler] Logout due to inactivity of ${timeoutMinutes} minutes`);
-        onLogout();
-        toast("Tu sesión ha expirado por inactividad por motivos de seguridad.", "error");
-      }, timeoutMs);
+    let expired = false;
+    let lastActivityWrite = 0;
+
+    const checkExpiry = (): boolean => {
+      if (expired) return true;
+      const reason = getSessionExpiryReason({
+        now: Date.now(),
+        startedAt: readTimestamp(store, SESSION_STARTED_KEY),
+        lastActivityAt: readTimestamp(store, LAST_ACTIVITY_KEY),
+        timeoutMinutes,
+        maxSessionHours,
+      });
+      if (!reason) return false;
+
+      expired = true;
+      console.log(`[SessionTimeoutHandler] Logout due to ${reason}`);
+      onLogout();
+      toast(
+        reason === 'max_duration'
+          ? `Tu sesión se cerró porque superó las ${maxSessionHours} horas. Ingresá nuevamente.`
+          : "Tu sesión ha expirado por inactividad por motivos de seguridad.",
+        "error"
+      );
+      return true;
+    };
+
+    const handleActivity = () => {
+      // Check before counting the event: the first move after the computer
+      // wakes up must not revive a session that already expired.
+      if (checkExpiry()) return;
+      const activityAt = Date.now();
+      if (activityAt - lastActivityWrite >= ACTIVITY_WRITE_THROTTLE_MS) {
+        lastActivityWrite = activityAt;
+        store.setItem(LAST_ACTIVITY_KEY, String(activityAt));
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkExpiry();
     };
 
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    
-    resetTimer();
-    events.forEach(event => window.addEventListener(event, resetTimer));
+
+    checkExpiry();
+    const interval = setInterval(checkExpiry, SESSION_CHECK_INTERVAL_MS);
+    events.forEach(event => window.addEventListener(event, handleActivity));
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
 
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      events.forEach(event => window.removeEventListener(event, resetTimer));
+      clearInterval(interval);
+      events.forEach(event => window.removeEventListener(event, handleActivity));
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
     };
   }, [user, onLogout, toast]);
 
@@ -201,9 +259,18 @@ const App: React.FC = () => {
       sessionStorage.setItem('medinex_user', JSON.stringify(loggedInUser));
       localStorage.removeItem('medinex_user');
     }
+
+    // A fresh login starts a fresh session clock.
+    clearSessionTimestamps();
+    const loginAt = String(Date.now());
+    const store = isPersistent ? localStorage : sessionStorage;
+    store.setItem(SESSION_STARTED_KEY, loginAt);
+    store.setItem(LAST_ACTIVITY_KEY, loginAt);
   };
 
-  const handleLogout = async () => {
+  // Stable identity: SessionTimeoutHandler's effect depends on it and must not
+  // re-run (and re-check expiry) on every App render.
+  const handleLogout = useCallback(async () => {
     try {
       await authRepository.logout();
     } catch (e) {
@@ -212,8 +279,9 @@ const App: React.FC = () => {
       setUser(null);
       localStorage.removeItem('medinex_user');
       sessionStorage.removeItem('medinex_user');
+      clearSessionTimestamps();
     }
-  };
+  }, []);
 
   // Sincronizar la política desde la base de datos
   useEffect(() => {
@@ -246,6 +314,7 @@ const App: React.FC = () => {
         setUser(null);
         localStorage.removeItem('medinex_user');
         sessionStorage.removeItem('medinex_user');
+        clearSessionTimestamps();
       }
     });
 
