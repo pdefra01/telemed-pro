@@ -76,6 +76,27 @@ describe('buildActivationEmail', () => {
     expect(email.text.toLowerCase()).not.toContain('contraseña temporal');
     expect(email.html.toLowerCase()).not.toContain('dni');
   });
+
+  it('tells the titular that their username is their email, in both bodies', () => {
+    const email = buildActivationEmail({
+      fullName: 'Juan Pérez',
+      email: 'juan@test.com',
+      activationUrl: 'https://medinex.com/#/activar?token_hash=abc',
+    });
+    expect(email.text).toContain('Tu usuario es: juan@test.com');
+    expect(email.html).toContain('Tu usuario es:');
+    expect(email.html).toContain('juan@test.com');
+  });
+
+  it('HTML-escapes the email in the HTML body', () => {
+    const email = buildActivationEmail({
+      fullName: 'Juan Pérez',
+      email: '"<b>"@test.com',
+      activationUrl: 'https://medinex.com/#/activar?token_hash=abc',
+    });
+    expect(email.html).not.toContain('<b>');
+    expect(email.html).toContain('&quot;&lt;b&gt;&quot;@test.com');
+  });
 });
 
 describe('sendActivationEmail', () => {
@@ -107,6 +128,7 @@ describe('sendActivationEmail', () => {
 
     expect(result).toEqual({ sent: true });
     expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: 'juan@test.com' }));
+    expect(sendMail.mock.calls[0][0].text).toContain('Tu usuario es: juan@test.com');
   });
 
   it('returns {sent:false, reason} and never throws when generateLink errors', async () => {

@@ -63,15 +63,17 @@ function escapeHtml(value) {
 
 /**
  * Pure builder for the activation email's content. No DNI, no password,
- * ever, in the message (design "Interfaces / Contracts"). `fullName` is
- * applicant-controlled (public /adhesion form) and MUST be HTML-escaped
- * before interpolation into `html` — the plain-text `text` body needs no
- * escaping.
+ * ever, in the message (design "Interfaces / Contracts"). It does state the
+ * username (the auth email), so the titular never tries to log in with the
+ * DNI. `fullName` and `email` are applicant-controlled (public /adhesion
+ * form) and MUST be HTML-escaped before interpolation into `html` — the
+ * plain-text `text` body needs no escaping.
  */
-export function buildActivationEmail({ fullName, activationUrl }) {
+export function buildActivationEmail({ fullName, email, activationUrl }) {
   const subject = 'Activá tu cuenta Medinex';
-  const text = `Hola ${fullName},\n\nTu afiliación fue aprobada. Para activar tu cuenta y crear tu contraseña, ingresá al siguiente enlace:\n${activationUrl}\n\nEste enlace es de un solo uso y vence pronto. Si el enlace venció, contactate con administración.`;
+  const text = `Hola ${fullName},\n\nTu afiliación fue aprobada. Para activar tu cuenta y crear tu contraseña, ingresá al siguiente enlace:\n${activationUrl}\n\nTu usuario es: ${email}\n\nEste enlace es de un solo uso y vence pronto. Si el enlace venció, contactate con administración.`;
   const safeFullName = escapeHtml(fullName);
+  const safeEmail = escapeHtml(email);
   const html = `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #0f172a; color: #f1f5f9; border-radius: 16px; overflow: hidden;">
       <div style="background: linear-gradient(135deg, #10b981, #0d9488); padding: 32px; text-align: center;">
@@ -81,6 +83,7 @@ export function buildActivationEmail({ fullName, activationUrl }) {
       <div style="padding: 40px 32px;">
         <h2 style="margin: 0 0 8px; font-size: 20px; color: #f1f5f9;">¡Hola, ${safeFullName}!</h2>
         <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">Tu afiliación fue aprobada. Creá tu contraseña para empezar a usar Medinex.</p>
+        <p style="color: #f1f5f9; font-size: 14px; line-height: 1.6; margin: 16px 0 0;">Tu usuario es: <strong style="color: #10b981; word-break: break-all;">${safeEmail}</strong></p>
         <div style="margin: 32px 0; text-align: center;">
           <a href="${activationUrl}" style="display: inline-block; background: #10b981; color: #0f172a; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px;">Crear mi contraseña</a>
         </div>
@@ -236,7 +239,7 @@ export async function sendActivationEmail(
     }
 
     const activationUrl = buildActivationUrl(publicAppUrl, data.properties.hashed_token);
-    const { subject, text, html } = buildActivationEmail({ fullName, activationUrl });
+    const { subject, text, html } = buildActivationEmail({ fullName, email, activationUrl });
 
     const transporter = await createMailTransporter();
     await transporter.sendMail({
