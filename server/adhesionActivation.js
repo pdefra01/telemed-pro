@@ -17,6 +17,7 @@
 import { buildPatientAuthUser, sendActivationEmail } from './affiliateActivation.js';
 import { resolveSellablePlan } from './pricing.js';
 import { postAdhesionCheckoutPayment } from './adhesionPayments.js';
+import { sendPaymentReceiptEmail } from './paymentReceipt.js';
 import { handleSubscriptionEvent, runDeferredReconciliation } from './mercadopago.js';
 
 export const ACTIVATION_SOURCES = ['auto', 'admin'];
@@ -281,6 +282,13 @@ export async function activateAdhesion(deps, adhesionId, { source } = {}) {
       console.error(`${LOG} Ledger posting of the checkout payment failed:`, ledgerPost.error);
     } else if (ledgerPost.posted) {
       console.log(`${LOG} Checkout payment posted to the ledger (invoice ${ledgerPost.invoiceId}).`);
+      if (ledgerPost.movementId) {
+        // Never throws; a failed receipt email never fails the approval.
+        await sendPaymentReceiptEmail(
+          { supabaseAdmin, createMailTransporter, fromAddress, publicAppUrl },
+          { movementId: ledgerPost.movementId }
+        );
+      }
     }
 
     // 5b. Mercado Pago débito-automático link back-fill (design D-F "Link

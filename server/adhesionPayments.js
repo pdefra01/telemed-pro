@@ -219,9 +219,13 @@ export async function createAdhesionCheckoutPreference(ctx, { adhesionRequestId 
  * idempotent). Shared by the payment webhook and approve-adhesion so whichever
  * happens second posts it. Never throws.
  *
- * @param {{ rpc: Function }} supabaseAdmin
+ * When this call posts the payment, `movementId` is the posted payment movement
+ * (so the caller can email its receipt exactly once); null otherwise or when
+ * the lookup fails.
+ *
+ * @param {{ rpc: Function, from?: Function }} supabaseAdmin
  * @param {string} adhesionRequestId
- * @returns {Promise<{ ok: true, posted: boolean, reason: string, invoiceId: string | null } | { ok: false, error: string }>}
+ * @returns {Promise<{ ok: true, posted: boolean, reason: string, invoiceId: string | null, movementId?: string | null } | { ok: false, error: string }>}
  */
 export async function postAdhesionCheckoutPayment(supabaseAdmin, adhesionRequestId) {
   try {
@@ -230,8 +234,26 @@ export async function postAdhesionCheckoutPayment(supabaseAdmin, adhesionRequest
     });
     if (error) return { ok: false, error: error.message };
     if (!data) return { ok: false, error: 'empty_ledger_response' };
-    return { ok: true, posted: data.posted === true, reason: data.reason, invoiceId: data.invoice_id ?? null };
+    const result = { ok: true, posted: data.posted === true, reason: data.reason, invoiceId: data.invoice_id ?? null };
+    if (result.posted && result.invoiceId) {
+      result.movementId = await findPaymentMovementId(supabaseAdmin, result.invoiceId);
+    }
+    return result;
   } catch (err) {
     return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+async function findPaymentMovementId(supabaseAdmin, invoiceId) {
+  try {
+    const { data } = await supabaseAdmin
+      .from('affiliate_account_movements')
+      .select('id')
+      .eq('invoice_id', invoiceId)
+      .eq('type', 'payment')
+      .maybeSingle();
+    return data?.id ?? null;
+  } catch {
+    return null;
   }
 }
