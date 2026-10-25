@@ -688,6 +688,9 @@ app.post('/api/create-staff', requireAuth, requireAdmin, async (req, res) => {
       password,
       email_confirm: true, // Auto-confirma el email para que el médico pueda ingresar de inmediato
       user_metadata: metadata,
+      // handle_new_user takes the role only from app_metadata (user_metadata is
+      // writable by the user through a public signUp).
+      app_metadata: { role },
     });
 
     if (error) {
@@ -741,6 +744,7 @@ app.post('/api/create-patient', requireAuth, requireAdmin, async (req, res) => {
       password,
       email_confirm: true,
       user_metadata: metadata,
+      app_metadata: { role: 'patient', is_active: true },
     });
 
     if (error) {
@@ -822,7 +826,8 @@ app.post('/api/create-patient-bulk', requireAuth, requireAdmin, async (req, res)
         email: targetEmail,
         password: targetPassword,
         email_confirm: true,
-        user_metadata: metadata
+        user_metadata: metadata,
+        app_metadata: { role: 'patient', is_active: true }
       });
 
       if (error) {
@@ -1441,7 +1446,8 @@ app.post('/api/create-advisor', requireAuth, requireAdmin, async (req, res) => {
       email: email.trim(),
       password: password,
       email_confirm: true,
-      user_metadata: { role: 'advisor', full_name: fullName }
+      user_metadata: { role: 'advisor', full_name: fullName },
+      app_metadata: { role: 'advisor' }
     });
 
     if (createUserError) {
