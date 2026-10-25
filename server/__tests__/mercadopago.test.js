@@ -506,6 +506,59 @@ describe('handlePaymentSettlement', () => {
     expect(result).toMatchObject({ outcome: 'posted', posted: true, coverage_extended: true });
   });
 
+  describe('payment receipt email (odd/debito-charge-invoice, S6)', () => {
+    const invoice = { id: 'inv-12', entity_id: 'profile-12', entity_type: 'affiliate', status: 'issued', total_amount: 14999 };
+    const payment = { id: 'pay-12', status: 'approved', transaction_amount: 14999, date_approved: '2026-11-09T20:46:56Z' };
+    const stubWith = (webhookResult) => createSupabaseStub({
+      tables: {
+        affiliate_payment_subscriptions: { maybeSingle: async () => ({ data: { profile_id: 'profile-12' }, error: null }) },
+        invoices: { maybeSingle: async () => ({ data: invoice, error: null }) },
+      },
+      rpcResults: {
+        post_payment_movement_from_webhook: { data: webhookResult, error: null },
+        record_mercadopago_payment_audit_event: { data: null, error: null },
+      },
+    });
+
+    it('sends the receipt for the new payment movement when the payment is posted', async () => {
+      const sendPaymentReceipt = vi.fn().mockResolvedValue({ sent: true });
+      const supabaseAdmin = stubWith({ posted: true, movement_id: 'mv-12', invoice_id: 'inv-12', invoice_status: 'paid', coverage_extended: true, deferred_reason: null });
+
+      const result = await handlePaymentSettlement(
+        { supabaseAdmin, mpFetch: vi.fn().mockResolvedValue(payment), sendPaymentReceipt },
+        { paymentId: 'pay-12', preapprovalId: 'preap-12' }
+      );
+
+      expect(sendPaymentReceipt).toHaveBeenCalledWith({ movementId: 'mv-12' });
+      expect(result).toMatchObject({ outcome: 'posted', posted: true });
+    });
+
+    it('sends nothing for a redelivered payment that is not posted again', async () => {
+      const sendPaymentReceipt = vi.fn();
+      const supabaseAdmin = stubWith({ posted: false, movement_id: null, invoice_id: 'inv-12', invoice_status: 'paid', coverage_extended: false, deferred_reason: null });
+
+      const result = await handlePaymentSettlement(
+        { supabaseAdmin, mpFetch: vi.fn().mockResolvedValue(payment), sendPaymentReceipt },
+        { paymentId: 'pay-12', preapprovalId: 'preap-12' }
+      );
+
+      expect(sendPaymentReceipt).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ outcome: 'duplicate', posted: false });
+    });
+
+    it('still reports the posted payment when sending the receipt throws', async () => {
+      const sendPaymentReceipt = vi.fn().mockRejectedValue(new Error('smtp down'));
+      const supabaseAdmin = stubWith({ posted: true, movement_id: 'mv-12', invoice_id: 'inv-12', invoice_status: 'paid', coverage_extended: true, deferred_reason: null });
+
+      const result = await handlePaymentSettlement(
+        { supabaseAdmin, mpFetch: vi.fn().mockResolvedValue(payment), sendPaymentReceipt },
+        { paymentId: 'pay-12', preapprovalId: 'preap-12' }
+      );
+
+      expect(result).toMatchObject({ outcome: 'posted', posted: true });
+    });
+  });
+
   it('keeps no_open_invoice (preapproval id as detail, for the sweep retry) when the invoice cannot be issued', async () => {
     const mpFetch = vi.fn().mockResolvedValue({ id: 'pay-10', status: 'approved', transaction_amount: 14999, date_approved: '2026-11-09T20:46:56Z' });
     const supabaseAdmin = createSupabaseStub({

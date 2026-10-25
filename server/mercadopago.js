@@ -659,6 +659,15 @@ export async function handlePaymentSettlement(ctx, { paymentId, preapprovalId = 
       userId: invoice.entity_id,
       amount: payment.transaction_amount,
     });
+    // Receipt email (odd/debito-charge-invoice, S6), injected by server.js.
+    // Only a first posting reaches here, so a redelivery never resends it.
+    if (ctx.sendPaymentReceipt && rpcResult.movement_id) {
+      try {
+        await ctx.sendPaymentReceipt({ movementId: rpcResult.movement_id });
+      } catch (err) {
+        console.error('[mercadopago] Payment receipt email failed (non-blocking):', err?.message || String(err));
+      }
+    }
   }
 
   const { error: auditWriteError } = await writeMercadopagoAuditEvent(supabaseAdmin, {
