@@ -26,6 +26,7 @@ import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
 import { resendActivationHandler } from './server/resendActivation.js';
 import { sendPaymentReceiptEmail } from './server/paymentReceipt.js';
+import { applyProfileAccess } from './server/profileAccess.js';
 import { buildRequireAdmin } from './server/auth.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
@@ -688,14 +689,18 @@ app.post('/api/create-staff', requireAuth, requireAdmin, async (req, res) => {
       password,
       email_confirm: true, // Auto-confirma el email para que el médico pueda ingresar de inmediato
       user_metadata: metadata,
-      // handle_new_user takes the role only from app_metadata (user_metadata is
-      // writable by the user through a public signUp).
-      app_metadata: { role },
     });
 
     if (error) {
       console.error('[create-staff] Supabase error:', error.message);
       return res.status(400).json({ error: error.message });
+    }
+
+    // handle_new_user creates every profile as an inactive patient; grant the role here.
+    const access = await applyProfileAccess(supabaseAdmin, data.user.id, { role, isActive: true });
+    if (!access.ok) {
+      console.error('[create-staff] Setting the profile role failed:', access.error);
+      return res.status(500).json({ error: 'No se pudo asignar el rol al usuario.' });
     }
 
     console.log(`[create-staff] Usuario ${role} creado: ${email} (${data.user.id})`);
@@ -744,12 +749,18 @@ app.post('/api/create-patient', requireAuth, requireAdmin, async (req, res) => {
       password,
       email_confirm: true,
       user_metadata: metadata,
-      app_metadata: { role: 'patient', is_active: true },
     });
 
     if (error) {
       console.error('[create-patient] Supabase error:', error.message);
       return res.status(400).json({ error: error.message });
+    }
+
+    // handle_new_user creates every profile inactive; an admin-created patient starts active.
+    const access = await applyProfileAccess(supabaseAdmin, data.user.id, { role: 'patient', isActive: true });
+    if (!access.ok) {
+      console.error('[create-patient] Activating the profile failed:', access.error);
+      return res.status(500).json({ error: 'No se pudo activar el paciente.' });
     }
 
     console.log(`[create-patient] Paciente creado: ${targetEmail} (${data.user.id})`);
@@ -826,16 +837,19 @@ app.post('/api/create-patient-bulk', requireAuth, requireAdmin, async (req, res)
         email: targetEmail,
         password: targetPassword,
         email_confirm: true,
-        user_metadata: metadata,
-        app_metadata: { role: 'patient', is_active: true }
+        user_metadata: metadata
       });
 
-      if (error) {
+      const access = error
+        ? null
+        : await applyProfileAccess(supabaseAdmin, data.user.id, { role: 'patient', isActive: true });
+
+      if (error || !access.ok) {
         results.failures.push({
           index,
           dni: dni.trim(),
           name,
-          error: error.message
+          error: error ? error.message : access.error
         });
         results.summary.failed++;
       } else {
@@ -1446,8 +1460,7 @@ app.post('/api/create-advisor', requireAuth, requireAdmin, async (req, res) => {
       email: email.trim(),
       password: password,
       email_confirm: true,
-      user_metadata: { role: 'advisor', full_name: fullName },
-      app_metadata: { role: 'advisor' }
+      user_metadata: { role: 'advisor', full_name: fullName }
     });
 
     if (createUserError) {

@@ -14,11 +14,15 @@
 --      write by the anon/authenticated API roles from a non-admin may not
 --      change privileged columns. SECURITY DEFINER functions (assign_plan,
 --      payment RPCs, ...) run as their owner and the service role (server) is
---      not an API role, so both keep working. Two self-service exceptions:
+--      not an API role, so both keep working. Direct inserts by those roles
+--      are always rejected. Two self-service exceptions on update:
 --        - family_group_id may only point to a group the caller is titular of;
 --        - current_period_quota_used may only grow (appointment booking).
---   2. handle_new_user reads role and is_active from raw_app_meta_data, which
---      only the service role can set; self-signups are always inactive patients.
+--   2. handle_new_user no longer trusts raw_user_meta_data for role/is_active:
+--      it reads raw_app_meta_data, which only the service role can set, so a
+--      self-signup is always an inactive patient. GoTrue's admin createUser
+--      writes app_metadata AFTER inserting the user, so the server sets role
+--      and is_active on the profile explicitly (server/profileAccess.js).
 
 CREATE OR REPLACE FUNCTION public.guard_profile_privileged_columns()
 RETURNS trigger
@@ -32,20 +36,10 @@ BEGIN
   END IF;
 
   IF TG_OP = 'INSERT' THEN
-    -- Profiles are created by handle_new_user; a client-side insert may only
-    -- create a plain, inactive patient.
-    IF NEW.role IS DISTINCT FROM 'patient'
-       OR NEW.plan_id IS NOT NULL
-       OR NEW.agreement_id IS NOT NULL
-       OR NEW.producer_id IS NOT NULL
-       OR NEW.promoter_code IS NOT NULL
-       OR NEW.family_group_id IS NOT NULL
-       OR NEW.is_verified IS TRUE
-       OR NEW.is_dni_verified IS TRUE THEN
-      RAISE EXCEPTION 'No tenés permiso para crear un perfil con esos datos.' USING ERRCODE = '42501';
-    END IF;
-    NEW.is_active := false;
-    RETURN NEW;
+    -- Profiles are created only by handle_new_user (SECURITY DEFINER). A direct
+    -- insert would let a user delete their row and re-create it with any value
+    -- (the Self manage policy also allows DELETE), so it is always rejected.
+    RAISE EXCEPTION 'No tenés permiso para crear perfiles.' USING ERRCODE = '42501';
   END IF;
 
   IF NEW.role                IS DISTINCT FROM OLD.role
@@ -112,9 +106,11 @@ BEGIN
     extracted_dni := NEW.raw_user_meta_data->>'dni';
   END IF;
 
-  -- The role and the active flag come ONLY from raw_app_meta_data, which only
-  -- the service role (server) can set. raw_user_meta_data is chosen by whoever
-  -- calls auth.signUp, so a self-signup is always a patient.
+  -- The role and the active flag never come from raw_user_meta_data, which is
+  -- chosen by whoever calls auth.signUp: a self-signup is always a patient.
+  -- raw_app_meta_data can only be set by the service role (GoTrue writes it
+  -- after this trigger runs, so server-created users get their role from an
+  -- explicit service-role profile update instead).
   extracted_role := COALESCE(NEW.raw_app_meta_data->>'role', 'patient');
 
   -- Los médicos y administradores son activos por defecto.

@@ -46,6 +46,22 @@ SELECT is((SELECT is_active FROM public.profiles WHERE id = '9a9a9a9a-0000-0000-
 SELECT is((SELECT role::text FROM public.profiles WHERE id = '9a9a9a9a-0000-0000-0000-000000000002'), 'admin',
   'admin fixture created from app metadata');
 
+-- GoTrue admin createUser inserts the user first and writes app_metadata in a
+-- later UPDATE: the profile starts as an inactive patient and the server grants
+-- the role with a service-role update (server/profileAccess.js).
+INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_user_meta_data, raw_app_meta_data)
+VALUES ('00000000-0000-0000-0000-000000000000', '9a9a9a9a-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'guard-gotrue@test.local', '', now(), now(), now(),
+  '{"role":"doctor","full_name":"GoTrue Doctor"}', '{"provider":"email"}');
+UPDATE auth.users SET raw_app_meta_data = raw_app_meta_data || '{"role":"doctor"}' WHERE id = '9a9a9a9a-0000-0000-0000-000000000006';
+SELECT results_eq($$SELECT role::text, is_active FROM public.profiles WHERE id = '9a9a9a9a-0000-0000-0000-000000000006'$$,
+  $$VALUES ('patient', false)$$, 'createUser order: the new profile starts as an inactive patient');
+SET LOCAL ROLE service_role;
+UPDATE public.profiles SET role = 'doctor', is_active = true WHERE id = '9a9a9a9a-0000-0000-0000-000000000006';
+RESET ROLE;
+SELECT results_eq($$SELECT p.role::text, p.is_active, ur.role::text FROM public.profiles p JOIN public.user_roles ur ON ur.user_id = p.id
+  WHERE p.id = '9a9a9a9a-0000-0000-0000-000000000006'$$,
+  $$VALUES ('doctor', true, 'doctor')$$, 'the server role grant reaches profiles and user_roles');
+
 -- ── S1, S2: a patient cannot change privileged columns of its own row ───────
 UPDATE public.profiles SET plan_status = 'suspended' WHERE id = '9a9a9a9a-0000-0000-0000-000000000001';
 SET LOCAL ROLE authenticated;
@@ -65,6 +81,9 @@ SELECT throws_ok($$UPDATE public.profiles SET is_dni_verified = true, is_verifie
 SELECT throws_ok($$INSERT INTO public.profiles (id, role, full_name) VALUES ('9a9a9a9a-0000-0000-0000-000000000001', 'admin', 'x')
   ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role$$,
   '42501', NULL, 'an upsert cannot change the role either');
+
+SELECT throws_ok($$INSERT INTO public.profiles (id, role, full_name) VALUES ('9a9a9a9a-0000-0000-0000-0000000000ee', 'patient', 'x')$$,
+  '42501', NULL, 'a user cannot insert profiles directly');
 
 -- S4: non-privileged personal columns stay editable, and rewriting a privileged column with its same value is allowed
 SELECT lives_ok($$UPDATE public.profiles SET phone = '3875000000', address = 'Calle 1', first_name = 'Guard' WHERE id = '9a9a9a9a-0000-0000-0000-000000000001'$$,
@@ -89,6 +108,11 @@ SELECT lives_ok($$UPDATE public.profiles SET current_period_quota_used = 3 WHERE
   'booking can increment the quota counter');
 SELECT throws_ok($$UPDATE public.profiles SET current_period_quota_used = 0 WHERE id = '9a9a9a9a-0000-0000-0000-000000000001'$$,
   '42501', NULL, 'a patient cannot reset its quota counter');
+
+SELECT throws_ok($$WITH gone AS (DELETE FROM public.profiles WHERE id = '9a9a9a9a-0000-0000-0000-000000000001' RETURNING id)
+  INSERT INTO public.profiles (id, role, full_name, plan_status, current_period_quota_used)
+  SELECT id, 'patient', 'x', 'active', -500 FROM gone$$,
+  '42501', NULL, 'a user cannot delete and re-create its profile with other values');
 
 -- S4: an admin can still change privileged columns of anyone
 SELECT set_config('request.jwt.claims', '{"sub":"9a9a9a9a-0000-0000-0000-000000000002","role":"authenticated"}', true);
