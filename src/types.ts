@@ -180,6 +180,8 @@ export interface Plan {
   isOffered?: boolean;
   /** Fixed advisor commission paid per sale of this plan. */
   advisorCommissionAmount?: number;
+  /** Pharmacy discount (%) for affiliates on this plan, 0-100. 0 = no discount. */
+  pharmacyDiscountPercent?: number;
   metadata?: Record<string, any>;
 }
 

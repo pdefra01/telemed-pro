@@ -113,6 +113,8 @@ export class PlanRepository {
       paymentOption: row.payment_option,
       isOffered: row.is_offered,
       advisorCommissionAmount: row.advisor_commission_amount,
+      // NUMERIC comes back from PostgREST as a string.
+      pharmacyDiscountPercent: row.pharmacy_discount_percent == null ? undefined : Number(row.pharmacy_discount_percent),
       metadata: row.metadata,
     };
   }
@@ -130,6 +132,7 @@ export class PlanRepository {
     if (plan.paymentOption !== undefined) row.payment_option = plan.paymentOption;
     if (plan.isOffered !== undefined) row.is_offered = plan.isOffered;
     if (plan.advisorCommissionAmount !== undefined) row.advisor_commission_amount = plan.advisorCommissionAmount;
+    if (plan.pharmacyDiscountPercent !== undefined) row.pharmacy_discount_percent = plan.pharmacyDiscountPercent;
     if (plan.metadata !== undefined) row.metadata = plan.metadata;
     return row;
   }

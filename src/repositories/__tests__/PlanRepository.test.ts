@@ -117,8 +117,28 @@ describe('PlanRepository', () => {
       payment_option: 'card_debit',
       is_offered: true,
       advisor_commission_amount: 25000,
+      pharmacy_discount_percent: '40.00',
       metadata: null,
     };
+
+    it('maps pharmacy_discount_percent to a number', async () => {
+      const orderMock = vi.fn().mockResolvedValue({ data: [row], error: null });
+      vi.mocked(supabase.from).mockReturnValue({ select: vi.fn().mockReturnValue({ order: orderMock }) } as any);
+
+      const [plan] = await repository.getAll();
+
+      expect(plan.pharmacyDiscountPercent).toBe(40);
+    });
+
+    it('sends pharmacyDiscountPercent as pharmacy_discount_percent on update', async () => {
+      const single = vi.fn().mockResolvedValue({ data: row, error: null });
+      const update = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single, maybeSingle: single }) }) });
+      vi.mocked(supabase.from).mockReturnValue({ update } as any);
+
+      await repository.update('plan-fam-card', { pharmacyDiscountPercent: 25 }).catch(() => {});
+
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ pharmacy_discount_percent: 25 }));
+    });
 
     it('maps plan_kind, payment_option, is_offered and advisor_commission_amount', async () => {
       const orderMock = vi.fn().mockResolvedValue({ data: [row], error: null });

@@ -31,6 +31,15 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [orderSuccessId, setOrderSuccessId] = useState<string | null>(null);
   const [unmatchedMedications, setUnmatchedMedications] = useState<string[]>([]);
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    pharmacyRepository.getMyDiscountPercent().then(percent => {
+      if (!cancelled) setDiscountPercent(percent);
+    });
+    return () => { cancelled = true; };
+  }, [patientId]);
 
   useEffect(() => {
     loadData();
@@ -119,7 +128,8 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-  const discount = Math.round(subtotal * 0.4); // 40% Co-pago Bonificado por Plan Médicos
+  // Display only: create_pharmacy_order recomputes the plan discount server-side.
+  const discount = Math.round(subtotal * discountPercent / 100);
   const total = subtotal - discount;
 
   const handleCheckout = async () => {
@@ -130,8 +140,7 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
         patientId,
         prescriptionId: selectedPrescriptionId,
         deliveryAddress: patientAddress,
-        // Cobertura Plan Médicos (40%) es una regla de negocio fija aplicada
-        // server-side; no se envía ni se acepta desde el cliente.
+        // The plan discount is applied server-side; it is never sent by the client.
         items: cart.map(i => ({ productId: i.product.id, quantity: i.quantity }))
       });
       setOrderSuccessId(order.id);
@@ -227,7 +236,7 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
                   onClick={() => handleDispensePrescription(rx)}
                   className="w-full py-2.5 px-4 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 font-semibold rounded-lg border border-teal-500/40 text-xs flex items-center justify-center gap-2 transition"
                 >
-                  <span>Comprar Medicamentos de la Receta (40% Cobertura)</span>
+                  <span>Comprar Medicamentos de la Receta{discountPercent > 0 ? ` (${discountPercent}% Cobertura)` : ''}</span>
                   <ArrowRight size={14} />
                 </button>
               </div>
@@ -358,7 +367,7 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
 
             <div className="bg-slate-800/80 p-4 rounded-2xl space-y-2 text-sm">
               <div className="flex justify-between text-slate-400"><span>Subtotal Comercial:</span><span>$ {subtotal}</span></div>
-              <div className="flex justify-between text-emerald-400 font-semibold"><span>Cobertura Plan Médicos (40%):</span><span>- $ {discount}</span></div>
+              {discountPercent > 0 && <div className="flex justify-between text-emerald-400 font-semibold"><span>Cobertura de tu plan ({discountPercent}%):</span><span>- $ {discount}</span></div>}
               <div className="flex justify-between text-slate-100 font-extrabold text-base pt-2 border-t border-slate-700"><span>Total a Pagar:</span><span className="text-teal-400">$ {total}</span></div>
             </div>
 

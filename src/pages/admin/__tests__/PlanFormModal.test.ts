@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { resolveBonifiedConsultations, isValidPaidMonths, isValidBonusMonths } from '../PlanFormModal';
+import { resolveBonifiedConsultations, isValidPaidMonths, isValidBonusMonths, isValidPharmacyDiscount } from '../PlanFormModal';
+
+describe('isValidPharmacyDiscount', () => {
+  it('accepts 0 to 100, decimals included', () => {
+    expect(isValidPharmacyDiscount(0)).toBe(true);
+    expect(isValidPharmacyDiscount(40)).toBe(true);
+    expect(isValidPharmacyDiscount(12.5)).toBe(true);
+    expect(isValidPharmacyDiscount(100)).toBe(true);
+  });
+
+  it('rejects values outside 0-100 or non-finite', () => {
+    expect(isValidPharmacyDiscount(-1)).toBe(false);
+    expect(isValidPharmacyDiscount(101)).toBe(false);
+    expect(isValidPharmacyDiscount(NaN)).toBe(false);
+  });
+});
 
 describe('resolveBonifiedConsultations', () => {
   it('forces 0 when the plan is unlimited, regardless of the raw field value', () => {

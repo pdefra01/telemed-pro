@@ -38,6 +38,11 @@ export function isValidBonusMonths(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
 }
 
+/** Pharmacy discount percent must be within 0-100 (DB CHECK). */
+export function isValidPharmacyDiscount(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
 export const PLAN_KIND_LABELS = {
   individual: 'Individual',
   familiar: 'Familiar',
@@ -117,6 +122,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, draft = null, inUse
   const [planKind, setPlanKind] = useState<string>(source?.planKind ?? '');
   const [paymentOption, setPaymentOption] = useState<string>(source?.paymentOption ?? '');
   const [commission, setCommission] = useState(String(source?.advisorCommissionAmount ?? 0));
+  const [pharmacyDiscount, setPharmacyDiscount] = useState(String(source?.pharmacyDiscountPercent ?? 40));
   const [isOffered, setIsOffered] = useState(source?.isOffered ?? false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -157,6 +163,12 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, draft = null, inUse
       return;
     }
 
+    const parsedPharmacyDiscount = Number(pharmacyDiscount);
+    if (!isValidPharmacyDiscount(parsedPharmacyDiscount)) {
+      setError('El descuento en farmacia debe ser un porcentaje entre 0 y 100.');
+      return;
+    }
+
     const catalogError = validateCatalogFields({
       isOffered,
       planKind,
@@ -175,6 +187,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, draft = null, inUse
         paymentOption: (paymentOption || null) as Plan['paymentOption'],
         isOffered,
         advisorCommissionAmount: Number(commission),
+        pharmacyDiscountPercent: parsedPharmacyDiscount,
         name: name.trim(),
         monthlyCost: parsedCost,
         isUnlimited,
@@ -192,7 +205,11 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, draft = null, inUse
         if (lockTerms) {
           // The DB trigger rejects any change to price/terms of a plan in use;
           // send only what stays editable.
-          await planRepository.update(plan.id, { name: payload.name, isOffered });
+          await planRepository.update(plan.id, {
+            name: payload.name,
+            isOffered,
+            pharmacyDiscountPercent: payload.pharmacyDiscountPercent,
+          });
         } else {
           await planRepository.update(plan.id, payload);
         }
@@ -237,7 +254,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, draft = null, inUse
 
         {lockTerms && (
           <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-2xl p-3.5 mb-6 font-medium leading-relaxed">
-            Este plan está en uso: para cambiar el precio cree una nueva versión. Solo se pueden editar el nombre y si está ofrecido.
+            Este plan está en uso: para cambiar el precio cree una nueva versión. Solo se pueden editar el nombre, el descuento en farmacia y si está ofrecido.
           </div>
         )}
 
@@ -413,6 +430,24 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({ plan, draft = null, inUse
             />
           </div>
           </fieldset>
+
+          <div>
+            <label htmlFor="pharmacyDiscount" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+              Descuento en farmacia (%):
+            </label>
+            <input
+              id="pharmacyDiscount"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              required
+              value={pharmacyDiscount}
+              onChange={(e) => setPharmacyDiscount(e.target.value)}
+              placeholder="Ej. 40 (0 = sin descuento)"
+              className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500/50"
+            />
+          </div>
 
           <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3">
             <input

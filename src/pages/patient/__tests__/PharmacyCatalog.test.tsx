@@ -9,6 +9,7 @@ vi.mock('../../../repositories/PharmacyRepository', () => ({
   pharmacyRepository: {
     getProducts: vi.fn(),
     getProductById: vi.fn(),
+    getMyDiscountPercent: vi.fn().mockResolvedValue(40),
   },
 }));
 
@@ -184,5 +185,28 @@ describe('PharmacyCatalog — dispensing uses the product the doctor picked (iss
 
     await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Ibuprofeno 400mg (Caja x 10)')));
     expect(screen.queryByRole('heading', { level: 4, name: 'Ibuprofeno 400mg' })).toBeNull();
+  });
+});
+
+describe('PharmacyCatalog — pharmacy discount comes from the patient plan (#33)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(pharmacyRepository.getProducts).mockResolvedValue([REAL_PRODUCT] as any);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([makePrescription()] as any);
+  });
+
+  it('shows the plan percent instead of a fixed 40%', async () => {
+    vi.mocked(pharmacyRepository.getMyDiscountPercent).mockResolvedValue(25);
+    render(<PharmacyCatalog patientId="patient-1" />);
+    expect(await screen.findByText(/Comprar Medicamentos de la Receta \(25% Cobertura\)/i)).toBeDefined();
+    expect(screen.queryByText(/40%/)).toBeNull();
+  });
+
+  it('shows no coverage when the plan has no pharmacy discount', async () => {
+    vi.mocked(pharmacyRepository.getMyDiscountPercent).mockResolvedValue(0);
+    render(<PharmacyCatalog patientId="patient-1" />);
+    await screen.findByText(/Comprar Medicamentos de la Receta/i);
+    await waitFor(() => expect(pharmacyRepository.getMyDiscountPercent).toHaveBeenCalled());
+    expect(screen.queryByText(/Cobertura/)).toBeNull();
   });
 });
