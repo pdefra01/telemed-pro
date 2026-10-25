@@ -25,6 +25,7 @@ import { sendAdhesionPaymentLink } from './server/adhesionPaymentLinkDelivery.js
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
 import { resendActivationHandler } from './server/resendActivation.js';
+import { sendPaymentReceiptEmail } from './server/paymentReceipt.js';
 import { buildRequireAdmin } from './server/auth.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
 
@@ -245,6 +246,15 @@ async function mpFetch(path, init = {}) {
 }
 
 /**
+ * Receipt email for every payment the webhook circuit posts
+ * (server/paymentReceipt.js). Passed in the settlement ctx; best-effort.
+ */
+const sendPaymentReceipt = (args) => sendPaymentReceiptEmail(
+  { supabaseAdmin, createMailTransporter, fromAddress: FROM_ADDRESS, publicAppUrl: PUBLIC_APP_URL },
+  args
+);
+
+/**
  * POST /api/webhooks/mercadopago
  * Signature-verified, session-free receiver (D-C). Mounted here — before any
  * requireAuth/requireAdmin usage in this file — because MP notifications
@@ -271,7 +281,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
   }
 
   try {
-    const { status, body } = await routeWebhookNotification({ supabaseAdmin, mpFetch }, { topic, dataId });
+    const { status, body } = await routeWebhookNotification({ supabaseAdmin, mpFetch, sendPaymentReceipt }, { topic, dataId });
     return res.status(status).json(body);
   } catch (err) {
     console.error('[webhooks/mercadopago] Unexpected error:', err);
@@ -588,7 +598,7 @@ app.post('/api/payments/reconcile-deferred', requireAuth, requireAdmin, async (r
   }
 
   try {
-    const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch });
+    const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch, sendPaymentReceipt });
     return res.status(200).json(summary);
   } catch (err) {
     console.error('[payments/reconcile-deferred] Unexpected error:', err);
