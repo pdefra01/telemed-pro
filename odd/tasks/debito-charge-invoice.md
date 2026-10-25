@@ -1,0 +1,25 @@
+# Feature: Débito charges post to the ledger (invoice issued on arrival)
+
+Objective: a monthly débito-automático charge from Mercado Pago must post to the affiliate's ledger (receipt number, invoice paid, coverage extended, in-app notification) even though no invoice was issued beforehand.
+Branch: `fix/debito-charge-invoice` · Delivery: single PR (Part A); receipt email is a separate later PR (Part B) · Tests: vitest (`npx vitest run server/`), pgTAP (`supabase test db supabase/tests/<file>.sql --local`).
+
+## Specs
+- **S1** — "necesito saber si el cobro de la cuota dispara el recibo y le llega al cliente". Part A covers the ledger side: when a débito charge arrives (`subscription_authorized_payment`, `processed`) for a linked subscription and the affiliate has no `issued` invoice, the server issues the period invoice + charge movement and the existing webhook circuit posts the payment (receipt number, invoice `paid`, plan active, coverage +1 month, "Pago acreditado" notification).
+- **S2** — Coverage: "desde la fecha del primer debito tomaremos". When the affiliate has no coverage window, it is opened anchored at the first debit date (`period_start` = payment date, `paid_months_snapshot` 0, `paid_through` = `period_start`), so the webhook extension yields `paid_through` = first debit + 1 month (e.g. debit 09/11 → 09/12). An existing window is never modified by the new function.
+- **S3** — Approach chosen by the user ("si" to "Emitir la factura cuando llega el cobro"): reuse the existing webhook circuit; only the missing link (invoice issuance) is added. Idempotent: same `(entity, period)` invoice and the same `charge:affiliate:<profileId>:<YYYY-MM>` ref as the admin billing cycle, so a later manual cycle never double-charges.
+- **S4** — Charge amount = what Mercado Pago debits per cycle (`affiliate_payment_subscriptions.discounted_monthly_cost`), so the invoice is fully paid by the charge.
+- **S5** — Unchanged: Checkout Pro payments (external_reference path), unlinked subscriptions (`subscription_not_linked`), and charges that already find an `issued` invoice behave exactly as before.
+
+## Tasks
+| ID | Specs | Route | Status | Evidence |
+|---|---|---|---|---|
+| T1 | S1-S4 | inline | done | RED: `function issue_debito_period_invoice does not exist`; GREEN: pgTAP 22/22, `service_rpc_grants` 27/27, `mercadopago` 222/222, `post_adhesion_checkout_payment` 43/43 (local) |
+| T2 | S1, S5 | inline | done | RED: new settle test failed; GREEN: `npx vitest run server/` 450/450 |
+| T3 | S1-S5 | delegated (verifier) | done | PASS S1-S5, no blockers; NULL occurred_at guard added (pgTAP 24/24) |
+
+## Log
+- **L1 (2026-10-24, user):** "necesito saber si el cobro de la cuota dispara el recibo y le llega al cliente" → "si, armá el plan" → "desde la fecha del primer debito tomaremos" → "revisa bien el codigo me parece que ya habia un circuito definido disparado por el webhook de MP" → "si" (issue the invoice when the charge arrives).
+- **L2:** Evidence: prod has 0 invoices and 0 coverage windows. `correlateInvoice` (server/mercadopago.js:385-405) needs an `issued` invoice; invoices are only created by admin-only `post_billing_charge` (monthly cycle, skips affiliates without a window), `post_adhesion_checkout_payment` (Checkout Pro only) and agreement invoices. `post_payment_movement_from_webhook` requires an existing invoice; with no window it posts but returns `no_window`. Débito plans: Individual and Familiar Débito Tarjeta, paid 1 / bonus 0, unlimited. First real charges: Hebe and Pedro, 2026-11-09.
+- **L3:** Design: new service-role RPC `issue_debito_period_invoice(p_mp_preapproval_id, p_occurred_at)` locks the subscription row, opens the window if missing (S2), upserts the invoice + charge (S3/S4), returns `{issued, reason, invoice_id}`. Period = `to_char(p_occurred_at, 'YYYY-MM')`, the same expression the webhook RPC compares against `period_start`, so `window_reset` cannot misfire at a month boundary. `correlateInvoice` calls it on `no_open_invoice` and re-reads the invoice.
+- **L4:** T1+T2 done. The sweep test "keeps a still-blocked payment deferral pending (R3)" now stubs `issue_debito_period_invoice` as not issuable (`no_plan`); its intent (still blocked → pending/no_open_invoice) is unchanged. Next: T3 independent verification.
+- **L5:** T3 verifier PASS, no blockers. It probed against the local DB: first debit 09/11 → paid_through 09/12; second-month debit → 09/01 with a second invoice; admin `post_billing_charge` for the same period is a no-op; redelivery is a no-op. It found no deadlock risk, and grants are correct. Fixed advisory: NULL `p_occurred_at` now falls back to now(). Open advisories (product decision, not regressions): two successful charges in the same UTC calendar month map to one invoice, so coverage extends once and the second charge stays as credit (only via MP retries/delays across a month boundary; billing_day ≤ 28). The period label is in UTC, not AR time. Next: PR (user decision), deploy = migration then app; then Part B (receipt email).

@@ -463,6 +463,98 @@ describe('handlePaymentSettlement', () => {
     });
   });
 
+  it('issues the debit-month invoice when none is open and settles the charge through the webhook RPC (odd/debito-charge-invoice)', async () => {
+    const mpFetch = vi.fn().mockResolvedValue({
+      id: 'pay-9',
+      status: 'approved',
+      transaction_amount: 14999,
+      date_approved: '2026-11-09T20:46:56Z',
+    });
+    const issuedInvoice = { id: 'inv-9', entity_id: 'profile-9', entity_type: 'affiliate', status: 'issued', total_amount: 14999 };
+    let invoiceReads = 0;
+    const supabaseAdmin = createSupabaseStub({
+      tables: {
+        affiliate_payment_subscriptions: { maybeSingle: async () => ({ data: { profile_id: 'profile-9' }, error: null }) },
+        // First read: the open-invoice lookup finds nothing. Second: the re-read of the issued invoice.
+        invoices: { maybeSingle: async () => ({ data: invoiceReads++ === 0 ? null : issuedInvoice, error: null }) },
+      },
+      rpcResults: {
+        issue_debito_period_invoice: { data: { issued: true, reason: 'issued', invoice_id: 'inv-9' }, error: null },
+        post_payment_movement_from_webhook: {
+          data: { posted: true, movement_id: 'mv-9', invoice_id: 'inv-9', invoice_status: 'paid', coverage_extended: true, deferred_reason: null },
+          error: null,
+        },
+        record_mercadopago_payment_audit_event: { data: null, error: null },
+      },
+    });
+
+    const result = await handlePaymentSettlement(
+      { supabaseAdmin, mpFetch },
+      { paymentId: 'pay-9', preapprovalId: 'preap-9' }
+    );
+
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('issue_debito_period_invoice', {
+      p_mp_preapproval_id: 'preap-9',
+      p_occurred_at: '2026-11-09T20:46:56Z',
+    });
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('post_payment_movement_from_webhook', expect.objectContaining({
+      p_invoice_id: 'inv-9',
+      p_entity_id: 'profile-9',
+      p_amount: 14999,
+      p_external_ref: 'payment:mercadopago:pay-9',
+    }));
+    expect(result).toMatchObject({ outcome: 'posted', posted: true, coverage_extended: true });
+  });
+
+  it('keeps no_open_invoice (preapproval id as detail, for the sweep retry) when the invoice cannot be issued', async () => {
+    const mpFetch = vi.fn().mockResolvedValue({ id: 'pay-10', status: 'approved', transaction_amount: 14999, date_approved: '2026-11-09T20:46:56Z' });
+    const supabaseAdmin = createSupabaseStub({
+      tables: {
+        affiliate_payment_subscriptions: { maybeSingle: async () => ({ data: { profile_id: 'profile-10' }, error: null }) },
+        invoices: { maybeSingle: async () => ({ data: null, error: null }) },
+      },
+      rpcResults: {
+        issue_debito_period_invoice: { data: { issued: false, reason: 'no_plan', invoice_id: null }, error: null },
+        record_mercadopago_payment_audit_event: { data: null, error: null },
+      },
+    });
+
+    const result = await handlePaymentSettlement(
+      { supabaseAdmin, mpFetch },
+      { paymentId: 'pay-10', preapprovalId: 'preap-10' }
+    );
+
+    expect(result).toMatchObject({ outcome: 'no_open_invoice', posted: false });
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalledWith('post_payment_movement_from_webhook', expect.anything());
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_payment_audit_event', expect.objectContaining({
+      p_outcome: 'no_open_invoice',
+      p_resolution_state: 'pending',
+      p_detail: 'preap-10',
+    }));
+  });
+
+  it('keeps no_open_invoice when issuing the invoice fails with a database error', async () => {
+    const mpFetch = vi.fn().mockResolvedValue({ id: 'pay-11', status: 'approved', transaction_amount: 14999, date_approved: '2026-11-09T20:46:56Z' });
+    const supabaseAdmin = createSupabaseStub({
+      tables: {
+        affiliate_payment_subscriptions: { maybeSingle: async () => ({ data: { profile_id: 'profile-11' }, error: null }) },
+        invoices: { maybeSingle: async () => ({ data: null, error: null }) },
+      },
+      rpcResults: {
+        issue_debito_period_invoice: { data: null, error: { message: 'connection reset' } },
+        record_mercadopago_payment_audit_event: { data: null, error: null },
+      },
+    });
+
+    const result = await handlePaymentSettlement(
+      { supabaseAdmin, mpFetch },
+      { paymentId: 'pay-11', preapprovalId: 'preap-11' }
+    );
+
+    expect(result).toMatchObject({ outcome: 'no_open_invoice', posted: false });
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalledWith('post_payment_movement_from_webhook', expect.anything());
+  });
+
   it('settles a débito-automático (subscription-correlated) payment with no external_reference through the preapproval->profile->invoice lookup, and calls the webhook RPC', async () => {
     const mpFetch = vi.fn().mockResolvedValue({
       id: 'pay-7',
@@ -1241,6 +1333,8 @@ describe('runDeferredReconciliation', () => {
         throw new Error(`Unexpected path: ${path}`);
       });
       const rpcHandler = (name) => {
+        // The invoice cannot be issued either (e.g. the profile has no plan), so the payment stays blocked.
+        if (name === 'issue_debito_period_invoice') return { data: { issued: false, reason: 'no_plan', invoice_id: null }, error: null };
         if (name === 'record_mercadopago_payment_audit_event') return { data: null, error: null };
         if (name === 'mark_mercadopago_event_resolution') return { data: true, error: null };
         throw new Error(`Unexpected RPC: ${name}`);

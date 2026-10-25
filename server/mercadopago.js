@@ -325,7 +325,7 @@ async function notifyPaymentSettled(supabaseAdmin, { userId, amount }) {
  *   `outcome` is null when a payable invoice was found; otherwise it names
  *   the deferral/rejection reason for the caller to audit.
  */
-async function correlateInvoice(supabaseAdmin, payment, preapprovalId) {
+async function correlateInvoice(supabaseAdmin, payment, preapprovalId, occurredAt = null) {
   const reference = payment.external_reference || null;
 
   if (reference) {
@@ -396,15 +396,39 @@ async function correlateInvoice(supabaseAdmin, payment, preapprovalId) {
     return { invoice: null, outcome: 'rpc_error', detail: invoiceError.message };
   }
 
-  if (!openInvoice) {
-    // R3/R4: no invoice exists yet for this period. Whether that is because
-    // the billing cycle hasn't run yet or because no coverage window exists
-    // at all (R5) is a distinction the D-H sweep (PR 4) makes on retry, not
-    // this handler.
-    return { invoice: null, outcome: 'no_open_invoice', detail: preapprovalId };
+  if (openInvoice) {
+    return { invoice: openInvoice, outcome: null };
   }
 
-  return { invoice: openInvoice, outcome: null };
+  // R3/R4: no invoice was issued for this charge (affiliates activated from an
+  // adhesion have no coverage window, so the admin billing cycle skips them).
+  // Issue the debit-month invoice here (odd/debito-charge-invoice). Any failure
+  // keeps no_open_invoice with the preapproval id as detail, which is the hint
+  // the D-H sweep (Pass A) needs to retry this payment.
+  const noOpenInvoice = { invoice: null, outcome: 'no_open_invoice', detail: preapprovalId };
+
+  const { data: issued, error: issueError } = await supabaseAdmin.rpc('issue_debito_period_invoice', {
+    p_mp_preapproval_id: preapprovalId,
+    p_occurred_at: occurredAt || new Date().toISOString(),
+  });
+  if (issueError) {
+    console.error('[mercadopago] issue_debito_period_invoice failed:', issueError.message);
+    return noOpenInvoice;
+  }
+  if (!issued?.issued || !issued.invoice_id) {
+    return noOpenInvoice;
+  }
+
+  const { data: issuedInvoice, error: issuedReadError } = await supabaseAdmin
+    .from('invoices')
+    .select('*')
+    .eq('id', issued.invoice_id)
+    .maybeSingle();
+  if (issuedReadError || !issuedInvoice) {
+    return noOpenInvoice;
+  }
+
+  return { invoice: issuedInvoice, outcome: null };
 }
 
 /**
@@ -567,7 +591,7 @@ export async function handlePaymentSettlement(ctx, { paymentId, preapprovalId = 
   const externalRef = `payment:mercadopago:${mpResourceId}`;
   const occurredAt = resolveOccurredAt(payment, 'payment');
 
-  const correlation = await correlateInvoice(supabaseAdmin, payment, preapprovalId);
+  const correlation = await correlateInvoice(supabaseAdmin, payment, preapprovalId, occurredAt);
 
   if (!correlation.invoice) {
     const { error: auditWriteError } = await writeMercadopagoAuditEvent(supabaseAdmin, {
