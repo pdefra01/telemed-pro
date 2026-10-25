@@ -74,7 +74,24 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
     });
   };
 
-  const handleDispensePrescription = (rx: Prescription) => {
+  // Resolves a prescribed medication to the exact catalog product (issue #35):
+  // the product the doctor picked when prescribing, looked up by id across the
+  // whole catalog (not just the filtered list). Older prescriptions without a
+  // picked product only match a product with exactly the same name; a partial
+  // match could dispense a different drug or dose.
+  const findPrescribedProduct = async (med: Prescription['medications'][number]): Promise<PharmacyProduct | null> => {
+    try {
+      if (med.productId) return await pharmacyRepository.getProductById(med.productId);
+      const wanted = med.name.trim().toLowerCase();
+      const candidates = await pharmacyRepository.getProducts({ query: med.name.trim() });
+      return candidates.find(p => p.name.trim().toLowerCase() === wanted) ?? null;
+    } catch (err) {
+      console.error('Error buscando el producto recetado:', err);
+      return null;
+    }
+  };
+
+  const handleDispensePrescription = async (rx: Prescription) => {
     // Dispansación en 1-Click desde receta: buscar medicamentos recetados e incorporarlos.
     // Solo se agregan productos reales del catálogo (con id de pharmacy_products válido).
     // Si un medicamento recetado no matchea ningún producto real, NO se fabrica un
@@ -82,14 +99,14 @@ export const PharmacyCatalog: React.FC<PharmacyCatalogProps> = ({
     const newCartItems: { product: PharmacyProduct; quantity: number }[] = [];
     const notFound: string[] = [];
 
-    rx.medications.forEach(med => {
-      const matchedProd = products.find(p => p.name.toLowerCase().includes(med.name.toLowerCase()) || med.name.toLowerCase().includes(p.name.toLowerCase()));
+    for (const med of rx.medications) {
+      const matchedProd = await findPrescribedProduct(med);
       if (matchedProd) {
         newCartItems.push({ product: matchedProd, quantity: med.quantity || 1 });
       } else {
         notFound.push(med.name);
       }
-    });
+    }
 
     setCart(newCartItems);
     setUnmatchedMedications(notFound);

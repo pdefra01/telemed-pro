@@ -467,9 +467,14 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
   };
 
   const handleMedicationChange = (index: number, field: 'name' | 'instructions' | 'productId' | 'stockAvailable', value: any) => {
-    const newMedications = [...medications];
-    (newMedications[index] as any)[field] = value;
-    setMedications(newMedications);
+    // Functional update: picking a catalog suggestion fires name, productId and
+    // stockAvailable back to back, and each must see the previous one.
+    setMedications((prev) => prev.map((med, i) => {
+      if (i !== index) return med;
+      // A typed name no longer refers to the picked catalog product (issue #35).
+      if (field === 'name') return { ...med, name: value, productId: undefined, stockAvailable: undefined };
+      return { ...med, [field]: value };
+    }));
   };
 
   // Delivers the prescription to the patient from the company's WhatsApp number

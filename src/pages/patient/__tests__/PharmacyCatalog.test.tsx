@@ -8,6 +8,7 @@ import { prescriptionRepository } from '../../../repositories/PrescriptionReposi
 vi.mock('../../../repositories/PharmacyRepository', () => ({
   pharmacyRepository: {
     getProducts: vi.fn(),
+    getProductById: vi.fn(),
   },
 }));
 
@@ -119,5 +120,69 @@ describe('PharmacyCatalog — prescription dispensing never fabricates synthetic
     callArgs.items.forEach((item: any) => {
       expect(item.productId.startsWith('rx-prod-')).toBe(false);
     });
+  });
+});
+
+describe('PharmacyCatalog — dispensing uses the product the doctor picked (issue #35)', () => {
+  const FORTE_PRODUCT = { ...REAL_PRODUCT, id: 'prod-forte', name: 'Ibuprofeno 400mg Forte' };
+  let alertSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.mocked(pharmacyOrderRepository.createOrder).mockResolvedValue({ id: 'order-1' } as any);
+  });
+
+  afterEach(() => {
+    alertSpy.mockRestore();
+  });
+
+  async function dispenseAndConfirm() {
+    render(<PharmacyCatalog patientId="patient-1" />);
+    fireEvent.click(await screen.findByText(/Comprar Medicamentos de la Receta/i));
+    fireEvent.click(await screen.findByText('Confirmar Pedido y Enviar Cadete'));
+    await waitFor(() => expect(pharmacyOrderRepository.createOrder).toHaveBeenCalled());
+    return (vi.mocked(pharmacyOrderRepository.createOrder).mock.calls[0][0] as any).items;
+  }
+
+  it('adds the exact catalog product linked to the prescription, even when another product name overlaps', async () => {
+    vi.mocked(pharmacyRepository.getProducts).mockResolvedValue([REAL_PRODUCT, FORTE_PRODUCT] as any);
+    vi.mocked(pharmacyRepository.getProductById).mockImplementation(async (id: string) =>
+      (id === 'prod-forte' ? FORTE_PRODUCT : null) as any);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([makePrescription({
+      medications: [{ name: 'Ibuprofeno 400mg Forte (Caja x 10)', instructions: 'Cada 8hs', quantity: 1, productId: 'prod-forte' }],
+    })] as any);
+
+    const items = await dispenseAndConfirm();
+
+    expect(pharmacyRepository.getProductById).toHaveBeenCalledWith('prod-forte');
+    expect(items).toEqual([{ productId: 'prod-forte', quantity: 1 }]);
+  });
+
+  it('no longer matches a legacy prescription by partial name: "Ibuprofeno 400" is not dispensed as "Ibuprofeno 400mg"', async () => {
+    vi.mocked(pharmacyRepository.getProducts).mockResolvedValue([REAL_PRODUCT] as any);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([makePrescription({
+      medications: [{ name: 'Ibuprofeno 400', instructions: 'Cada 8hs', quantity: 1 }],
+    })] as any);
+
+    render(<PharmacyCatalog patientId="patient-1" />);
+    fireEvent.click(await screen.findByText(/Comprar Medicamentos de la Receta/i));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Ibuprofeno 400')));
+    expect(screen.queryByRole('heading', { level: 4, name: 'Ibuprofeno 400mg' })).toBeNull();
+  });
+
+  it('warns instead of dispensing when the linked product no longer exists in the catalog', async () => {
+    vi.mocked(pharmacyRepository.getProducts).mockResolvedValue([REAL_PRODUCT] as any);
+    vi.mocked(pharmacyRepository.getProductById).mockResolvedValue(null);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([makePrescription({
+      medications: [{ name: 'Ibuprofeno 400mg (Caja x 10)', instructions: 'Cada 8hs', quantity: 1, productId: 'prod-deleted' }],
+    })] as any);
+
+    render(<PharmacyCatalog patientId="patient-1" />);
+    fireEvent.click(await screen.findByText(/Comprar Medicamentos de la Receta/i));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Ibuprofeno 400mg (Caja x 10)')));
+    expect(screen.queryByRole('heading', { level: 4, name: 'Ibuprofeno 400mg' })).toBeNull();
   });
 });

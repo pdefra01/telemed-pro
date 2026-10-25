@@ -136,6 +136,8 @@ export interface Prescription {
     name: string;
     instructions: string;
     quantity: number;
+    /** Catalog product (pharmacy_products.id) the doctor picked; absent for free-text medications. */
+    productId?: string;
   }[];
   date: string;
   status: 'active' | 'dispensed' | 'expired';
