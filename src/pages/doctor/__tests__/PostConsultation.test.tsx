@@ -209,6 +209,16 @@ describe('PostConsultation Page', () => {
       ]);
     }, 10000);
 
+    it('does not deduct stock when prescribing; stock is deducted only at checkout', async () => {
+      (pharmacyRepository.deductStock as any).mockClear();
+      await pickCatalogProduct();
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(pharmacyRepository.deductStock).not.toHaveBeenCalled();
+    }, 10000);
+
     it('drops the picked product when the doctor types a different name afterwards', async () => {
       const medInput = await pickCatalogProduct();
       fireEvent.change(medInput, { target: { value: 'Ibuprofeno 600mg' } });

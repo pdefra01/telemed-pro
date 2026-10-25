@@ -526,17 +526,7 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
 
       if (functionError) throw functionError;
 
-      // 2. Tras la emisión exitosa, descontar stock de los medicamentos seleccionados del catálogo
-      if (addPrescription && !isObraSocial && medications.length > 0) {
-        for (const med of medications) {
-          if (med.productId) {
-            const success = await pharmacyRepository.deductStock(med.productId, 1);
-            if (!success) {
-              console.warn(`No se pudo descontar el stock para ${med.name}. Es posible que el lote haya vencido o no tenga stock suficiente.`);
-            }
-          }
-        }
-      }
+      // Stock is deducted only when the patient buys (create_pharmacy_order), never at prescription time.
 
       // Artificial delay for premium feel of the steps
       await new Promise(resolve => setTimeout(resolve, 2000));
