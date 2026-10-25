@@ -506,6 +506,13 @@ async function handleAdhesionCheckoutPayment(ctx, payment, adhesionId) {
         outcome: 'ledger_not_posted', resolution_state: 'needs_admin', detail: `ledger:${ledger.reason}`, amount,
       });
     }
+    if (ledger.posted && ledger.movementId && ctx.sendPaymentReceipt) {
+      try {
+        await ctx.sendPaymentReceipt({ movementId: ledger.movementId });
+      } catch (err) {
+        console.error('[mercadopago] Checkout receipt email failed:', err?.message || String(err));
+      }
+    }
     const ledgerState = ledger.posted ? 'posted' : 'already_posted';
     return done({ outcome: 'adhesion_paid', ledger: ledgerState }, {
       outcome: 'adhesion_paid', resolution_state: 'final', amount,

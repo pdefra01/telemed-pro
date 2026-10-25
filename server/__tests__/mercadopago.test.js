@@ -942,6 +942,41 @@ describe('handlePaymentSettlement: adhesion checkout payments', () => {
     expect(auditCall(db).p_detail).toContain('inv-9');
   });
 
+  describe('payment receipt email for the sign-up checkout payment', () => {
+    const withMovement = (db, movement) => {
+      const baseFrom = db.from;
+      db.from = (table) => {
+        if (table !== 'affiliate_account_movements') return baseFrom(table);
+        const builder = { select: () => builder, eq: () => builder, maybeSingle: async () => ({ data: movement, error: null }) };
+        return builder;
+      };
+      return db;
+    };
+
+    it('emails the receipt when the checkout payment is posted', async () => {
+      const db = withMovement(ledgerStub(APPROVED_ROW, { data: { posted: true, reason: 'posted', invoice_id: 'inv-9' }, error: null }), { id: 'mv-77' });
+      const sendPaymentReceipt = vi.fn().mockResolvedValue({ sent: true });
+      const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment), sendPaymentReceipt }, { paymentId: '910' });
+      expect(result).toMatchObject({ outcome: 'adhesion_paid', ledger: 'posted' });
+      expect(sendPaymentReceipt).toHaveBeenCalledWith({ movementId: 'mv-77' });
+    });
+
+    it('does not email again when the payment was already posted', async () => {
+      const db = withMovement(ledgerStub({ ...APPROVED_ROW, payment_status: 'approved', mp_payment_id: '910' }, { data: { posted: false, reason: 'already_posted', invoice_id: null }, error: null }), { id: 'mv-77' });
+      const sendPaymentReceipt = vi.fn();
+      await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment), sendPaymentReceipt }, { paymentId: '910' });
+      expect(sendPaymentReceipt).not.toHaveBeenCalled();
+    });
+
+    it('a failing receipt email never changes the settlement outcome', async () => {
+      const db = withMovement(ledgerStub(APPROVED_ROW, { data: { posted: true, reason: 'posted', invoice_id: 'inv-9' }, error: null }), { id: 'mv-77' });
+      const sendPaymentReceipt = vi.fn().mockRejectedValue(new Error('smtp down'));
+      const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment), sendPaymentReceipt }, { paymentId: '910' });
+      expect(result).toMatchObject({ outcome: 'adhesion_paid', ledger: 'posted' });
+      expect(auditCall(db)).toMatchObject({ p_outcome: 'adhesion_paid', p_resolution_state: 'final' });
+    });
+  });
+
   it('already_posted is a normal final outcome', async () => {
     const db = ledgerStub({ ...APPROVED_ROW, payment_status: 'approved', mp_payment_id: '910' }, { data: { posted: false, reason: 'already_posted', invoice_id: null }, error: null });
     const result = await handlePaymentSettlement({ supabaseAdmin: db, mpFetch: vi.fn().mockResolvedValue(approvedPayment) }, { paymentId: '910' });

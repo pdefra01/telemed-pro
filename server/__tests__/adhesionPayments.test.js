@@ -223,7 +223,30 @@ describe('postAdhesionCheckoutPayment', () => {
     const db = { rpc: vi.fn().mockResolvedValue({ data: { posted: true, reason: 'posted', invoice_id: 'inv-1' }, error: null }) };
     const result = await postAdhesionCheckoutPayment(db, 'adh-1');
     expect(db.rpc).toHaveBeenCalledWith('post_adhesion_checkout_payment', { p_adhesion_request_id: 'adh-1' });
-    expect(result).toEqual({ ok: true, posted: true, reason: 'posted', invoiceId: 'inv-1' });
+    expect(result).toEqual({ ok: true, posted: true, reason: 'posted', invoiceId: 'inv-1', movementId: null });
+  });
+
+  it('returns the payment movement id of the posted invoice so the receipt can be emailed', async () => {
+    const filters = [];
+    const builder = {
+      select: () => builder,
+      eq: (col, val) => { filters.push([col, val]); return builder; },
+      maybeSingle: async () => ({ data: { id: 'mv-1' }, error: null }),
+    };
+    const db = {
+      rpc: vi.fn().mockResolvedValue({ data: { posted: true, reason: 'posted', invoice_id: 'inv-1' }, error: null }),
+      from: vi.fn(() => builder),
+    };
+    const result = await postAdhesionCheckoutPayment(db, 'adh-1');
+    expect(db.from).toHaveBeenCalledWith('affiliate_account_movements');
+    expect(filters).toEqual(expect.arrayContaining([['invoice_id', 'inv-1'], ['type', 'payment']]));
+    expect(result).toEqual({ ok: true, posted: true, reason: 'posted', invoiceId: 'inv-1', movementId: 'mv-1' });
+  });
+
+  it('does not look up a movement when nothing was posted', async () => {
+    const db = { rpc: vi.fn().mockResolvedValue({ data: { posted: false, reason: 'already_posted', invoice_id: null }, error: null }), from: vi.fn() };
+    await postAdhesionCheckoutPayment(db, 'adh-1');
+    expect(db.from).not.toHaveBeenCalled();
   });
 
   it('maps a non-posted business answer (already_posted) without flagging an error', async () => {

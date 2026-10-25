@@ -15,7 +15,12 @@ vi.mock('../affiliateActivation.js', async (importOriginal) => {
   return { ...actual, sendActivationEmail: vi.fn(async () => ({ sent: true })) };
 });
 
+vi.mock('../paymentReceipt.js', () => ({
+  sendPaymentReceiptEmail: vi.fn(async () => ({ sent: true })),
+}));
+
 import { activateAdhesion } from '../adhesionActivation.js';
+import { sendPaymentReceiptEmail } from '../paymentReceipt.js';
 import { sendActivationEmail } from '../affiliateActivation.js';
 import { postAdhesionCheckoutPayment } from '../adhesionPayments.js';
 
@@ -263,6 +268,25 @@ describe('activateAdhesion', () => {
     const result = await activateAdhesion(deps(supabaseAdmin), ADHESION_ID, { source: 'admin' });
     expect(result.status).toBe(200);
     expect(result.body.activationEmailSent).toBe(false);
+  });
+
+  it('emails the payment receipt when approval posts the checkout payment', async () => {
+    sendPaymentReceiptEmail.mockClear();
+    postAdhesionCheckoutPayment.mockResolvedValueOnce({ ok: true, posted: true, reason: 'posted', invoiceId: 'inv-1', movementId: 'mv-5' });
+    const { supabaseAdmin } = createDb();
+    const result = await activateAdhesion(deps(supabaseAdmin), ADHESION_ID, { source: 'admin' });
+    expect(result.status).toBe(200);
+    expect(sendPaymentReceiptEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ supabaseAdmin, fromAddress: 'no-reply@test.com', publicAppUrl: 'https://app.test' }),
+      { movementId: 'mv-5' }
+    );
+  });
+
+  it('does not email a receipt when approval posted nothing', async () => {
+    sendPaymentReceiptEmail.mockClear();
+    const { supabaseAdmin } = createDb();
+    await activateAdhesion(deps(supabaseAdmin), ADHESION_ID, { source: 'admin' });
+    expect(sendPaymentReceiptEmail).not.toHaveBeenCalled();
   });
 
   it('a ledger posting failure is non-blocking', async () => {
