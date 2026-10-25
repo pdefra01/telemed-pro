@@ -304,4 +304,17 @@ describe('PharmacyRepository', () => {
       });
     });
   });
+
+  describe('getMyDiscountPercent', () => {
+    it('reads the caller plan percent from get_my_pharmacy_discount_percent', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({ data: '25.00', error: null } as any);
+      expect(await pharmacyRepository.getMyDiscountPercent()).toBe(25);
+      expect(supabase.rpc).toHaveBeenCalledWith('get_my_pharmacy_discount_percent');
+    });
+
+    it('returns 0 when the RPC fails', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValue({ data: null, error: { message: 'boom' } } as any);
+      expect(await pharmacyRepository.getMyDiscountPercent()).toBe(0);
+    });
+  });
 });

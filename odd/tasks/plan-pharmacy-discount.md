@@ -10,7 +10,7 @@ Objective: the pharmacy discount comes from the affiliate's plan instead of a ha
 
 ## Tasks
 - [x] T1 S1-S4 inline: migration (column, CHECK, backfill 40, resolver, create_pharmacy_order, get_my_pharmacy_discount_percent) + pgTAP. Risk: item 1 (migration, prod RPC). RED (column missing) → GREEN: plan_pharmacy_discount.sql 25 tests PASS; full pgTAP 12 files, 461 tests PASS.
-- T2 S2,S5 inline: types, PlanRepository, PlanFormModal, PharmacyRepository, PharmacyCatalog + Vitest.
+- [x] T2 S2,S5 inline: types, PlanRepository, PlanFormModal, PharmacyRepository, PharmacyCatalog + Vitest. RED 8 tests → GREEN; full Vitest 1066 pass, only the 5 pre-existing failures; tsc clean.
 
 ## Log
 - L1 (2026-10-25): "si, vamos con el 8, tenemos que especificar en la definicion de los planes: tiene descuento en farmacia? cuanto?"

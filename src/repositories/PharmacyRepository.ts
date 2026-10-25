@@ -261,6 +261,21 @@ export class PharmacyRepository {
   }
 
   /**
+   * Pharmacy discount (%) of the signed-in patient's plan, for display only:
+   * create_pharmacy_order recomputes it server-side. 0 when it cannot be read.
+   */
+  async getMyDiscountPercent(): Promise<number> {
+    try {
+      const { data, error } = await supabase.rpc('get_my_pharmacy_discount_percent');
+      if (error) return 0;
+      const percent = Number(data);
+      return Number.isFinite(percent) ? percent : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
    * Descuenta atómicamente el stock de un medicamento vía RPC almacenado
    */
   async deductStock(productId: string, quantity: number): Promise<boolean> {
