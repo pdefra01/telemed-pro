@@ -12,6 +12,9 @@ function formatDoctorName(title: unknown, fullName: string | null | undefined): 
   return `${safeTitle} ${name.replace(/\s+/g, ' ')}`
 }
 
+// pharmacy_products ids are UUIDs; anything else is dropped instead of stored.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -224,7 +227,10 @@ serve(async (req) => {
           medications: medications.map((m: any) => ({
             name: m.name,
             instructions: m.instructions,
-            quantity: 1
+            quantity: 1,
+            // Catalog product the doctor picked: dispensing uses it instead of
+            // matching by name (issue #35). Absent for free-text medications.
+            ...(typeof m.productId === 'string' && UUID_PATTERN.test(m.productId) ? { productId: m.productId } : {})
           })),
           notes: trimmedIndications || null,
           pdf_url: pdfUrl,

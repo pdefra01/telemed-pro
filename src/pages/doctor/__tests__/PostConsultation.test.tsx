@@ -7,6 +7,7 @@ import { appointmentRepository } from '../../../repositories/AppointmentReposito
 import { medicalRecordRepository } from '../../../repositories/MedicalRecordRepository';
 import { medicalDocumentRepository } from '../../../repositories/MedicalDocumentRepository';
 import { prescriptionRepository } from '../../../repositories/PrescriptionRepository';
+import { pharmacyRepository } from '../../../repositories/PharmacyRepository';
 
 // Mock dependencies
 vi.mock('../../../services/supabase', () => ({
@@ -35,6 +36,13 @@ vi.mock('../../../repositories/AppointmentRepository', () => ({
 vi.mock('../../../repositories/MedicalRecordRepository', () => ({
   medicalRecordRepository: {
     getRecordsByPatientId: vi.fn(),
+  },
+}));
+
+vi.mock('../../../repositories/PharmacyRepository', () => ({
+  pharmacyRepository: {
+    searchProductsWithStock: vi.fn().mockResolvedValue([]),
+    deductStock: vi.fn().mockResolvedValue(true),
   },
 }));
 
@@ -164,6 +172,52 @@ describe('PostConsultation Page', () => {
       expect(body.medications).toEqual([expect.objectContaining({ name: 'Ibuprofeno 400mg' })]);
       expect(body).not.toHaveProperty('digitalSignature');
       expect(body).not.toHaveProperty('signaturePublicKey');
+    }, 10000);
+  });
+
+  describe('catalog product picked for a medication (issue #35)', () => {
+    afterEach(() => cleanup());
+
+    const pickCatalogProduct = async () => {
+      (supabase.functions.invoke as any).mockResolvedValue({ data: { success: true }, error: null });
+      (pharmacyRepository.searchProductsWithStock as any).mockResolvedValue([
+        { id: 'prod-forte', name: 'Ibuprofeno 400mg Forte', activeIngredient: 'Ibuprofeno', presentation: 'Caja x 10', totalStock: 5 },
+      ]);
+      render(
+        <BrowserRouter>
+          <PostConsultation user={mockDoctor as any} />
+        </BrowserRouter>
+      );
+      await waitFor(() => screen.getByText(/Documentación/i), { timeout: 4000 });
+      fireEvent.change(screen.getByLabelText(/Diagnóstico principal/i), { target: { value: 'Dx' } });
+      fireEvent.click(screen.getByText(/Receta Electrónica/i));
+      const medInput = screen.getByPlaceholderText(/Ej\. Amoxicilina/i);
+      fireEvent.focus(medInput);
+      fireEvent.change(medInput, { target: { value: 'Ibupro' } });
+      fireEvent.mouseDown(await screen.findByText('Ibuprofeno 400mg Forte (Caja x 10)', {}, { timeout: 3000 }));
+      return medInput;
+    };
+
+    it('sends the picked product id with the medication', async () => {
+      await pickCatalogProduct();
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.medications).toEqual([
+        expect.objectContaining({ name: 'Ibuprofeno 400mg Forte (Caja x 10)', productId: 'prod-forte' }),
+      ]);
+    }, 10000);
+
+    it('drops the picked product when the doctor types a different name afterwards', async () => {
+      const medInput = await pickCatalogProduct();
+      fireEvent.change(medInput, { target: { value: 'Ibuprofeno 600mg' } });
+      fireEvent.click(screen.getByRole('button', { name: /Finalizar Consulta/i }));
+
+      await waitFor(() => expect(supabase.functions.invoke).toHaveBeenCalled(), { timeout: 4000 });
+      const body = (supabase.functions.invoke as any).mock.calls[0][1].body;
+      expect(body.medications[0].name).toBe('Ibuprofeno 600mg');
+      expect(body.medications[0].productId).toBeUndefined();
     }, 10000);
   });
 
