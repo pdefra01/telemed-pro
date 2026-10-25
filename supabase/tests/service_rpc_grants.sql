@@ -15,7 +15,8 @@ INSERT INTO service_rpcs VALUES
   ('public.mark_mercadopago_event_resolution(uuid,text,text,text)'),
   ('public.claim_subscription_enrollment(uuid)'),
   ('public.finalize_subscription_enrollment(uuid,text,numeric)'),
-  ('public.release_subscription_reservation(uuid)');
+  ('public.release_subscription_reservation(uuid)'),
+  ('public.issue_debito_period_invoice(text,timestamptz)');
 
 SELECT ok(NOT has_function_privilege('anon', sig::regprocedure, 'EXECUTE'), sig || ': anon has no EXECUTE')
   FROM service_rpcs;
