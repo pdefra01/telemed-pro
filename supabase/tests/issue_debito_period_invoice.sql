@@ -154,5 +154,17 @@ SELECT is(
   (SELECT total_amount FROM public.invoices WHERE entity_id = 'e1e1e1e1-0000-0000-0000-000000000004'),
   39999.00::numeric(12,2), 'family invoice amount = the subscription amount');
 
+-- ── Missing payment date falls back to now() instead of failing ─────────────
+UPDATE public.affiliate_payment_subscriptions SET profile_id = 'e1e1e1e1-0000-0000-0000-000000000003'
+ WHERE mp_preapproval_id = 'PA-UNLINKED';
+UPDATE public.profiles SET plan_id = 'd0d0d0d0-0000-0000-0000-000000000000'
+ WHERE id = 'e1e1e1e1-0000-0000-0000-000000000003';
+SELECT is(
+  public.issue_debito_period_invoice('PA-UNLINKED', NULL) ->> 'issued',
+  'true', 'NULL occurred_at: issued with the current date');
+SELECT is(
+  (SELECT period FROM public.invoices WHERE entity_id = 'e1e1e1e1-0000-0000-0000-000000000003'),
+  to_char(now(), 'YYYY-MM'), 'NULL occurred_at: invoice for the current month');
+
 SELECT * FROM finish();
 ROLLBACK;

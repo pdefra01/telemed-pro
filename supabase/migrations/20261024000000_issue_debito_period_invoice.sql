@@ -28,7 +28,8 @@ DECLARE
   -- Same expression post_payment_movement_from_webhook compares against
   -- to_char(period_start, 'YYYY-MM') (window_reset guard), so the invoice
   -- period and the window anchor always agree, even at a month boundary.
-  v_period         TEXT := to_char(p_occurred_at, 'YYYY-MM');
+  v_occurred_at    TIMESTAMPTZ := COALESCE(p_occurred_at, now());
+  v_period         TEXT := to_char(COALESCE(p_occurred_at, now()), 'YYYY-MM');
 BEGIN
   IF NOT public.is_service_role() THEN
     RAISE EXCEPTION 'forbidden';
@@ -99,8 +100,8 @@ BEGIN
       v_profile.family_group_id,
       CASE WHEN v_profile.family_group_id IS NULL THEN v_profile.id ELSE NULL END,
       v_plan.id,
-      p_occurred_at,
-      p_occurred_at,
+      v_occurred_at,
+      v_occurred_at,
       CASE WHEN v_plan.is_unlimited THEN NULL ELSE 0 END,
       v_plan.is_unlimited,
       NULL,
