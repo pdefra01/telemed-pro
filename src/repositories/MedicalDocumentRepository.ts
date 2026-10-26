@@ -1,6 +1,9 @@
 import { supabase } from '../services/supabase';
 import { MedicalDocument } from '../types';
 
+const BUCKET = 'medical-documents';
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 export class MedicalDocumentRepository {
   /**
    * Sube un archivo a Supabase Storage y registra la meta-información en la DB.
@@ -74,16 +77,51 @@ export class MedicalDocumentRepository {
 
     if (error) throw error;
 
-    return data.map((item: any) => ({
+    const signedUrls = await this.signUrls(data.map((item: any) => item.url));
+
+    return data.map((item: any, index: number) => ({
       id: item.id,
       patientId: item.patient_id,
       familyMemberId: item.family_member_id || undefined,
       title: item.title,
       type: item.type,
       date: item.date,
-      url: item.url,
+      url: signedUrls[index],
       uploadedBy: item.uploaded_by
     }));
+  }
+
+  /**
+   * The bucket is private, but rows store the `/object/public/` URL that
+   * getPublicUrl() returned at upload time, which answers "Bucket not found".
+   * Derive the object path from the stored URL and sign it; fall back to the
+   * stored URL when it cannot be signed.
+   */
+  private async signUrls(storedUrls: string[]): Promise<string[]> {
+    const marker = `/${BUCKET}/`;
+    const paths = storedUrls.map((url) => {
+      const at = url.indexOf(marker);
+      return at === -1 ? null : decodeURIComponent(url.slice(at + marker.length).split('?')[0]);
+    });
+
+    const toSign = paths.filter((p): p is string => p !== null);
+    if (toSign.length === 0) return storedUrls;
+
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrls(toSign, SIGNED_URL_TTL_SECONDS);
+    if (error || !data) {
+      console.error('Error signing medical document URLs:', error);
+      return storedUrls;
+    }
+
+    const signedByPath = new Map<string, string>();
+    data.forEach((entry) => {
+      if (entry.path && entry.signedUrl) signedByPath.set(entry.path, entry.signedUrl);
+    });
+
+    return storedUrls.map((url, index) => {
+      const path = paths[index];
+      return (path && signedByPath.get(path)) || url;
+    });
   }
 }
 
