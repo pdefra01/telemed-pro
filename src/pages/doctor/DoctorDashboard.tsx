@@ -6,6 +6,8 @@ import { Button } from '../../components/ui/Button';
 import { appointmentRepository } from '../../repositories/AppointmentRepository';
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
 import { medicalDocumentRepository } from '../../repositories/MedicalDocumentRepository';
+import { patientChartRepository, PatientChartData } from '../../repositories/PatientChartRepository';
+import { PatientChartPanel } from '../../components/doctor/PatientChartPanel';
 import { prescriptionRepository } from '../../repositories/PrescriptionRepository';
 import { dashboardRepository } from '../../repositories/DashboardRepository';
 import { notificationRepository, Notification } from '../../repositories/NotificationRepository';
@@ -41,7 +43,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     // New state for patient history modal
     const [patientRecords, setPatientRecords] = useState<MedicalRecord[]>([]);
     const [patientDocuments, setPatientDocuments] = useState<MedicalDocument[]>([]);
-    const [historyView, setHistoryView] = useState<'records' | 'documents'>('records');
+    const [historyView, setHistoryView] = useState<'records' | 'documents' | 'chart'>('chart');
+    const [patientChart, setPatientChart] = useState<PatientChartData | null>(null);
     const [isFetchingPatientHistory, setIsFetchingPatientHistory] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [activeArrivalAlert, setActiveArrivalAlert] = useState<{ patientName: string; appointmentId: string } | null>(null);
@@ -351,17 +354,20 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             if (!selectedPatientId) {
                 setPatientRecords([]);
                 setPatientDocuments([]);
+                setPatientChart(null);
                 return;
             }
 
             setIsFetchingPatientHistory(true);
             try {
-                const [records, docs] = await Promise.all([
+                const [records, docs, chart] = await Promise.all([
                     medicalRecordRepository.getRecordsByPatientId(selectedPatientId),
-                    medicalDocumentRepository.getDocumentsByPatientId(selectedPatientId)
+                    medicalDocumentRepository.getDocumentsByPatientId(selectedPatientId),
+                    patientChartRepository.getChartData(selectedPatientId).catch(() => null)
                 ]);
                 setPatientRecords(records);
                 setPatientDocuments(docs);
+                setPatientChart(chart);
             } catch (error) {
                 console.error("Error cargando historia del paciente:", error);
             } finally {
@@ -789,6 +795,12 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             <div className="flex items-center gap-2">
                                 <div className="flex p-1 bg-slate-950/60 rounded-xl border border-white/5 gap-1">
                                     <button
+                                        onClick={() => setHistoryView('chart')}
+                                        className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'chart' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        <Users size={14} /> Ficha
+                                    </button>
+                                    <button
                                         onClick={() => setHistoryView('records')}
                                         className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'records' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                                     >
@@ -820,6 +832,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                     <div className="w-10 h-10 border-2 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
                                     <p className="text-xs font-bold text-emerald-500 animate-pulse">Cargando historia clínica...</p>
                                 </div>
+                            ) : historyView === 'chart' ? (
+                                <PatientChartPanel chart={patientChart} />
                             ) : historyView === 'records' ? (
                                 patientRecords.length > 0 ? (
                                     <div className="space-y-3">
