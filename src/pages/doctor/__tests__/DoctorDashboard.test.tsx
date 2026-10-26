@@ -54,6 +54,12 @@ vi.mock('../../../repositories/MedicalDocumentRepository', () => ({
   },
 }));
 
+vi.mock('../../../repositories/PatientChartRepository', () => ({
+  patientChartRepository: {
+    getChartData: vi.fn().mockResolvedValue(null),
+  },
+}));
+
 vi.mock('../../../repositories/DoctorShiftRepository', () => ({
   doctorShiftRepository: {
     getActiveShift: vi.fn().mockResolvedValue(null),
@@ -250,6 +256,7 @@ describe('DoctorDashboard - Consultation History', () => {
     renderComponent();
 
     fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Evoluciones/i }));
 
     expect(await screen.findByText('26/08/2026 16:30')).toBeInTheDocument();
     expect(screen.getByText('Chequeo General')).toBeInTheDocument();
