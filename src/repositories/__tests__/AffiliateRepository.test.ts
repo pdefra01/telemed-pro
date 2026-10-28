@@ -357,6 +357,24 @@ describe('AffiliateRepository', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
+  it('writes first_name and last_name on update because the sync_full_name trigger rebuilds full_name from them', async () => {
+    const updateSingle = vi.fn().mockResolvedValue({
+      data: { id: 'test-id', full_name: 'Luciano Condo', first_name: 'Luciano', last_name: 'Condo', role: 'patient' },
+      error: null,
+    });
+    const updateMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: updateSingle }) }) });
+    const paymentStatusMock = { select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }) };
+    vi.mocked(supabase.from).mockImplementation((table: string) =>
+      (table === 'affiliate_payment_status' ? paymentStatusMock : { update: updateMock }) as any
+    );
+
+    const result = await affiliateRepository.updateAffiliate('test-id', { name: 'Condo Luciano', firstName: 'Luciano', lastName: 'Condo' });
+
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ first_name: 'Luciano', last_name: 'Condo' }));
+    expect(result.firstName).toBe('Luciano');
+    expect(result.lastName).toBe('Condo');
+  });
+
   it('throws instead of silently succeeding when the assign_plan RPC reports an error', async () => {
     vi.mocked(supabase.rpc).mockResolvedValue({
       data: null,

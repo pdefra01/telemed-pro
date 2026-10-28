@@ -42,6 +42,8 @@ export interface Patient extends User {
   locality?: string;
   neighborhood?: string;
   cuil?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface DoctorMetrics {
