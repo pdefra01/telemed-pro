@@ -218,6 +218,12 @@ const Affiliates: React.FC = () => {
         planId: formData.planId || undefined
       };
       if (editId) {
+        // Only sync the Auth login email when it actually changed: re-sending
+        // the current address makes Auth reject the call and aborts the save.
+        const current = affiliates.find(a => a.id === editId);
+        if (current && current.email.trim().toLowerCase() === formData.email.trim().toLowerCase()) {
+          delete (payload as Partial<typeof payload>).email;
+        }
         await affiliateRepository.updateAffiliate(editId, payload);
         toast(`Afiliado ${fullName} actualizado`, "success");
       } else {
@@ -245,9 +251,11 @@ const Affiliates: React.FC = () => {
 
   const handleEdit = (patient: Patient) => {
     setEditId(patient.id);
+    // Prefer the stored split; legacy rows without it keep the "Apellido Nombre" word split.
+    const hasSplit = Boolean(patient.firstName || patient.lastName);
     const parts = patient.name.split(' ');
-    const lastName = parts[0] || '';
-    const firstName = parts.slice(1).join(' ') || '';
+    const lastName = hasSplit ? (patient.lastName || '') : (parts[0] || '');
+    const firstName = hasSplit ? (patient.firstName || '') : (parts.slice(1).join(' ') || '');
     setFormData({
       lastName,
       firstName,

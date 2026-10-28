@@ -297,6 +297,10 @@ export class AffiliateRepository {
   async updateAffiliate(id: string, data: Partial<Patient>): Promise<Patient> {
     const profileData: any = {};
     if (data.name !== undefined) profileData.full_name = data.name;
+    // The sync_full_name trigger rebuilds full_name from first_name/last_name
+    // whenever either is set, so editing full_name alone is silently reverted.
+    if (data.firstName !== undefined) profileData.first_name = data.firstName;
+    if (data.lastName !== undefined) profileData.last_name = data.lastName;
     if (data.email !== undefined) profileData.email = data.email;
     if (data.dni !== undefined) profileData.dni = data.dni;
     // plan_id ya NO se escribe acá — se enruta por la RPC assign_plan (ver
@@ -710,6 +714,8 @@ export class AffiliateRepository {
       locality: row.locality ?? undefined,
       neighborhood: row.neighborhood ?? undefined,
       cuil: row.cuil ?? undefined,
+      firstName: row.first_name ?? undefined,
+      lastName: row.last_name ?? undefined,
     };
   }
 }
