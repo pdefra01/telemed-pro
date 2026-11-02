@@ -182,6 +182,10 @@ export class FamilyMemberRepository {
 
     if (error) {
       console.error('Error removing family member:', error);
+      // 23503 = foreign key violation: clinical rows reference this member (ON DELETE RESTRICT).
+      if (error.code === '23503') {
+        throw new Error('No se puede quitar a este integrante: tiene consultas, evoluciones o recetas registradas.');
+      }
       throw error;
     }
   }

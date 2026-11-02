@@ -116,3 +116,33 @@ describe('FamilyMemberRepository.findFamilyGroupId', () => {
     await expect(familyMemberRepository.findFamilyGroupId('p1')).resolves.toBeUndefined();
   });
 });
+
+describe('FamilyMemberRepository.removeMember — clinical history guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function mockDelete(result: { error: any }) {
+    vi.mocked(supabase.from).mockReturnValue({
+      delete: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue(result) }),
+    } as any);
+  }
+
+  it('removes a member without clinical history', async () => {
+    mockDelete({ error: null });
+    await expect(familyMemberRepository.removeMember('fm1')).resolves.toBeUndefined();
+  });
+
+  it('refuses with a clear message when consultations, evoluciones or recetas reference the member', async () => {
+    mockDelete({ error: { code: '23503', message: 'violates foreign key constraint' } });
+    await expect(familyMemberRepository.removeMember('fm1')).rejects.toThrow(
+      'No se puede quitar a este integrante: tiene consultas, evoluciones o recetas registradas.'
+    );
+  });
+
+  it('keeps other database errors unchanged', async () => {
+    const dbError = { code: '42501', message: 'permission denied' };
+    mockDelete({ error: dbError });
+    await expect(familyMemberRepository.removeMember('fm1')).rejects.toBe(dbError);
+  });
+});
