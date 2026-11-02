@@ -80,6 +80,7 @@ export interface Doctor extends User {
   provincialLicense?: string;
   cuit?: string;
   phone?: string;
+  notifyNewAppointmentWhatsapp?: boolean;
   university?: string;
   graduationYear?: number;
   consultationFee?: number;

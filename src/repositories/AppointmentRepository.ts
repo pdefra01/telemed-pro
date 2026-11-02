@@ -188,7 +188,25 @@ export class AppointmentRepository {
       console.error("Error incrementando cupo:", qErr);
     }
 
+    await this.notifyDoctor(insertedData.id);
+
     return insertedData;
+  }
+
+  /**
+   * Aviso por WhatsApp al médico (opt-in en su ficha). Es solo un aviso:
+   * si falla, el turno ya está agendado y no se interrumpe nada.
+   */
+  private async notifyDoctor(appointmentId: string): Promise<void> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`/api/appointments/${encodeURIComponent(appointmentId)}/notify-doctor`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session?.access_token || ''}` },
+      });
+    } catch (notifyError) {
+      console.error('Error avisando al médico del turno:', notifyError);
+    }
   }
 
   /**
