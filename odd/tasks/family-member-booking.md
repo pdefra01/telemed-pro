@@ -16,8 +16,8 @@ Risk: T1 and T3 touch migrations / an edge function (high-risk item 1 and 5): ea
 Assumptions (not asked): the choice is required but defaults to the titular; `ON DELETE RESTRICT` for appointments / medical_records / prescriptions; quota is shared by the group (unchanged); the receta is delivered to the titular's WhatsApp.
 
 ## Tasks
-- [ ] T1 (S2, S7) Migration: `family_member_id` on appointments, medical_records, prescriptions (FK `family_members`, RESTRICT); `doctor_queue` view exposes member id, name and relation; types. Route: inline. Risk: item 1.
-- [ ] T2 (S2, S3) Booking: selector in the patient's appointment modal; `createAppointment` stores it; patient's appointment lists show "Para: X"; the doctor's WhatsApp notice names the attended person. Route: inline.
+- [x] T1 (S2, S7) Migration: `family_member_id` on appointments, medical_records, prescriptions (FK `family_members`, RESTRICT); `doctor_queue` view exposes member id, name and relation; types. Route: inline. Risk: item 1. Done: PR #83, migration applied to prod 2026-11-02, Opus verified.
+- [x] T2 (S2, S3) Booking: selector in the patient's appointment modal; `createAppointment` stores it; patient's appointment lists show "Para: X"; the doctor's WhatsApp notice names the attended person. Route: inline. Done: Opus verified, no blockers.
 - [ ] T3 (S3, S4, S5) Doctor side: queue, VideoRoom and PostConsultation show the person; `finalize-consultation` copies the member to the record and the receta (edge function, needs deploy); chart/history view per person; evolución added from history uses the consultation's person. Route: inline. Risk: item 5 (edge function deploy).
 - [ ] T4 (S6) Admin removal guard: friendly message when the FK blocks a removal. Route: inline.
 

@@ -12,7 +12,9 @@ const APPOINTMENT = { id: 'a1', patient_id: 'pat1', doctor_id: 'doc1', scheduled
 const DOCTOR = { phone: '387 123-4567', notify_new_appointment_whatsapp: true };
 const PATIENT = { full_name: 'Juan Pérez' };
 
-function createSupabase({ appointment = APPOINTMENT, doctor = DOCTOR, patient = PATIENT } = {}) {
+const MEMBER = { full_name: 'Lucía Pérez', relation: 'hijo/a' };
+
+function createSupabase({ appointment = APPOINTMENT, doctor = DOCTOR, patient = PATIENT, member = MEMBER } = {}) {
   return {
     from: (table) => {
       let id;
@@ -21,6 +23,7 @@ function createSupabase({ appointment = APPOINTMENT, doctor = DOCTOR, patient = 
         eq: (_col, value) => { id = value; return b; },
         maybeSingle: async () => {
           if (table === 'appointments') return { data: appointment, error: null };
+          if (table === 'family_members') return { data: member, error: null };
           return { data: id === APPOINTMENT.doctor_id ? doctor : patient, error: null };
         },
       };
@@ -46,6 +49,39 @@ describe('buildAppointmentNoticeMessage', () => {
     expect(text).toContain('Juan Pérez');
     expect(text).toContain('05/11/2026');
     expect(text).toContain('14:30');
+  });
+});
+
+describe('buildAppointmentNoticeMessage with a family member', () => {
+  it('names the attended member and their relation to the titular', () => {
+    const text = buildAppointmentNoticeMessage({
+      patientName: 'Marta Pérez',
+      member: { full_name: 'Lucía Pérez', relation: 'hijo/a' },
+      scheduledAt: '2026-11-05T17:30:00.000Z',
+    });
+    expect(text).toContain('Lucía Pérez (hijo/a de Marta Pérez)');
+    expect(text).toContain('05/11/2026');
+  });
+});
+
+describe('notifyDoctorAppointmentHandler with a family member', () => {
+  it('names the attended member in the notice when the appointment has one', async () => {
+    const supabase = createSupabase({ appointment: { ...APPOINTMENT, family_member_id: 'fm1' } });
+    const { handler, sendText } = setup({ supabase });
+    const res = await call(handler);
+    expect(res.body).toEqual({ status: 'sent' });
+    expect(sendText).toHaveBeenCalledWith({
+      phone: '5493871234567',
+      text: expect.stringContaining('Lucía Pérez (hijo/a de Juan Pérez)'),
+    });
+  });
+
+  it('keeps naming only the titular when the appointment has no member', async () => {
+    const { handler, sendText } = setup();
+    await call(handler);
+    const { text } = sendText.mock.calls[0][0];
+    expect(text).toContain('Juan Pérez');
+    expect(text).not.toContain(' de Juan Pérez');
   });
 });
 
