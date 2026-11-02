@@ -53,6 +53,8 @@ const Affiliates: React.FC = () => {
   const [renewingId, setRenewingId] = useState<string | null>(null);
   // Fila con un reenvío de mail de activación en curso (deshabilita sólo su botón).
   const [resendingId, setResendingId] = useState<string | null>(null);
+  // Canal del reenvío del link de pago en curso desde el detalle de una solicitud.
+  const [sendingLinkChannel, setSendingLinkChannel] = useState<'whatsapp' | 'email' | null>(null);
   const [formData, setFormData] = useState({
     lastName: '',
     firstName: '',
@@ -331,6 +333,18 @@ const Affiliates: React.FC = () => {
     } catch (error: any) {
       toast(error.message || "Error al actualizar el email", "error");
       throw error;
+    }
+  };
+
+  const handleSendPaymentLink = async (id: string, channel: 'whatsapp' | 'email') => {
+    setSendingLinkChannel(channel);
+    try {
+      await adhesionRepository.sendPaymentLink(id, channel);
+      toast(channel === 'whatsapp' ? "Link de pago enviado por WhatsApp" : "Link de pago enviado por mail", "success");
+    } catch (error: any) {
+      toast(error.message || "Error al enviar el link de pago", "error");
+    } finally {
+      setSendingLinkChannel(null);
     }
   };
 
@@ -1051,6 +1065,23 @@ const Affiliates: React.FC = () => {
                     <span className="text-sm text-white font-semibold">{selectedRequest.payment_detail || '-'}</span>
                   </div>
                 </div>
+                {(!selectedRequest.status || selectedRequest.status === 'pending') && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Reenviar link de pago:</span>
+                    {(['whatsapp', 'email'] as const).map((channel) => (
+                      <button
+                        key={channel}
+                        type="button"
+                        onClick={() => handleSendPaymentLink(selectedRequest.id!, channel)}
+                        disabled={sendingLinkChannel !== null}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white hover:bg-white/10 disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {sendingLinkChannel === channel ? <Loader2 size={12} className="animate-spin" /> : channel === 'email' ? <Mail size={12} /> : <Phone size={12} />}
+                        {channel === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Section 3: Family Group */}
