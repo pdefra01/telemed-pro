@@ -77,11 +77,13 @@ function doctorWithArticle(doctorTitle, doctorName) {
  * Generic, link-free message that accompanies the prescription PDF. The PDF is
  * attached, so the text carries no URL, and it never includes phone numbers.
  */
-export function buildPrescriptionMessage({ patientName, doctorName, doctorTitle } = {}) {
+export function buildPrescriptionMessage({ patientName, doctorName, doctorTitle, forName } = {}) {
   const greeting = patientName ? `Hola ${patientName},` : 'Hola,';
   const doctor = doctorWithArticle(doctorTitle, doctorName);
+  // A family member's receta goes to the titular's phone: say whose consultation it is.
+  const consultation = forName ? `de la consulta de ${forName}` : 'de tu consulta';
   return (
-    `${greeting} te enviamos la receta electrónica de tu consulta con ${doctor}.\n\n` +
+    `${greeting} te enviamos la receta electrónica ${consultation} con ${doctor}.\n\n` +
     'La encontrás adjunta en este mensaje. Si tenés alguna consulta, respondé por la plataforma.'
   );
 }
@@ -190,11 +192,12 @@ ${indications}`;
 }
 
 /** Text message carrying the insurer (obra social) prescription download link. */
-export function buildExternalPrescriptionMessage({ patientName, doctorName, doctorTitle, url } = {}) {
+export function buildExternalPrescriptionMessage({ patientName, doctorName, doctorTitle, url, forName } = {}) {
   const greeting = patientName ? `Hola ${patientName},` : 'Hola,';
   const doctor = doctorWithArticle(doctorTitle, doctorName);
+  const consultation = forName ? `de la consulta de ${forName}` : 'de tu consulta';
   return (
-    `${greeting} te enviamos la receta de tu obra social de tu consulta con ${doctor}.
+    `${greeting} te enviamos la receta de tu obra social ${consultation} con ${doctor}.
 
 ` +
     `Podés descargarla acá: ${url}
@@ -222,7 +225,7 @@ export async function sendPrescriptionViaWhatsApp(
   { supabaseAdmin, waha, fetchFn = fetch, now = () => new Date() },
   { prescriptionId, requesterId }
 ) {
-  const baseColumns = 'id, doctor_id, patient_id, doctor_name, pdf_url, pdf_path, notes, medications';
+  const baseColumns = 'id, doctor_id, patient_id, family_member_id, doctor_name, pdf_url, pdf_path, notes, medications';
   const selectPrescription = (columns) =>
     supabaseAdmin.from('prescriptions').select(columns).eq('id', prescriptionId).maybeSingle();
   let { data: prescription, error: selectError } = await selectPrescription(
@@ -297,6 +300,17 @@ export async function sendPrescriptionViaWhatsApp(
   const phone = normalizeArgentinePhone(patient?.phone);
   if (!phone) return fail(422, 'invalid_phone');
 
+  // The receta of a family member still goes to the titular's phone (members have none).
+  let attendedName;
+  if (prescription.family_member_id) {
+    const { data: member } = await supabaseAdmin
+      .from('family_members')
+      .select('full_name')
+      .eq('id', prescription.family_member_id)
+      .maybeSingle();
+    attendedName = member?.full_name;
+  }
+
   // Tolerant lookup: a missing row or column (migration not applied yet) reads as "Dr.".
   const { data: doctorProfile } = await supabaseAdmin
     .from('profiles')
@@ -333,6 +347,7 @@ export async function sendPrescriptionViaWhatsApp(
           doctorName: prescription.doctor_name,
           doctorTitle,
           url: externalUrl,
+          forName: attendedName,
         }),
       });
     }
@@ -345,6 +360,7 @@ export async function sendPrescriptionViaWhatsApp(
           patientName: patient?.full_name,
           doctorName: prescription.doctor_name,
           doctorTitle,
+          forName: attendedName,
         }),
       });
       pdfSent = true;

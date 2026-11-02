@@ -68,6 +68,41 @@ describe('MedicalRecordRepository (TDD)', () => {
     });
   });
 
+  describe('attended family member', () => {
+    const base = {
+      patientId: 'p1',
+      doctorId: 'd1',
+      doctorName: 'Dr. Smith',
+      diagnosis: 'Control',
+      notes: 'Llamó por dolor de cabeza',
+      type: 'consultation' as const,
+    };
+
+    it('stores the attended member on a new record, and null for the titular', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.select.mockReturnThis();
+      supabaseMock.single.mockResolvedValue({ data: { id: 'mr-new', family_member_id: 'fm1' }, error: null });
+
+      const created = await repository.createMedicalRecord({ ...base, familyMemberId: 'fm1' });
+      expect(supabaseMock.insert).toHaveBeenLastCalledWith([expect.objectContaining({ family_member_id: 'fm1' })]);
+      expect(created.familyMemberId).toBe('fm1');
+
+      supabaseMock.single.mockResolvedValue({ data: { id: 'mr-2', family_member_id: null }, error: null });
+      const titular = await repository.createMedicalRecord(base);
+      expect(supabaseMock.insert).toHaveBeenLastCalledWith([expect.objectContaining({ family_member_id: null })]);
+      expect(titular.familyMemberId).toBeUndefined();
+    });
+
+    it('maps the attended member when reading a record', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.maybeSingle.mockResolvedValue({ data: { id: 'mr-1', family_member_id: 'fm1' }, error: null });
+
+      const record = await repository.getRecordByAppointmentId('app-1');
+
+      expect(record?.familyMemberId).toBe('fm1');
+    });
+  });
+
   describe('createMedicalRecord', () => {
     it('should insert a new medical record into Supabase', async () => {
       const newRecordData = {

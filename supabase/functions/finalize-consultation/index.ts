@@ -53,13 +53,17 @@ serve(async (req) => {
     // 1. Get Appointment Info
     const { data: appointment, error: apptError } = await supabase
       .from('appointments')
-      .select('*, patient:profiles!patient_id(full_name, dni, phone, email)')
+      .select('*, patient:profiles!patient_id(full_name, dni, phone, email), family_member:family_members!family_member_id(full_name, dni)')
       .eq('id', appointmentId)
       .single()
 
     if (apptError || !appointment) {
       throw new Error('Turno no encontrado')
     }
+
+    // The person attended: a family member when the appointment has one, else the
+    // titular. Their clinical record and receta are stored and printed under them.
+    const attended = appointment.family_member ?? appointment.patient
 
     // 2. Get Doctor Info (for the records). '*' instead of a column list so the
     // function keeps working on a database without professional_title yet.
@@ -80,6 +84,7 @@ serve(async (req) => {
       .insert({
         appointment_id: appointmentId,
         patient_id: appointment.patient_id,
+        family_member_id: appointment.family_member_id ?? null,
         doctor_id: appointment.doctor_id,
         doctor_name: doctor.full_name,
         diagnosis,
@@ -135,8 +140,8 @@ serve(async (req) => {
       let currentY = height - 140
       page.drawText('DATOS DEL PACIENTE', { x: 50, y: currentY, size: 8, font: helveticaBold, color: primaryColor })
       currentY -= 15
-      page.drawText(`Nombre: ${appointment.patient.full_name}`, { x: 50, y: currentY, size: 11, font: helveticaFont, color: textColor })
-      page.drawText(`DNI: ${appointment.patient.dni || 'N/A'}`, { x: 300, y: currentY, size: 11, font: helveticaFont, color: textColor })
+      page.drawText(`Nombre: ${attended.full_name}`, { x: 50, y: currentY, size: 11, font: helveticaFont, color: textColor })
+      page.drawText(`DNI: ${attended.dni || 'N/A'}`, { x: 300, y: currentY, size: 11, font: helveticaFont, color: textColor })
       
       currentY -= 30
       page.drawText('DATOS DEL PROFESIONAL', { x: 50, y: currentY, size: 8, font: helveticaBold, color: primaryColor })
@@ -219,6 +224,7 @@ serve(async (req) => {
         .insert({
           appointment_id: appointmentId,
           patient_id: appointment.patient_id,
+          family_member_id: appointment.family_member_id ?? null,
           doctor_id: appointment.doctor_id,
           doctor_name: doctor.full_name,
           expiration_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
