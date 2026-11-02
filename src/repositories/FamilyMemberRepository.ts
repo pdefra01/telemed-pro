@@ -187,6 +187,20 @@ export class FamilyMemberRepository {
   }
 
   /**
+   * Reads the group linked to a patient's profile without creating one.
+   */
+  async findFamilyGroupId(patientId: string): Promise<string | undefined> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('family_group_id')
+      .eq('id', patientId)
+      .single();
+
+    if (error) throw error;
+    return data?.family_group_id ?? undefined;
+  }
+
+  /**
    * Ensures a family group exists for the given patient.
    * Creates one if it doesn't exist yet and links it to the patient's profile.
    * Returns the family_group_id.
