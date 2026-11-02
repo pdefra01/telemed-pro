@@ -569,6 +569,27 @@ describe('AdhesionRepository', () => {
     });
   });
 
+  describe('sendPaymentLink', () => {
+    it('POSTs the channel to the send-payment-link endpoint', async () => {
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, status: 'sent' }) } as any);
+      await repository.sendPaymentLink('adh-1', 'whatsapp');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/adhesion/adh-1/send-payment-link', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ channel: 'whatsapp' }),
+      }));
+    });
+
+    it('surfaces the server message on error', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: false, json: async () => ({ ok: false, error: 'El teléfono del titular no es válido para WhatsApp. Revisalo o usá otro medio.' }) } as any);
+      await expect(repository.sendPaymentLink('adh-1', 'whatsapp')).rejects.toThrow('El teléfono del titular no es válido');
+    });
+
+    it('falls back to a generic message when the body is not JSON', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: false, json: async () => { throw new Error('x'); } } as any);
+      await expect(repository.sendPaymentLink('adh-1', 'email')).rejects.toThrow('No pudimos enviar el enlace de pago.');
+    });
+  });
+
   describe('releaseStuckActivation (admin recovery of a stale claim)', () => {
     beforeEach(() => {
       vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: { access_token: 'jwt-1' } } } as any);

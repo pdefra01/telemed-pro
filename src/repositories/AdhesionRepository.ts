@@ -422,6 +422,24 @@ export class AdhesionRepository {
   }
 
   /**
+   * Reenvía al titular el link de pago de Mercado Pago de una solicitud, por
+   * WhatsApp o mail. El servidor re-obtiene (o crea) el link de forma
+   * idempotente, así que sirve cuando el afiliado abandonó el checkout.
+   * Lanza con el mensaje del servidor si falla.
+   */
+  async sendPaymentLink(id: string, channel: 'whatsapp' | 'email'): Promise<void> {
+    const response = await fetch(`/api/adhesion/${encodeURIComponent(id)}/send-payment-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || 'No pudimos enviar el enlace de pago.');
+    }
+  }
+
+  /**
    * Rechaza una solicitud de adhesión cambiándole el estado
    */
   async rejectApplication(id: string): Promise<void> {
