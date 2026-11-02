@@ -1,4 +1,5 @@
 import { hasUsableIndications } from '../../utils/usableIndications';
+import { attendedMemberLabel } from '../../utils/attendedMember';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { parsePrescriptionDraft } from './prescriptionDraft';
@@ -670,6 +671,9 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
                 <p className="text-lg font-bold text-white">
                   {appointmentData?.patientName || 'Paciente Externo'}
                 </p>
+                {appointmentData && attendedMemberLabel(appointmentData) && (
+                  <p className="text-sm font-semibold text-teal-400">{attendedMemberLabel(appointmentData)}</p>
+                )}
               </div>
             </div>
           </div>

@@ -21,6 +21,7 @@ import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../
 import { formatDoctorName } from '../../utils/doctorName';
 import { newestFirst, filterHistory } from './historyList';
 import { sendPrescriptionWhatsapp } from '../../utils/prescriptionWhatsapp';
+import { attendedMemberLabel } from '../../utils/attendedMember';
 
 interface Props {
     user: Doctor;
@@ -230,6 +231,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 patientName: row.patient_name,
                 patientAvatar: row.patient_avatar,
                 patientPlan: row.patient_plan,
+                familyMemberId: row.family_member_id ?? undefined,
+                familyMemberName: row.family_member_name ?? undefined,
+                familyMemberRelation: row.family_member_relation ?? undefined,
                 doctorId: row.doctor_id,
                 doctorName: "", 
                 date: toLocalDateStr(new Date(row.scheduled_at)),
@@ -293,6 +297,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         try {
             await medicalRecordRepository.createMedicalRecord({
                 patientId: selectedAppointment.patientId,
+                familyMemberId: selectedAppointment.familyMemberId,
                 doctorId: user.id,
                 doctorName: user.name,
                 diagnosis: evolutionDiagnosis.trim(),
@@ -727,6 +732,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                             
                                             <div className="space-y-1">
                                                 <h4 className="text-xl sm:text-2xl font-bold text-white tracking-tighter group-hover:text-emerald-400 transition-colors truncate">{apt.patientName}</h4>
+                                                {attendedMemberLabel(apt) && (
+                                                    <p className="text-sm font-semibold text-teal-400 truncate">{attendedMemberLabel(apt)}</p>
+                                                )}
                                                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 sm:gap-3">
                                                     <div className="flex items-center gap-2 bg-slate-950/80 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-white/5">
                                                         <Clock size={12} className="text-emerald-500" />
@@ -823,6 +831,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                             </div>
                                             <div>
                                                 <h4 className="text-xl font-bold text-white tracking-tight">{apt.patientName}</h4>
+                                                {attendedMemberLabel(apt) && (
+                                                    <p className="text-sm font-semibold text-teal-400">{attendedMemberLabel(apt)}</p>
+                                                )}
                                                 <div className="flex items-center gap-6 mt-2">
                                                     <span className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                                         <Calendar size={12} className="text-blue-500" /> {formatHistoryDate(apt.date)}
@@ -924,6 +935,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                     <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{visitTypeLabel(record.type)}</span>
                                                     <span className="text-xs text-slate-500 sm:ml-auto">{formatDoctorName(record.doctorTitle, record.doctorName)}</span>
                                                 </div>
+                                                {attendedMemberLabel(record) && (
+                                                    <p className="text-sm font-semibold text-teal-400 mb-1">{attendedMemberLabel(record)}</p>
+                                                )}
                                                 <h4 className="font-bold text-white text-lg leading-snug">{record.diagnosis}</h4>
                                                 {record.notes && (
                                                     <p className="mt-2 text-slate-300 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{record.notes}</p>
@@ -985,6 +999,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             <div className="flex flex-wrap items-baseline gap-x-3 min-w-0" title={`Protocolo ${selectedAppointment.id}`}>
                                 <h3 className="font-bold text-xl text-white tracking-tight">Resumen clínico</h3>
                                 <span className="font-bold text-xl text-emerald-400 tracking-tight truncate">{selectedAppointment.patientName}</span>
+                                {attendedMemberLabel(selectedAppointment) && (
+                                    <span className="text-sm font-semibold text-teal-400">{attendedMemberLabel(selectedAppointment)}</span>
+                                )}
                                 <span className="text-xs text-slate-500">{formatHistoryDate(selectedAppointment.date)}</span>
                             </div>
                             <button

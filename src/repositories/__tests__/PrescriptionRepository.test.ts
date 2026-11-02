@@ -22,6 +22,17 @@ describe('PrescriptionRepository (TDD)', () => {
     repository = new PrescriptionRepository();
   });
 
+  describe('attended family member', () => {
+    it('maps the attended member of a prescription, and nothing for the titular', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.maybeSingle.mockResolvedValueOnce({ data: { id: 'rx-1', family_member_id: 'fm1' }, error: null });
+      expect((await repository.getPrescriptionByAppointmentId('app-1'))?.familyMemberId).toBe('fm1');
+
+      supabaseMock.maybeSingle.mockResolvedValueOnce({ data: { id: 'rx-2', family_member_id: null }, error: null });
+      expect((await repository.getPrescriptionByAppointmentId('app-2'))?.familyMemberId).toBeUndefined();
+    });
+  });
+
   describe('getPrescriptionByAppointmentId', () => {
     it('should fetch a prescription by appointment ID from Supabase', async () => {
       const mockPrescription = {

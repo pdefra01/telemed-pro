@@ -72,6 +72,25 @@ describe('doctor title in WhatsApp messages', () => {
   });
 });
 
+describe('prescription messages for a family member', () => {
+  it('says whose consultation the receta belongs to, keeping the titular greeting', () => {
+    const text = buildPrescriptionMessage({ patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur', forName: 'Lucía Pérez' });
+    expect(text).toContain('Hola Ana Pérez,');
+    expect(text).toContain('consulta de Lucía Pérez con');
+  });
+
+  it('keeps the original wording when the titular is the patient', () => {
+    const text = buildPrescriptionMessage({ patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur' });
+    expect(text).toContain('de tu consulta con');
+    expect(text).not.toContain('consulta de ');
+  });
+
+  it('names the member in the obra social message too', () => {
+    const text = buildExternalPrescriptionMessage({ patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur', url: 'https://os.example/r', forName: 'Lucía Pérez' });
+    expect(text).toContain('consulta de Lucía Pérez con');
+  });
+});
+
 describe('buildPrescriptionMessage', () => {
   const base = { patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur' };
 
@@ -331,6 +350,7 @@ describe('sendPrescriptionViaWhatsApp', () => {
   function createSupabaseStub({
     prescription = PRESCRIPTION,
     patient = PATIENT,
+    member = null,
     doctor = null,
     lastSent = null,
     lastDelivery = null,
@@ -364,6 +384,7 @@ describe('sendPrescriptionViaWhatsApp', () => {
             }
             return { data: prescription, error: null };
           }
+          if (table === 'family_members') return { data: member, error: null };
           if (table === 'profiles') {
             if (prescription && idFilter === prescription.doctor_id) return { data: doctor, error: null };
             return { data: patient, error: null };
@@ -411,6 +432,23 @@ describe('sendPrescriptionViaWhatsApp', () => {
 
   const run = (ctx, requesterId = 'doc-1') =>
     sendPrescriptionViaWhatsApp(ctx, { prescriptionId: 'rx-1', requesterId });
+
+  it('names the family member in the message and still sends to the titular phone', async () => {
+    const { ctx, waha } = setup({
+      db: {
+        prescription: { ...PRESCRIPTION, family_member_id: 'fm1' },
+        member: { full_name: 'Lucía Pérez' },
+      },
+    });
+
+    const result = await run(ctx);
+
+    expect(result.status).toBe(200);
+    const call = waha.sendFile.mock.calls[0][0];
+    expect(call.phone).toBe('5491112345678');
+    expect(call.caption).toContain('Hola Ana Pérez,');
+    expect(call.caption).toContain('consulta de Lucía Pérez con');
+  });
 
   it('sends the PDF to the normalized patient number and logs success', async () => {
     const { ctx, waha, inserts, fetchFn, createSignedUrl } = setup();

@@ -124,6 +124,9 @@ export interface MedicalRecord {
   patientId: string;
   /** Person attended; absent = the titular (patientId). */
   familyMemberId?: string;
+  /** Filled when reading a patient's history, so the chart can say whose record it is. */
+  familyMemberName?: string;
+  familyMemberRelation?: string;
   doctorId?: string;
   date: string;
   diagnosis: string;

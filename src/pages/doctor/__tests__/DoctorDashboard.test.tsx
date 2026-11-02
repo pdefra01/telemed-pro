@@ -213,6 +213,26 @@ describe('DoctorDashboard - history ordering, filters and follow-up actions', ()
     expect(await screen.findByText('Evolución agregada a la historia clínica.')).toBeInTheDocument();
   });
 
+  it('stores the added evolution against the family member attended in that consultation', async () => {
+    vi.mocked(medicalRecordRepository.createMedicalRecord).mockResolvedValue(mockRecord);
+    vi.mocked(appointmentRepository.getDoctorAppointments).mockResolvedValue([
+      { ...history[1], familyMemberId: 'fm1', familyMemberName: 'Lucía Pérez', familyMemberRelation: 'hijo/a' },
+    ]);
+    render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Historial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Ver Resumen/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Agregar evolución' }));
+    fireEvent.change(screen.getByLabelText('Diagnóstico de la evolución'), { target: { value: 'Control' } });
+    fireEvent.change(screen.getByLabelText('Notas de la evolución'), { target: { value: 'Llamó por dolor de cabeza' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar evolución' }));
+
+    await waitFor(() => expect(medicalRecordRepository.createMedicalRecord).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(medicalRecordRepository.createMedicalRecord).mock.calls[0][0]).toMatchObject({
+      patientId: 'pat-new',
+      familyMemberId: 'fm1',
+    });
+  });
+
   it('resends the prescription of a past consultation by WhatsApp', async () => {
     vi.mocked(prescriptionRepository.getPrescriptionByAppointmentId).mockResolvedValue(mockPrescription);
     vi.mocked(sendPrescriptionWhatsapp).mockResolvedValue({ ok: true });

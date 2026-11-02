@@ -19,6 +19,7 @@ export class MedicalRecordRepository {
       .insert([{
         appointment_id: recordData.appointmentId,
         patient_id: recordData.patientId,
+        family_member_id: recordData.familyMemberId ?? null,
         doctor_id: recordData.doctorId,
         doctor_name: recordData.doctorName,
         diagnosis: recordData.diagnosis,
@@ -35,6 +36,7 @@ export class MedicalRecordRepository {
       id: data.id,
       appointmentId: data.appointment_id,
       patientId: data.patient_id,
+      familyMemberId: data.family_member_id ?? undefined,
       doctorId: data.doctor_id,
       doctorName: data.doctor_name,
       doctorTitle: normalizeProfessionalTitle(data.doctor?.professional_title),
@@ -49,7 +51,7 @@ export class MedicalRecordRepository {
   async getRecordsByPatientId(patientId: string): Promise<MedicalRecord[]> {
     const { data, error } = await supabase
       .from('medical_records')
-      .select(SELECT_WITH_DOCTOR_TITLE)
+      .select(`${SELECT_WITH_DOCTOR_TITLE}, family_member:family_members!family_member_id(full_name, relation)`)
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false });
 
@@ -59,6 +61,9 @@ export class MedicalRecordRepository {
       id: item.id,
       appointmentId: item.appointment_id,
       patientId: item.patient_id,
+      familyMemberId: item.family_member_id ?? undefined,
+      familyMemberName: item.family_member?.full_name ?? undefined,
+      familyMemberRelation: item.family_member?.relation ?? undefined,
       doctorId: item.doctor_id,
       doctorName: item.doctor_name,
       doctorTitle: normalizeProfessionalTitle(item.doctor?.professional_title),
@@ -84,6 +89,7 @@ export class MedicalRecordRepository {
       id: data.id,
       appointmentId: data.appointment_id,
       patientId: data.patient_id,
+      familyMemberId: data.family_member_id ?? undefined,
       doctorId: data.doctor_id,
       doctorName: data.doctor_name,
       doctorTitle: normalizeProfessionalTitle(data.doctor?.professional_title),

@@ -19,6 +19,7 @@ import { useToast } from '../context/ToastContext';
 import { getBranding } from '../config/branding';
 import { formatHistoryDate } from '../utils/clinicalHistoryFormat';
 import { formatDoctorName } from '../utils/doctorName';
+import { attendedMemberLabel } from '../utils/attendedMember';
 import { 
   Save, 
   CheckCircle, 
@@ -441,6 +442,9 @@ const VideoRoomContent: React.FC<VideoRoomContentProps> = ({
                 <div className="flex-1 min-w-0">
                   <p className="text-[8px] font-bold text-teal-500 uppercase tracking-widest">Paciente</p>
                   <p className="text-sm font-bold text-white truncate">{appointment?.patientName || 'Cargando...'}</p>
+                  {appointment && attendedMemberLabel(appointment) && (
+                    <p className="text-[11px] font-bold text-teal-400 truncate">{attendedMemberLabel(appointment)}</p>
+                  )}
                 </div>
                 <button 
                   onClick={() => setIsVaultOpen(true)}
