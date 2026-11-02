@@ -86,6 +86,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
     const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null);
     const [familyMembers, setFamilyMembers] = useState<any[]>([]);
     const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState<string>('');
+    // Who is attended in the consultation being booked ('' = the titular).
+    const [bookingFamilyMemberId, setBookingFamilyMemberId] = useState<string>('');
 
     const handleCancelAppointment = async (appointmentId: string) => {
         if (!window.confirm('¿Estás seguro de que querés cancelar este turno?')) return;
@@ -239,6 +241,7 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
             setShowPastSlotWarning(false);
             setPendingSlot(null);
             setSelectedSlot(null);
+            setBookingFamilyMemberId('');
         }
     }, [showAppointmentModal]);
 
@@ -456,6 +459,9 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                     <span className="text-xs font-mono text-slate-400 bg-white/5 px-3 py-1 rounded-full">ID: {appt.id.slice(0, 8)}</span>
                                                 </div>
                                                 <p className="font-bold text-2xl text-white mb-1 tracking-tight group-hover/card:text-emerald-400 transition-colors">{appt.doctorName}</p>
+                                                {appt.familyMemberName && (
+                                                    <p className="text-sm text-emerald-300 font-semibold mb-1">Para: {appt.familyMemberName} ({appt.familyMemberRelation})</p>
+                                                )}
                                                 <p className="text-slate-400 font-semibold text-base flex items-center justify-center sm:justify-start">
                                                     <Video size={18} className="mr-3 text-emerald-500" /> 
                                                     {appt.time} <span className="mx-2 opacity-30">|</span> 
@@ -859,6 +865,27 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                         </div>
 
                         <div className="space-y-8">
+                            {/* Who is attended: each person keeps their own medical chart */}
+                            {familyMembers.length > 0 && (
+                                <div>
+                                    <label htmlFor="booking-attended" className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">¿Quién se atiende?</label>
+                                    <select
+                                        id="booking-attended"
+                                        aria-label="¿Quién se atiende?"
+                                        value={bookingFamilyMemberId}
+                                        onChange={(e) => setBookingFamilyMemberId(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all appearance-none"
+                                    >
+                                        <option value="">Yo ({user.name})</option>
+                                        {familyMembers.map(member => (
+                                            <option key={member.id} value={member.id}>
+                                                {member.name} ({member.relation})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             {/* Specialty Selection */}
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Especialidad</label>
@@ -1204,7 +1231,8 @@ const PatientDashboard: React.FC<Props> = ({ user }) => {
                                                 doctor_id: selectedDoctor.id,
                                                 scheduled_at: scheduledDate.toISOString(),
                                                 specialty: selectedSpecialty,
-                                                status: 'confirmed'
+                                                status: 'confirmed',
+                                                family_member_id: bookingFamilyMemberId || undefined
                                             });
 
                                             toast('¡Turno agendado con éxito!', 'success');

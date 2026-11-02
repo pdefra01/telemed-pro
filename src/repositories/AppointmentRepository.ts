@@ -5,6 +5,16 @@ import { toLocalDateStr } from '../utils/localDate';
 import { normalizeProfessionalTitle } from '../utils/doctorName';
 import { affiliateRepository } from './AffiliateRepository';
 
+/** The attended family member of an appointment row; empty for the titular. */
+function mapAttendedMember(row: any): Pick<Appointment, 'familyMemberId' | 'familyMemberName' | 'familyMemberRelation'> {
+  if (!row.family_member_id) return {};
+  return {
+    familyMemberId: row.family_member_id,
+    familyMemberName: row.family_member?.full_name,
+    familyMemberRelation: row.family_member?.relation,
+  };
+}
+
 export class AppointmentRepository {
   /**
    * Barre turnos que nunca llegaron a un estado terminal (completed/cancelled)
@@ -32,7 +42,8 @@ export class AppointmentRepository {
       .from('appointments')
       .select(`
         *,
-        doctor:profiles!doctor_id(full_name, professional_title)
+        doctor:profiles!doctor_id(full_name, professional_title),
+        family_member:family_members!family_member_id(full_name, relation)
       `)
       .eq('patient_id', patientId)
       .not('status', 'in', '(cancelled,no_show,completed)')
@@ -55,6 +66,7 @@ export class AppointmentRepository {
       status: row.status,
       type: 'video', // Por defecto en este MVP
       consultationMetadata: row.consultation_metadata || {},
+      ...mapAttendedMember(row),
     }));
   }
 
@@ -71,7 +83,8 @@ export class AppointmentRepository {
       .from('appointments')
       .select(`
         *,
-        patient:profiles!patient_id(full_name)
+        patient:profiles!patient_id(full_name),
+        family_member:family_members!family_member_id(full_name, relation)
       `)
       .eq('doctor_id', doctorId);
 
@@ -101,6 +114,7 @@ export class AppointmentRepository {
       status: row.status,
       type: 'video',
       consultationMetadata: row.consultation_metadata || {},
+      ...mapAttendedMember(row),
     }));
   }
 
@@ -142,6 +156,8 @@ export class AppointmentRepository {
     scheduled_at: string;
     specialty: string;
     status: 'pending' | 'confirmed';
+    /** Attended family member; omit for the titular. */
+    family_member_id?: string;
   }): Promise<any> {
     // 1. Verificar solapamiento (Overlap check con margen de 14 minutos y normalización ISO)
     const targetTime = new Date(data.scheduled_at).getTime();
@@ -169,6 +185,7 @@ export class AppointmentRepository {
         scheduled_at: data.scheduled_at,
         specialty: data.specialty,
         status: data.status,
+        family_member_id: data.family_member_id ?? null,
         livekit_room_name: `room-${data.patient_id.substring(0, 5)}-${Date.now().toString().slice(-5)}`
       })
       .select()
@@ -346,7 +363,8 @@ export class AppointmentRepository {
       .select(`
         *,
         patient:profiles!patient_id(full_name),
-        doctor:profiles!doctor_id(full_name, professional_title, specialty, license_number)
+        doctor:profiles!doctor_id(full_name, professional_title, specialty, license_number),
+        family_member:family_members!family_member_id(full_name, relation)
       `)
       .eq('id', appointmentId)
       .single();
@@ -372,6 +390,7 @@ export class AppointmentRepository {
       type: 'video', // Por defecto en este MVP
       notes: data.notes || '',
       consultationMetadata: data.consultation_metadata || {},
+      ...mapAttendedMember(data),
     } as any; 
   }
 }

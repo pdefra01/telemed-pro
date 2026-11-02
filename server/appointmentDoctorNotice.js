@@ -18,9 +18,12 @@ function formatLocal(scheduledAt) {
   return { day, time };
 }
 
-export function buildAppointmentNoticeMessage({ patientName, scheduledAt } = {}) {
+export function buildAppointmentNoticeMessage({ patientName, member, scheduledAt } = {}) {
   const { day, time } = formatLocal(scheduledAt);
-  return `Nuevo turno agendado: ${patientName || 'un afiliado'} el ${day} a las ${time} hs. Estate atento en tu agenda de Medinex.`;
+  const titular = patientName || 'un afiliado';
+  // A family member is the one attended: name them and say whose group they belong to.
+  const attended = member?.full_name ? `${member.full_name} (${member.relation} de ${titular})` : titular;
+  return `Nuevo turno agendado: ${attended} el ${day} a las ${time} hs. Estate atento en tu agenda de Medinex.`;
 }
 
 /**
@@ -32,7 +35,7 @@ export function notifyDoctorAppointmentHandler({ supabaseAdmin, waha }) {
   return async function notifyDoctorAppointment(req, res) {
     const { data: appointment } = await supabaseAdmin
       .from('appointments')
-      .select('id, patient_id, doctor_id, scheduled_at')
+      .select('id, patient_id, doctor_id, scheduled_at, family_member_id')
       .eq('id', req.params.id)
       .maybeSingle();
 
@@ -58,12 +61,21 @@ export function notifyDoctorAppointmentHandler({ supabaseAdmin, waha }) {
       .eq('id', appointment.patient_id)
       .maybeSingle();
 
+    let member = null;
+    if (appointment.family_member_id) {
+      ({ data: member } = await supabaseAdmin
+        .from('family_members')
+        .select('full_name, relation')
+        .eq('id', appointment.family_member_id)
+        .maybeSingle());
+    }
+
     if (!(await waha.isSessionReady())) return res.status(503).json({ status: 'failed', reason: 'session_not_ready' });
 
     try {
       await waha.sendText({
         phone,
-        text: buildAppointmentNoticeMessage({ patientName: patient?.full_name, scheduledAt: appointment.scheduled_at }),
+        text: buildAppointmentNoticeMessage({ patientName: patient?.full_name, member, scheduledAt: appointment.scheduled_at }),
       });
     } catch (err) {
       console.error('[appointment-notice] send failed:', err?.message || err);

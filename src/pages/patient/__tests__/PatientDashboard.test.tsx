@@ -145,6 +145,44 @@ describe('PatientDashboard Scheduler', () => {
     expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('éxito'), 'success');
   });
 
+  const openBookingFor = async () => {
+    vi.mocked(doctorRepository.getSpecialties).mockResolvedValue(['Pediatría']);
+    vi.mocked(doctorRepository.getDoctorsBySpecialty).mockResolvedValue([
+      { id: 'doc1', name: 'Dr. Smith', specialty: 'Pediatría', rating: 4.8, availability: ['10:00', '11:00'] }
+    ] as any);
+    vi.mocked(appointmentRepository.getPatientAppointments).mockResolvedValue([]);
+    vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValue([]);
+    vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValue([]);
+
+    renderWithRouter(<PatientDashboard user={MOCK_PATIENT} />);
+    fireEvent.click(screen.getByText(/Nuevo Turno/i));
+    await waitFor(() => expect(screen.getByLabelText('¿Quién se atiende?')).toBeDefined());
+    fireEvent.click(await screen.findByText('PEDIATRÍA'));
+    fireEvent.click(await screen.findByText('DR. SMITH'));
+    fireEvent.click(await screen.findByText('10:00'));
+  };
+
+  it('books the consultation for the chosen family member', async () => {
+    await openBookingFor();
+    fireEvent.change(screen.getByLabelText('¿Quién se atiende?'), { target: { value: '1' } });
+    fireEvent.click(screen.getByText(/CONFIRMAR TURNO/i));
+
+    await waitFor(() => {
+      expect(appointmentRepository.createAppointment).toHaveBeenCalledWith(expect.objectContaining({
+        doctor_id: 'doc1',
+        family_member_id: '1',
+      }));
+    });
+  });
+
+  it('books for the titular by default', async () => {
+    await openBookingFor();
+    fireEvent.click(screen.getByText(/CONFIRMAR TURNO/i));
+
+    await waitFor(() => expect(appointmentRepository.createAppointment).toHaveBeenCalled());
+    expect(vi.mocked(appointmentRepository.createAppointment).mock.calls[0][0].family_member_id).toBeUndefined();
+  });
+
   it('should filter doctors when specialty changes', async () => {
     vi.mocked(doctorRepository.getSpecialties).mockResolvedValue(['Cardiología', 'Pediatría']);
     vi.mocked(doctorRepository.getDoctorsBySpecialty)

@@ -114,6 +114,69 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
     });
   });
 
+  describe('attended family member', () => {
+    const memberRow = {
+      id: 'ap1', status: 'confirmed', scheduled_at: '2026-10-08T15:00:00Z',
+      family_member_id: 'fm1', family_member: { full_name: 'Lucía Pérez', relation: 'hijo/a' },
+    };
+    const titularRow = { id: 'ap2', status: 'confirmed', scheduled_at: '2026-10-08T15:00:00Z', family_member_id: null, family_member: null };
+    const expected = { familyMemberId: 'fm1', familyMemberName: 'Lucía Pérez', familyMemberRelation: 'hijo/a' };
+
+    it('maps the attended member on a patient appointment, and nothing for the titular', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.not = vi.fn().mockReturnValue({ order: vi.fn().mockResolvedValue({ data: [memberRow, titularRow], error: null }) });
+
+      const [withMember, titular] = await appointmentRepository.getPatientAppointments('p1');
+
+      expect(withMember).toMatchObject(expected);
+      expect(titular.familyMemberId).toBeUndefined();
+      expect(titular.familyMemberName).toBeUndefined();
+      expect(supabaseMock.select).toHaveBeenCalledWith(expect.stringContaining('family_members!family_member_id'));
+    });
+
+    it('maps the attended member on a doctor appointment', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.in = vi.fn().mockReturnValue(supabaseMock);
+      supabaseMock.order = vi.fn().mockResolvedValue({ data: [memberRow], error: null });
+
+      const [appointment] = await appointmentRepository.getDoctorAppointments('doc1', { status: ['confirmed'] });
+
+      expect(appointment).toMatchObject(expected);
+    });
+
+    it('maps the attended member on a single appointment', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.single.mockResolvedValueOnce({ data: memberRow, error: null });
+
+      const appointment = await appointmentRepository.getAppointmentById('ap1');
+
+      expect(appointment).toMatchObject(expected);
+    });
+
+    it('stores the attended member when booking, and null for the titular', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.neq.mockResolvedValue({ data: [], error: null });
+      supabaseMock.single.mockResolvedValue({ data: { id: 'new-app-id' }, error: null });
+      vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true } as Response);
+      const base = { patient_id: 'p1', doctor_id: 'd1', scheduled_at: '2026-05-01T10:00:00Z', specialty: 'Pediatría', status: 'confirmed' as const };
+
+      await appointmentRepository.createAppointment({ ...base, family_member_id: 'fm1' });
+      expect(supabaseMock.insert).toHaveBeenLastCalledWith(expect.objectContaining({ family_member_id: 'fm1' }));
+
+      await appointmentRepository.createAppointment(base);
+      expect(supabaseMock.insert).toHaveBeenLastCalledWith(expect.objectContaining({ family_member_id: null }));
+    });
+  });
+
   describe('getDoctorAppointments', () => {
     // Escenario 1: El médico recupera sus turnos activos (confirmados o pendientes)
     it('should filter appointments by an array of statuses', async () => {
