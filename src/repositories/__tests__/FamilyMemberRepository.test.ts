@@ -91,3 +91,28 @@ describe('FamilyMemberRepository.addMember — maxFamilyMembers cap', () => {
     ).rejects.toThrow(/No tenés un plan asignado/);
   });
 });
+
+describe('FamilyMemberRepository.findFamilyGroupId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const mockProfile = (result: { data: any; error?: any }) => {
+    const single = vi.fn().mockResolvedValue({ error: null, ...result });
+    const eq = vi.fn().mockReturnValue({ single });
+    vi.mocked(supabase.from).mockReturnValue({ select: vi.fn().mockReturnValue({ eq }) } as any);
+    return eq;
+  };
+
+  it('returns the group linked to the profile without creating one', async () => {
+    const eq = mockProfile({ data: { family_group_id: 'g1' } });
+    await expect(familyMemberRepository.findFamilyGroupId('p1')).resolves.toBe('g1');
+    expect(supabase.from).toHaveBeenCalledWith('profiles');
+    expect(eq).toHaveBeenCalledWith('id', 'p1');
+  });
+
+  it('returns undefined when the profile has no group', async () => {
+    mockProfile({ data: { family_group_id: null } });
+    await expect(familyMemberRepository.findFamilyGroupId('p1')).resolves.toBeUndefined();
+  });
+});

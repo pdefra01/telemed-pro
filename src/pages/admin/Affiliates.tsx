@@ -12,6 +12,7 @@ import { AdhesionEmailEditor } from './AdhesionEmailEditor';
 import { planRepository } from '../../repositories/PlanRepository';
 import { Patient, Plan } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
+import { FamilyGroupModal } from '../../components/admin/FamilyGroupModal';
 import { getActivationClaimState } from '../../utils/activationClaim';
 
 // Glass Card for Table Container
@@ -57,6 +58,7 @@ const Affiliates: React.FC = () => {
   const [sendingLinkChannel, setSendingLinkChannel] = useState<'whatsapp' | 'email' | null>(null);
   // Afiliado activo al que se le ofrece reenviar el link de pago (elige el canal).
   const [paymentLinkPatient, setPaymentLinkPatient] = useState<{ id: string; name: string } | null>(null);
+  const [familyGroupPatient, setFamilyGroupPatient] = useState<{ id: string; name: string; familyGroupId?: string } | null>(null);
   const [formData, setFormData] = useState({
     lastName: '',
     firstName: '',
@@ -614,6 +616,13 @@ const Affiliates: React.FC = () => {
                           </button>
                         )}
                         <button
+                          onClick={() => setFamilyGroupPatient(patient)}
+                          className="p-2 bg-white/5 hover:bg-violet-500/20 text-violet-400 rounded-xl transition-colors border border-white/5"
+                          title="Grupo familiar"
+                        >
+                          <Users size={16} />
+                        </button>
+                        <button
                           onClick={() => handleEdit(patient)}
                           className="p-2 bg-white/5 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-colors border border-white/5"
                           title="Editar Perfil"
@@ -1002,6 +1011,15 @@ const Affiliates: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {familyGroupPatient && (
+        <FamilyGroupModal
+          patientId={familyGroupPatient.id}
+          patientName={familyGroupPatient.name}
+          familyGroupId={familyGroupPatient.familyGroupId}
+          onClose={() => setFamilyGroupPatient(null)}
+        />
       )}
 
       {/* Reset Password Modal */}
