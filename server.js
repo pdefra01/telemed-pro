@@ -19,6 +19,7 @@ import { createActivateAdhesionLimiter, createDniUploadUrlsLimiter } from './ser
 import { createDniUploadUrls, cleanupOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS } from './server/adhesionDniPhotos.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
+import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/whatsappSessionMonitor.js';
 import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
 import { sendAdhesionPaymentLink } from './server/adhesionPaymentLinkDelivery.js';
@@ -1611,6 +1612,21 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
   if (process.env.NODE_ENV === 'production') {
     console.log(`📁 Sirviendo archivos estáticos desde: ${distPath}`);
+  }
+
+  // Emails the admin when the WhatsApp (WAHA) session stays down. Opt-in: needs WHATSAPP_ALERT_EMAIL.
+  const alertEmail = process.env.WHATSAPP_ALERT_EMAIL;
+  if (waha && alertEmail) {
+    createWhatsappSessionMonitor({
+      waha,
+      sendAlert: async (event) => {
+        const transporter = await createMailTransporter();
+        await transporter.sendMail({ from: `"Medinex" <${FROM_ADDRESS}>`, to: alertEmail, ...buildSessionAlertEmail(event) });
+      },
+    }).start();
+    console.log('📡 Monitor de sesión de WhatsApp activo');
+  } else if (waha) {
+    console.warn('⚠️ WHATSAPP_ALERT_EMAIL no configurado: no habrá aviso si cae la sesión de WhatsApp.');
   }
 });
 
