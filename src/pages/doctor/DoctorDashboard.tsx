@@ -935,6 +935,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                     <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{visitTypeLabel(record.type)}</span>
                                                     <span className="text-xs text-slate-500 sm:ml-auto">{formatDoctorName(record.doctorTitle, record.doctorName)}</span>
                                                 </div>
+                                                {attendedMemberLabel(record) && (
+                                                    <p className="text-sm font-semibold text-teal-400 mb-1">{attendedMemberLabel(record)}</p>
+                                                )}
                                                 <h4 className="font-bold text-white text-lg leading-snug">{record.diagnosis}</h4>
                                                 {record.notes && (
                                                     <p className="mt-2 text-slate-300 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{record.notes}</p>

@@ -51,7 +51,7 @@ export class MedicalRecordRepository {
   async getRecordsByPatientId(patientId: string): Promise<MedicalRecord[]> {
     const { data, error } = await supabase
       .from('medical_records')
-      .select(SELECT_WITH_DOCTOR_TITLE)
+      .select(`${SELECT_WITH_DOCTOR_TITLE}, family_member:family_members!family_member_id(full_name, relation)`)
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false });
 
@@ -62,6 +62,8 @@ export class MedicalRecordRepository {
       appointmentId: item.appointment_id,
       patientId: item.patient_id,
       familyMemberId: item.family_member_id ?? undefined,
+      familyMemberName: item.family_member?.full_name ?? undefined,
+      familyMemberRelation: item.family_member?.relation ?? undefined,
       doctorId: item.doctor_id,
       doctorName: item.doctor_name,
       doctorTitle: normalizeProfessionalTitle(item.doctor?.professional_title),

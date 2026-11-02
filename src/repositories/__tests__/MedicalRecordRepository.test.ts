@@ -101,6 +101,25 @@ describe('MedicalRecordRepository (TDD)', () => {
 
       expect(record?.familyMemberId).toBe('fm1');
     });
+
+    it("names the attended member in a patient's history, leaving the titular's records unnamed", async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.order = vi.fn().mockResolvedValue({
+        data: [
+          { id: 'mr-1', family_member_id: 'fm1', family_member: { full_name: 'Tomas Pérez', relation: 'Hijo' } },
+          { id: 'mr-2', family_member_id: null, family_member: null },
+        ],
+        error: null,
+      });
+
+      const records = await repository.getRecordsByPatientId('p1');
+
+      expect(supabaseMock.select).toHaveBeenCalledWith(
+        expect.stringContaining('family_member:family_members!family_member_id(full_name, relation)')
+      );
+      expect(records[0]).toMatchObject({ familyMemberName: 'Tomas Pérez', familyMemberRelation: 'Hijo' });
+      expect(records[1].familyMemberName).toBeUndefined();
+    });
   });
 
   describe('createMedicalRecord', () => {
