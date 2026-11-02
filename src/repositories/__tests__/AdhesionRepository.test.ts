@@ -590,6 +590,27 @@ describe('AdhesionRepository', () => {
     });
   });
 
+  describe('sendAffiliatePaymentLink', () => {
+    beforeEach(() => {
+      vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: { access_token: 'jwt-1' } } } as any);
+    });
+
+    it('POSTs the channel for the affiliate with the bearer token', async () => {
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, status: 'sent' }) } as any);
+      await repository.sendAffiliatePaymentLink('p1', 'email');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/affiliates/p1/send-payment-link', expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer jwt-1' }),
+        body: JSON.stringify({ channel: 'email' }),
+      }));
+    });
+
+    it('surfaces the server message on error', async () => {
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce({ ok: false, json: async () => ({ ok: false, error: 'El afiliado ya tiene el débito automático activo.' }) } as any);
+      await expect(repository.sendAffiliatePaymentLink('p1', 'email')).rejects.toThrow('ya tiene el débito automático activo');
+    });
+  });
+
   describe('releaseStuckActivation (admin recovery of a stale claim)', () => {
     beforeEach(() => {
       vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: { access_token: 'jwt-1' } } } as any);
