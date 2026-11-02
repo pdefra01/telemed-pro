@@ -19,6 +19,7 @@ vi.mock('../../services/supabase', () => ({
     limit: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+    auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'jwt-1' } } }) },
   },
 }));
 
@@ -275,6 +276,39 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
         patient_id: 'p1',
         doctor_id: 'd1'
       }));
+      expect(result.id).toBe('new-app-id');
+    });
+
+    const bookAppointment = () => appointmentRepository.createAppointment({
+      patient_id: 'p1',
+      doctor_id: 'd1',
+      scheduled_at: '2026-05-01T10:00:00Z',
+      specialty: 'Cardiología',
+      status: 'pending' as const,
+    });
+
+    it('asks the server to notify the doctor once the appointment is created', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.neq.mockResolvedValue({ data: [], error: null });
+      supabaseMock.single.mockResolvedValue({ data: { id: 'new-app-id' }, error: null });
+      const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true } as Response);
+
+      await bookAppointment();
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/appointments/new-app-id/notify-doctor', expect.objectContaining({
+        method: 'POST',
+        headers: { Authorization: 'Bearer jwt-1' },
+      }));
+    });
+
+    it('still returns the appointment when the doctor notice fails', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.neq.mockResolvedValue({ data: [], error: null });
+      supabaseMock.single.mockResolvedValue({ data: { id: 'new-app-id' }, error: null });
+      vi.spyOn(window, 'fetch').mockRejectedValue(new Error('network down'));
+
+      const result = await bookAppointment();
+
       expect(result.id).toBe('new-app-id');
     });
   });

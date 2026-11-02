@@ -42,6 +42,7 @@ const Doctors: React.FC = () => {
     provincialLicense: '',
     cuit: '',
     phone: '',
+    notifyNewAppointmentWhatsapp: false,
     university: '',
     graduationYear: new Date().getFullYear(),
     consultationFee: 0,
@@ -95,6 +96,7 @@ const Doctors: React.FC = () => {
       provincialLicense: '',
       cuit: '',
       phone: '',
+      notifyNewAppointmentWhatsapp: false,
       university: '',
       graduationYear: new Date().getFullYear(),
       consultationFee: 0,
@@ -139,6 +141,7 @@ const Doctors: React.FC = () => {
       provincialLicense: doctor.provincialLicense || '',
       cuit: doctor.cuit || '',
       phone: doctor.phone || '',
+      notifyNewAppointmentWhatsapp: doctor.notifyNewAppointmentWhatsapp === true,
       university: doctor.university || '',
       graduationYear: doctor.graduationYear || new Date().getFullYear(),
       consultationFee: doctor.consultationFee || 0,
@@ -428,6 +431,20 @@ const Doctors: React.FC = () => {
                       />
                     </div>
                   </div>
+
+                  {/* Se guarda con "Editar": el alta no persiste el teléfono */}
+                  {editId && (
+                    <label className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-3.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-emerald-500"
+                        checked={formData.notifyNewAppointmentWhatsapp}
+                        onChange={e => setFormData({ ...formData, notifyNewAppointmentWhatsapp: e.target.checked })}
+                      />
+                      <span className="text-sm text-white font-semibold">Enviar WhatsApp con aviso de Turno</span>
+                      <span className="text-[10px] text-slate-500">al teléfono móvil de contacto</span>
+                    </label>
+                  )}
 
                   {/* Contraseña solo al crear */}
                   {!editId && (

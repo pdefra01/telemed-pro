@@ -25,6 +25,7 @@ import { sendAdhesionPaymentLink } from './server/adhesionPaymentLinkDelivery.js
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
 import { resendActivationHandler } from './server/resendActivation.js';
+import { notifyDoctorAppointmentHandler } from './server/appointmentDoctorNotice.js';
 import { sendPaymentReceiptEmail } from './server/paymentReceipt.js';
 import { applyProfileAccess } from './server/profileAccess.js';
 import { buildRequireAdmin } from './server/auth.js';
@@ -1146,6 +1147,12 @@ app.post('/api/adhesion/check-duplicates', checkDuplicatesHandler({ supabaseAdmi
 
 // PATCH /api/adhesion-requests/:id/email — admin corrects the email of a pending request.
 app.patch('/api/adhesion-requests/:id/email', requireAuth, requireAdmin, updateAdhesionEmailHandler({ supabaseAdmin }));
+
+// Patient: heads-up WhatsApp to the doctor (opt-in per doctor) after booking an appointment.
+app.post('/api/appointments/:id/notify-doctor', requireAuth, (req, res, next) => {
+  if (!waha) return res.status(503).json({ status: 'failed', reason: 'whatsapp_not_configured' });
+  return notifyDoctorAppointmentHandler({ supabaseAdmin, waha })(req, res, next);
+});
 
 // Admin: resend the activation email to an approved affiliate without a password.
 app.post(

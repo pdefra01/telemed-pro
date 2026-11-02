@@ -74,6 +74,19 @@ describe('DoctorRepository (TDD)', () => {
       expect(doctor.professionalTitle).toBe('Dra.');
     });
 
+    it('persists the appointment WhatsApp notice flag and reads it back', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.single.mockResolvedValue({
+        data: { id: 'd1', full_name: 'Lucía Fernández', notify_new_appointment_whatsapp: true },
+        error: null,
+      });
+
+      const doctor = await repository.updateDoctor('d1', { notifyNewAppointmentWhatsapp: true });
+
+      expect(supabaseMock.update).toHaveBeenCalledWith({ notify_new_appointment_whatsapp: true });
+      expect(doctor.notifyNewAppointmentWhatsapp).toBe(true);
+    });
+
     it('persists the title chosen on create', async () => {
       const supabaseMock = supabase as any;
       vi.spyOn(window, 'fetch').mockResolvedValueOnce({

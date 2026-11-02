@@ -178,6 +178,7 @@ export class DoctorRepository {
     if (data.provincialLicense !== undefined) profileData.provincial_license = data.provincialLicense;
     if (data.cuit !== undefined) profileData.cuit = data.cuit;
     if (data.phone !== undefined) profileData.phone = data.phone;
+    if (data.notifyNewAppointmentWhatsapp !== undefined) profileData.notify_new_appointment_whatsapp = data.notifyNewAppointmentWhatsapp;
     if (data.university !== undefined) profileData.university = data.university;
     if (data.graduationYear !== undefined) profileData.graduation_year = data.graduationYear;
     if (data.consultationFee !== undefined) profileData.consultation_fee = data.consultationFee;
@@ -251,6 +252,7 @@ export class DoctorRepository {
       provincialLicense: row.provincial_license,
       cuit: row.cuit,
       phone: row.phone,
+      notifyNewAppointmentWhatsapp: row.notify_new_appointment_whatsapp === true,
       university: row.university,
       graduationYear: row.graduation_year,
       consultationFee: row.consultation_fee ? parseFloat(row.consultation_fee) : 0,
