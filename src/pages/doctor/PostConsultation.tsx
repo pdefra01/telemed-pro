@@ -41,13 +41,8 @@ import { Button } from '../../components/ui/Button';
 import { validateExternalPrescriptionUrl } from '../../utils/externalPrescriptionUrl';
 import { formatDoctorName } from '../../utils/doctorName';
 import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../utils/clinicalHistoryFormat';
+import { sendPrescriptionWhatsapp as deliverPrescriptionWhatsapp, WHATSAPP_GENERIC_ERROR } from '../../utils/prescriptionWhatsapp';
 import '../../styles/animations.css';
-const WHATSAPP_ERROR_MESSAGES: Record<string, string> = {
-  invalid_phone: 'El paciente no tiene un teléfono válido cargado.',
-  session_not_ready: 'El WhatsApp de la empresa no está conectado.',
-  whatsapp_disabled: 'El envío por WhatsApp no está configurado.',
-};
-const WHATSAPP_GENERIC_ERROR = 'No se pudo enviar el WhatsApp. Podés reintentar.';
 
 const COMMON_MEDS = [
   "Amoxicilina 500mg",
@@ -486,18 +481,12 @@ const PostConsultation: React.FC<PostConsultationProps> = ({ user }) => {
       const prescription = await prescriptionRepository.getPrescriptionByAppointmentId(appointmentData.id);
       if (!prescription) throw new Error('prescription_not_found');
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`/api/prescriptions/${prescription.id}/send-whatsapp`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token || ''}` },
-      });
-      const body = await response.json().catch(() => ({}));
-
-      if (response.ok || body?.status === 'already_sent') {
+      const result = await deliverPrescriptionWhatsapp(prescription.id);
+      if (result.ok) {
         setWhatsappStatus('sent');
         return true;
       }
-      setWhatsappError(WHATSAPP_ERROR_MESSAGES[body?.reason] || WHATSAPP_GENERIC_ERROR);
+      setWhatsappError(result.message);
     } catch (err) {
       console.error('Error enviando la receta por WhatsApp:', err);
       setWhatsappError(WHATSAPP_GENERIC_ERROR);

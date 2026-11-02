@@ -19,6 +19,8 @@ import { playArrivalSound } from '../../utils/audio';
 import { toLocalDateStr } from '../../utils/localDate';
 import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../utils/clinicalHistoryFormat';
 import { formatDoctorName } from '../../utils/doctorName';
+import { newestFirst, filterHistory } from './historyList';
+import { sendPrescriptionWhatsapp } from '../../utils/prescriptionWhatsapp';
 
 interface Props {
     user: Doctor;
@@ -34,8 +36,19 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
 
     const [queueAppointments, setQueueAppointments] = useState<Appointment[]>([]);
     const [historyAppointments, setHistoryAppointments] = useState<Appointment[]>([]);
+    const [historyNameFilter, setHistoryNameFilter] = useState('');
+    const [historyDateFilter, setHistoryDateFilter] = useState('');
+    const visibleHistory = filterHistory(newestFirst(historyAppointments), {
+        name: historyNameFilter,
+        date: historyDateFilter,
+    });
 
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+    const [resendState, setResendState] = useState<{ status: 'idle' | 'sending' | 'sent' | 'failed'; message?: string }>({ status: 'idle' });
+    const [showEvolutionForm, setShowEvolutionForm] = useState(false);
+    const [evolutionDiagnosis, setEvolutionDiagnosis] = useState('');
+    const [evolutionNotes, setEvolutionNotes] = useState('');
+    const [isSavingEvolution, setIsSavingEvolution] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
     const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
     const [isFetchingDetails, setIsFetchingDetails] = useState(false);
@@ -257,6 +270,45 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             setIsLoading(false);
         }
     }, [user.id, kpiTimeframe]);
+
+    useEffect(() => {
+        setResendState({ status: 'idle' });
+        setShowEvolutionForm(false);
+        setEvolutionDiagnosis('');
+        setEvolutionNotes('');
+    }, [selectedAppointment?.id]);
+
+    const handleResendPrescription = async () => {
+        if (!selectedPrescription) return;
+        setResendState({ status: 'sending' });
+        const result = await sendPrescriptionWhatsapp(selectedPrescription.id);
+        setResendState(result.ok ? { status: 'sent' } : { status: 'failed', message: result.message });
+    };
+
+    // Adds a NEW evolution to the patient's chart (never edits an existing one).
+    // It carries no appointment id: the summary looks up one record per appointment.
+    const handleSaveEvolution = async () => {
+        if (!selectedAppointment) return;
+        setIsSavingEvolution(true);
+        try {
+            await medicalRecordRepository.createMedicalRecord({
+                patientId: selectedAppointment.patientId,
+                doctorId: user.id,
+                doctorName: user.name,
+                diagnosis: evolutionDiagnosis.trim(),
+                notes: evolutionNotes.trim(),
+                type: 'consultation',
+            });
+            setToast({ message: 'Evolución agregada a la historia clínica.', type: 'success' });
+            setShowEvolutionForm(false);
+            setEvolutionDiagnosis('');
+            setEvolutionNotes('');
+        } catch (error: any) {
+            setToast({ message: error?.message || 'No se pudo guardar la evolución.', type: 'error' });
+        } finally {
+            setIsSavingEvolution(false);
+        }
+    };
 
     const handleCancelAppointment = async (appointmentId: string) => {
         if (!window.confirm('¿Estás seguro de que querés dar de baja este turno?')) return;
@@ -735,8 +787,35 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 </div>
                             )
                         ) : (
-                            historyAppointments.length > 0 ? (
-                                historyAppointments.map(apt => (
+                            <>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <input
+                                    type="text"
+                                    value={historyNameFilter}
+                                    onChange={(e) => setHistoryNameFilter(e.target.value)}
+                                    placeholder="Filtrar por nombre del afiliado"
+                                    aria-label="Filtrar por nombre del afiliado"
+                                    className="bg-slate-950/50 border border-white/5 px-5 py-3 rounded-2xl text-xs font-bold text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 w-full sm:w-80"
+                                />
+                                <input
+                                    type="date"
+                                    value={historyDateFilter}
+                                    onChange={(e) => setHistoryDateFilter(e.target.value)}
+                                    aria-label="Filtrar por fecha"
+                                    className="bg-slate-950/50 border border-white/5 px-5 py-3 rounded-2xl text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50"
+                                />
+                                {(historyNameFilter || historyDateFilter) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setHistoryNameFilter(''); setHistoryDateFilter(''); }}
+                                        className="px-5 py-3 rounded-2xl text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-widest"
+                                    >
+                                        Limpiar
+                                    </button>
+                                )}
+                            </div>
+                            {visibleHistory.length > 0 ? (
+                                visibleHistory.map(apt => (
                                     <div key={apt.id} className="group bg-slate-900/20 hover:bg-white/[0.02] rounded-[2.5rem] p-8 border border-white/5 transition-all duration-500 flex flex-col md:flex-row md:items-center justify-between gap-8">
                                         <div className="flex items-center gap-6">
                                             <div className="w-16 h-16 bg-slate-950 border border-white/5 rounded-2xl flex items-center justify-center font-bold text-slate-500 text-xl group-hover:text-white transition-colors">
@@ -773,7 +852,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                     <Search size={48} className="mx-auto text-slate-800 mb-6" />
                                     <p className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.4em]">No se encontraron registros previos</p>
                                 </div>
-                            )
+                            )}
+                            </>
                         )}
                     </div>
                 </div>
@@ -974,12 +1054,74 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                     <span className="flex items-center gap-2"><Calendar size={14} /> Vence: {selectedPrescription.expirationDate}</span>
                                                     <span className="font-mono truncate max-w-[220px]" title={selectedPrescription.digitalSignature}>Firma: {selectedPrescription.digitalSignature}</span>
                                                 </div>
+                                                <div className="mt-4 flex flex-wrap items-center gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleResendPrescription}
+                                                        disabled={resendState.status === 'sending'}
+                                                        className="px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold disabled:opacity-50"
+                                                    >
+                                                        {resendState.status === 'sending' ? 'Enviando...' : 'Reenviar por WhatsApp'}
+                                                    </button>
+                                                    {resendState.status === 'sent' && <span className="text-xs text-emerald-400">Receta enviada por WhatsApp.</span>}
+                                                    {resendState.status === 'failed' && <span className="text-xs text-red-400">{resendState.message}</span>}
+                                                </div>
                                             </div>
                                         ) : (
                                             <div className="text-center py-10 bg-white/[0.02] rounded-xl border border-white/5 border-dashed">
                                                 <FileText size={24} className="mx-auto text-slate-700 mb-2" />
                                                 <p className="text-sm text-slate-500">Sin prescripciones en esta consulta.</p>
                                             </div>
+                                        )}
+                                    </section>
+
+                                    <section className="space-y-3">
+                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Agregar evolución</h4>
+                                        {showEvolutionForm ? (
+                                            <div className="bg-white/[0.03] rounded-xl p-4 sm:p-5 border border-white/5 space-y-3">
+                                                <input
+                                                    type="text"
+                                                    value={evolutionDiagnosis}
+                                                    onChange={(e) => setEvolutionDiagnosis(e.target.value)}
+                                                    placeholder="Diagnóstico"
+                                                    aria-label="Diagnóstico de la evolución"
+                                                    className="w-full bg-slate-950/50 border border-white/5 px-4 py-3 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
+                                                />
+                                                <textarea
+                                                    value={evolutionNotes}
+                                                    onChange={(e) => setEvolutionNotes(e.target.value)}
+                                                    placeholder="Notas de evolución"
+                                                    aria-label="Notas de la evolución"
+                                                    rows={4}
+                                                    className="w-full bg-slate-950/50 border border-white/5 px-4 py-3 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
+                                                />
+                                                <div className="flex items-center gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSaveEvolution}
+                                                        disabled={isSavingEvolution}
+                                                        className="px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold disabled:opacity-50"
+                                                    >
+                                                        {isSavingEvolution ? 'Guardando...' : 'Guardar evolución'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowEvolutionForm(false)}
+                                                        className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+                                                    >
+                                                        Cancelar
+                                                    </button>
+                                                </div>
+                                                <p className="text-[11px] text-slate-500">Se suma a la historia clínica con la fecha y hora actuales. No modifica lo ya registrado.</p>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowEvolutionForm(true)}
+                                                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-white"
+                                            >
+                                                Agregar evolución
+                                            </button>
                                         )}
                                     </section>
                                 </>
