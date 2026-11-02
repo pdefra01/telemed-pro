@@ -440,6 +440,27 @@ export class AdhesionRepository {
   }
 
   /**
+   * Reenvía el link de pago de Mercado Pago a un afiliado ya activo que no
+   * terminó de pagar (solo admin). El servidor ubica su solicitud de adhesión.
+   * Lanza con el mensaje del servidor si falla.
+   */
+  async sendAffiliatePaymentLink(profileId: string, channel: 'whatsapp' | 'email'): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`/api/affiliates/${encodeURIComponent(profileId)}/send-payment-link`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ channel }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || 'No pudimos enviar el enlace de pago.');
+    }
+  }
+
+  /**
    * Rechaza una solicitud de adhesión cambiándole el estado
    */
   async rejectApplication(id: string): Promise<void> {

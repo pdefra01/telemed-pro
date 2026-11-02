@@ -55,6 +55,8 @@ const Affiliates: React.FC = () => {
   const [resendingId, setResendingId] = useState<string | null>(null);
   // Canal del reenvío del link de pago en curso desde el detalle de una solicitud.
   const [sendingLinkChannel, setSendingLinkChannel] = useState<'whatsapp' | 'email' | null>(null);
+  // Afiliado activo al que se le ofrece reenviar el link de pago (elige el canal).
+  const [paymentLinkPatient, setPaymentLinkPatient] = useState<{ id: string; name: string } | null>(null);
   const [formData, setFormData] = useState({
     lastName: '',
     firstName: '',
@@ -348,6 +350,19 @@ const Affiliates: React.FC = () => {
     }
   };
 
+  const handleSendAffiliatePaymentLink = async (profileId: string, channel: 'whatsapp' | 'email') => {
+    setSendingLinkChannel(channel);
+    try {
+      await adhesionRepository.sendAffiliatePaymentLink(profileId, channel);
+      toast(channel === 'whatsapp' ? "Link de pago enviado por WhatsApp" : "Link de pago enviado por mail", "success");
+      setPaymentLinkPatient(null);
+    } catch (error: any) {
+      toast(error.message || "Error al enviar el link de pago", "error");
+    } finally {
+      setSendingLinkChannel(null);
+    }
+  };
+
   const handleReleaseActivation = async (id: string) => {
     if (!window.confirm(
       "La activación automática de esta solicitud quedó trabada. Liberarla borra la cuenta de acceso incompleta " +
@@ -589,6 +604,15 @@ const Affiliates: React.FC = () => {
                         >
                           {resendingId === patient.id ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
                         </button>
+                        {patient.isActive && (
+                          <button
+                            onClick={() => setPaymentLinkPatient({ id: patient.id, name: patient.name })}
+                            className="p-2 bg-white/5 hover:bg-sky-500/20 text-sky-400 rounded-xl transition-colors border border-white/5"
+                            title="Reenviar link de pago"
+                          >
+                            <CreditCard size={16} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEdit(patient)}
                           className="p-2 bg-white/5 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-colors border border-white/5"
@@ -942,6 +966,40 @@ const Affiliates: React.FC = () => {
                 {isSubmitting ? '...' : 'Confirmar'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reenviar link de pago a un afiliado activo */}
+      {paymentLinkPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 w-full max-w-sm space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">Reenviar link de pago</h3>
+              <p className="text-xs text-slate-400 mt-1">{paymentLinkPatient.name}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {(['whatsapp', 'email'] as const).map((channel) => (
+                <button
+                  key={channel}
+                  type="button"
+                  onClick={() => handleSendAffiliatePaymentLink(paymentLinkPatient.id, channel)}
+                  disabled={sendingLinkChannel !== null}
+                  className="px-3 py-3 rounded-2xl text-sm font-bold bg-white/5 border border-white/10 text-white hover:bg-white/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {sendingLinkChannel === channel ? <Loader2 size={14} className="animate-spin" /> : channel === 'email' ? <Mail size={14} /> : <Phone size={14} />}
+                  {channel === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPaymentLinkPatient(null)}
+              disabled={sendingLinkChannel !== null}
+              className="w-full text-xs font-bold text-slate-400 hover:text-white py-2 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}

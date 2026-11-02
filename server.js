@@ -26,6 +26,7 @@ import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
 import { resendActivationHandler } from './server/resendActivation.js';
 import { notifyDoctorAppointmentHandler } from './server/appointmentDoctorNotice.js';
+import { sendAffiliatePaymentLink } from './server/affiliatePaymentLink.js';
 import { sendPaymentReceiptEmail } from './server/paymentReceipt.js';
 import { applyProfileAccess } from './server/profileAccess.js';
 import { buildRequireAdmin } from './server/auth.js';
@@ -342,6 +343,25 @@ app.post('/api/adhesion/:id/send-payment-link', async (req, res) => {
   const { status, body } = await sendAdhesionPaymentLink(
     { supabaseAdmin, mpFetch, publicAppUrl: PUBLIC_APP_URL, nextBillingDate, waha, createMailTransporter, fromAddress: FROM_ADDRESS },
     { adhesionRequestId: req.params.id, channel: req.body?.channel }
+  );
+  return res.status(status).json(body);
+});
+
+/**
+ * POST /api/affiliates/:id/send-payment-link
+ * Admin. Resends the MP payment link of an already-approved affiliate that
+ * never finished paying (the adhesion form blocks a retry: the DNI exists).
+ */
+app.post('/api/affiliates/:id/send-payment-link', requireAuth, requireAdmin, async (req, res) => {
+  if (!mercadoPagoEnabled) {
+    return res.status(503).json({ ok: false, error: 'Servicio de pagos no configurado.' });
+  }
+  if (req.body?.channel === 'whatsapp' && !waha) {
+    return res.status(503).json({ ok: false, error: 'Servicio de WhatsApp no configurado.' });
+  }
+  const { status, body } = await sendAffiliatePaymentLink(
+    { supabaseAdmin, mpFetch, publicAppUrl: PUBLIC_APP_URL, nextBillingDate, waha, createMailTransporter, fromAddress: FROM_ADDRESS },
+    { profileId: req.params.id, channel: req.body?.channel }
   );
   return res.status(status).json(body);
 });
