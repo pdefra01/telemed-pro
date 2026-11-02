@@ -99,6 +99,8 @@ export interface Appointment {
   doctorTitle?: ProfessionalTitle;
   date: string;
   time: string;
+  /** Exact ISO instant of the appointment (date/time above are display strings). */
+  scheduledAt?: string;
   status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
   type: 'video' | 'chat' | 'in-person';
   notes?: string; // Doctor's evolution notes

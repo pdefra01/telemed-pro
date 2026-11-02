@@ -9,6 +9,7 @@ import { dashboardRepository } from '../../../repositories/DashboardRepository';
 import { notificationRepository } from '../../../repositories/NotificationRepository';
 import { medicalDocumentRepository } from '../../../repositories/MedicalDocumentRepository';
 import { doctorShiftRepository } from '../../../repositories/DoctorShiftRepository';
+import { sendPrescriptionWhatsapp } from '../../../utils/prescriptionWhatsapp';
 import { Doctor, Appointment, MedicalRecord, Prescription } from '../../../types';
 
 // Mock dependencies
@@ -22,7 +23,13 @@ vi.mock('../../../repositories/MedicalRecordRepository', () => ({
   medicalRecordRepository: {
     getRecordByAppointmentId: vi.fn(),
     getRecordsByPatientId: vi.fn().mockResolvedValue([]),
+    createMedicalRecord: vi.fn(),
   },
+}));
+
+vi.mock('../../../utils/prescriptionWhatsapp', () => ({
+  sendPrescriptionWhatsapp: vi.fn(),
+  WHATSAPP_GENERIC_ERROR: 'No se pudo enviar el WhatsApp. Podés reintentar.',
 }));
 
 vi.mock('../../../repositories/PrescriptionRepository', () => ({
@@ -140,6 +147,93 @@ const mockPrescription: Prescription = {
   expirationDate: '2024-06-10',
   digitalSignature: 'SIG-12345'
 };
+
+describe('DoctorDashboard - history ordering, filters and follow-up actions', () => {
+  const appt = (id: string, patientName: string, scheduledAt: string, date: string): Appointment => ({
+    id, patientId: `pat-${id}`, patientName, doctorId: 'doc1', doctorName: 'Dr. Gregory House',
+    date, time: '10:00', scheduledAt, status: 'completed', type: 'video',
+  });
+  const history = [
+    appt('old', 'Ana Antigua', '2026-10-01T13:00:00.000Z', '2026-10-01'),
+    appt('new', 'Beto Reciente', '2026-11-02T13:00:00.000Z', '2026-11-02'),
+    appt('mid', 'Carla Media', '2026-10-15T13:00:00.000Z', '2026-10-15'),
+  ];
+
+  const openHistory = async () => {
+    vi.mocked(appointmentRepository.getDoctorAppointments).mockResolvedValue(history);
+    render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Historial/i }));
+    await screen.findByText('Beto Reciente');
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(medicalRecordRepository.getRecordByAppointmentId).mockResolvedValue(null);
+    vi.mocked(prescriptionRepository.getPrescriptionByAppointmentId).mockResolvedValue(null);
+  });
+
+  it('lists attended consultations from most recent to oldest', async () => {
+    await openHistory();
+    const names = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+    expect(names).toEqual(['Beto Reciente', 'Carla Media', 'Ana Antigua']);
+  });
+
+  it('filters the history by patient name', async () => {
+    await openHistory();
+    fireEvent.change(screen.getByLabelText('Filtrar por nombre del afiliado'), { target: { value: 'carla' } });
+    expect(screen.getByText('Carla Media')).toBeInTheDocument();
+    expect(screen.queryByText('Beto Reciente')).not.toBeInTheDocument();
+  });
+
+  it('filters the history by date', async () => {
+    await openHistory();
+    fireEvent.change(screen.getByLabelText('Filtrar por fecha'), { target: { value: '2026-10-01' } });
+    expect(screen.getByText('Ana Antigua')).toBeInTheDocument();
+    expect(screen.queryByText('Carla Media')).not.toBeInTheDocument();
+  });
+
+  it('adds a new evolution for the patient without an appointment id', async () => {
+    vi.mocked(medicalRecordRepository.createMedicalRecord).mockResolvedValue(mockRecord);
+    await openHistory();
+    fireEvent.click(screen.getAllByRole('button', { name: /Ver Resumen/i })[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Agregar evolución' }));
+    fireEvent.change(screen.getByLabelText('Diagnóstico de la evolución'), { target: { value: 'Control' } });
+    fireEvent.change(screen.getByLabelText('Notas de la evolución'), { target: { value: 'Llamó por dolor de cabeza' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar evolución' }));
+
+    await waitFor(() => expect(medicalRecordRepository.createMedicalRecord).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(medicalRecordRepository.createMedicalRecord).mock.calls[0][0];
+    expect(payload).toMatchObject({
+      patientId: 'pat-new',
+      doctorId: mockDoctor.id,
+      diagnosis: 'Control',
+      notes: 'Llamó por dolor de cabeza',
+    });
+    expect(payload.appointmentId).toBeUndefined();
+    expect(await screen.findByText('Evolución agregada a la historia clínica.')).toBeInTheDocument();
+  });
+
+  it('resends the prescription of a past consultation by WhatsApp', async () => {
+    vi.mocked(prescriptionRepository.getPrescriptionByAppointmentId).mockResolvedValue(mockPrescription);
+    vi.mocked(sendPrescriptionWhatsapp).mockResolvedValue({ ok: true });
+    await openHistory();
+    fireEvent.click(screen.getAllByRole('button', { name: /Ver Resumen/i })[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Reenviar por WhatsApp' }));
+
+    expect(await screen.findByText('Receta enviada por WhatsApp.')).toBeInTheDocument();
+    expect(sendPrescriptionWhatsapp).toHaveBeenCalledWith('pres1');
+  });
+
+  it('shows why the WhatsApp resend failed', async () => {
+    vi.mocked(prescriptionRepository.getPrescriptionByAppointmentId).mockResolvedValue(mockPrescription);
+    vi.mocked(sendPrescriptionWhatsapp).mockResolvedValue({ ok: false, message: 'El WhatsApp de la empresa no está conectado.' });
+    await openHistory();
+    fireEvent.click(screen.getAllByRole('button', { name: /Ver Resumen/i })[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Reenviar por WhatsApp' }));
+
+    expect(await screen.findByText('El WhatsApp de la empresa no está conectado.')).toBeInTheDocument();
+  });
+});
 
 describe('DoctorDashboard - Consultation History', () => {
   beforeEach(() => {

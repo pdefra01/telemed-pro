@@ -97,6 +97,7 @@ export class AppointmentRepository {
       doctorName: "", // Llenado en el contexto
       date: toLocalDateStr(new Date(row.scheduled_at)),
       time: new Date(row.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      scheduledAt: row.scheduled_at,
       status: row.status,
       type: 'video',
       consultationMetadata: row.consultation_metadata || {},
