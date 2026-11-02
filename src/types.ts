@@ -101,6 +101,10 @@ export interface Appointment {
   time: string;
   /** Exact ISO instant of the appointment (date/time above are display strings). */
   scheduledAt?: string;
+  /** Attended family member; absent = the titular (patientId). */
+  familyMemberId?: string;
+  familyMemberName?: string;
+  familyMemberRelation?: string;
   status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
   type: 'video' | 'chat' | 'in-person';
   notes?: string; // Doctor's evolution notes
@@ -118,6 +122,8 @@ export interface MedicalRecord {
   id: string;
   appointmentId?: string; // Optional for migration/old records
   patientId: string;
+  /** Person attended; absent = the titular (patientId). */
+  familyMemberId?: string;
   doctorId?: string;
   date: string;
   diagnosis: string;
@@ -133,6 +139,8 @@ export interface Prescription {
   id: string;
   appointmentId?: string;
   patientId: string;
+  /** Person attended; absent = the titular (patientId). */
+  familyMemberId?: string;
   doctorId?: string;
   doctorName: string;
   /** The doctor's professional title; absent reads as "Dr.". */
