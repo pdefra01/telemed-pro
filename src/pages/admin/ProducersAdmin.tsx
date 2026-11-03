@@ -15,6 +15,8 @@ export const ProducersAdmin: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  // Status filter of the loaded list (search results are global and ignore it).
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive'>('active');
   // Server-side search results (design 3.5/D4) — null means "no active search,
   // show `producers` as loaded". Distinct from an empty array (no matches).
   const [searchResults, setSearchResults] = useState<Producer[] | null>(null);
@@ -175,7 +177,7 @@ export const ProducersAdmin: React.FC = () => {
     }
   };
 
-  const displayedProducers = searchResults ?? producers;
+  const displayedProducers = searchResults ?? producers.filter(p => (p.status === 'active') === (statusFilter === 'active'));
 
   const totalAffiliatesAllProducers = producers.reduce((sum, p) => sum + (p.totalAffiliatesReferred || 0), 0);
 
@@ -259,15 +261,32 @@ export const ProducersAdmin: React.FC = () => {
 
       {/* Search & List */}
       <div className="space-y-4">
-        <div className="relative max-w-md w-full">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, apellido, DNI, código o email"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-900/60 border border-white/10 rounded-2xl pl-12 pr-4 py-3 text-white text-xs focus:outline-none focus:border-teal-500/50"
-          />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative max-w-md w-full">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, apellido, DNI, código o email"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-900/60 border border-white/10 rounded-2xl pl-12 pr-4 py-3 text-white text-xs focus:outline-none focus:border-teal-500/50"
+            />
+          </div>
+          <div className="inline-flex rounded-2xl border border-white/10 bg-slate-900/60 p-1 shrink-0">
+            {([['active', 'Activos'], ['inactive', 'Inactivos']] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={statusFilter === value}
+                onClick={() => setStatusFilter(value)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                  statusFilter === value ? 'bg-teal-500/20 text-teal-300' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {searchError && (

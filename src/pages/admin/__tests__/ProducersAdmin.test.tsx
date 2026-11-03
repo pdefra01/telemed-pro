@@ -56,7 +56,7 @@ describe('ProducersAdmin', () => {
     vi.useRealTimers();
   });
 
-  it('renders the producers list from loadProducers() with no client-side filter when the search term is empty', async () => {
+  it('renders the producers list from loadProducers() without calling the search endpoint when the search term is empty', async () => {
     render(<ProducersAdmin />);
 
     await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
@@ -96,7 +96,7 @@ describe('ProducersAdmin', () => {
     vi.useRealTimers();
 
     await waitFor(() => expect(screen.getByText('Ana Ruiz')).toBeInTheDocument());
-    expect(screen.getByText(/inactivo/i)).toBeInTheDocument();
+    expect(screen.getByText('Inactivo')).toBeInTheDocument();
   });
 
   it('shows no results (no error) when the search returns an empty array', async () => {
@@ -169,9 +169,53 @@ describe('ProducersAdmin', () => {
       vi.mocked(producerRepository.getProducers).mockResolvedValue([INACTIVE_PRODUCER]);
 
       render(<ProducersAdmin />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Inactivos' }));
       await waitFor(() => expect(screen.getByText('Ana Ruiz')).toBeInTheDocument());
 
       expect(screen.getByRole('button', { name: /reactivar/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('status filter', () => {
+    beforeEach(() => {
+      vi.mocked(producerRepository.getProducers).mockResolvedValue([ACTIVE_PRODUCER, INACTIVE_PRODUCER]);
+    });
+
+    it('lists only active advisors by default', async () => {
+      render(<ProducersAdmin />);
+
+      await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
+      expect(screen.queryByText('Ana Ruiz')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Activos' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('switches to the inactive advisors and back', async () => {
+      render(<ProducersAdmin />);
+      await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Inactivos' }));
+      expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();
+      expect(screen.queryByText('Pedro Gómez')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Activos' }));
+      expect(screen.getByText('Pedro Gómez')).toBeInTheDocument();
+      expect(screen.queryByText('Ana Ruiz')).not.toBeInTheDocument();
+    });
+
+    it('does not hide search results: the search still finds inactive advisors while Activos is selected', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.mocked(producerRepository.searchAdvisors).mockResolvedValue([INACTIVE_PRODUCER]);
+
+      render(<ProducersAdmin />);
+      await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
+
+      fireEvent.change(screen.getByPlaceholderText(/Buscar por nombre, apellido, DNI, código o email/i), {
+        target: { value: 'ana' },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+      vi.useRealTimers();
+
+      await waitFor(() => expect(screen.getByText('Ana Ruiz')).toBeInTheDocument());
     });
   });
 });
