@@ -591,10 +591,10 @@ const Doctors: React.FC = () => {
                   { label: 'Sábado',    day: 6 },
                   { label: 'Domingo',   day: 0 },
                 ];
-                const TIME_SLOTS = Array.from({ length: 13 }, (_, i) => {
+                const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
                   const hour = 8 + i;
                   return `${hour.toString().padStart(2, '0')}:00`;
-                }); // 08:00 – 20:00
+                }); // 08:00 – 23:00
 
                 const getSlotsForDay = (day: number) =>
                   formData.availability.find(e => e.day === day)?.slots ?? [];
