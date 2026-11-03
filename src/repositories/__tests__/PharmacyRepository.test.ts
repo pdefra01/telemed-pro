@@ -17,6 +17,51 @@ describe('PharmacyRepository', () => {
     vi.clearAllMocks();
   });
 
+  describe('batch maintenance', () => {
+    it('updateBatchDetails trims the batch number and updates number and expiry by id', async () => {
+      const eq = vi.fn().mockResolvedValue({ error: null });
+      const update = vi.fn().mockReturnValue({ eq });
+      vi.mocked(supabase.from).mockReturnValue({ update } as any);
+
+      await pharmacyRepository.updateBatchDetails('inv-1', {
+        batchNumber: '  LOT-9 ',
+        expirationDate: '2027-05-01',
+      });
+
+      expect(supabase.from).toHaveBeenCalledWith('pharmacy_inventory');
+      expect(update).toHaveBeenCalledWith({ batch_number: 'LOT-9', expiration_date: '2027-05-01' });
+      expect(eq).toHaveBeenCalledWith('id', 'inv-1');
+    });
+
+    it('deleteEmptyBatch only deletes a batch with zero stock and zero reserved', async () => {
+      const select = vi.fn().mockResolvedValue({ data: [{ id: 'inv-1' }], error: null });
+      const eqReserved = vi.fn().mockReturnValue({ select });
+      const eqStock = vi.fn().mockReturnValue({ eq: eqReserved });
+      const eqId = vi.fn().mockReturnValue({ eq: eqStock });
+      const del = vi.fn().mockReturnValue({ eq: eqId });
+      vi.mocked(supabase.from).mockReturnValue({ delete: del } as any);
+
+      await pharmacyRepository.deleteEmptyBatch('inv-1');
+
+      expect(eqId).toHaveBeenCalledWith('id', 'inv-1');
+      expect(eqStock).toHaveBeenCalledWith('stock_quantity', 0);
+      expect(eqReserved).toHaveBeenCalledWith('reserved_quantity', 0);
+    });
+
+    it('deleteEmptyBatch refuses when the batch still has stock or reservations', async () => {
+      const select = vi.fn().mockResolvedValue({ data: [], error: null });
+      const eqReserved = vi.fn().mockReturnValue({ select });
+      const eqStock = vi.fn().mockReturnValue({ eq: eqReserved });
+      const eqId = vi.fn().mockReturnValue({ eq: eqStock });
+      const del = vi.fn().mockReturnValue({ eq: eqId });
+      vi.mocked(supabase.from).mockReturnValue({ delete: del } as any);
+
+      await expect(pharmacyRepository.deleteEmptyBatch('inv-1')).rejects.toThrow(
+        'Solo se puede eliminar un lote sin stock ni reservas.'
+      );
+    });
+  });
+
   describe('purchase_price <-> purchasePrice mapping', () => {
     const rawRow = {
       id: 'prod-1',
