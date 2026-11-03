@@ -46,6 +46,22 @@ describe('getQuotaBadgeContent', () => {
     expect(badge.className).toContain('amber');
   });
 
+  it('never prints "null" for a finite plan whose coverage was not opened yet', () => {
+    const badge = getQuotaBadgeContent({
+      quotaUsed: 0,
+      totalBonified: null,
+      remaining: null,
+      isUnlimited: false,
+      hasPlan: true,
+      isOverQuota: false,
+      planName: 'Plan Individual',
+    });
+
+    expect(badge.label).toBe('Primer débito/pago pendiente');
+    expect(badge.label).not.toMatch(/null/);
+    expect(badge.className).toContain('slate');
+  });
+
   it('shows the normal teal usage label for a finite plan under its cap', () => {
     const badge = getQuotaBadgeContent({
       quotaUsed: 2,
