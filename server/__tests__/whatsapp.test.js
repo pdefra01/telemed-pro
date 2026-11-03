@@ -176,6 +176,16 @@ describe('createWahaClient', () => {
     await expect(client.isSessionReady()).resolves.toBe(false);
   });
 
+  it('reports the raw session status, and UNREACHABLE when the gateway does not answer', async () => {
+    const scan = createWahaClient({ ...config, fetchFn: vi.fn().mockResolvedValue(okResponse({ status: 'SCAN_QR_CODE' })) });
+    const down = createWahaClient({ ...config, fetchFn: vi.fn().mockRejectedValue(new Error('down')) });
+    const rejected = createWahaClient({ ...config, fetchFn: vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }) });
+
+    await expect(scan.getSessionStatus()).resolves.toBe('SCAN_QR_CODE');
+    await expect(down.getSessionStatus()).resolves.toBe('UNREACHABLE');
+    await expect(rejected.getSessionStatus()).resolves.toBe('UNREACHABLE');
+  });
+
   it('sends a text message with the api key and the chat id', async () => {
     const fetchFn = vi.fn().mockResolvedValue(okResponse({ id: 'msg-2' }));
     const client = createWahaClient({ ...config, fetchFn });
