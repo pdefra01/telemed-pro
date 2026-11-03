@@ -36,6 +36,48 @@ describe('PatientChartPanel', () => {
         expect(screen.queryByText('Hijo Declarado')).not.toBeInTheDocument();
     });
 
+    describe('plan section', () => {
+        const withPlan = (plan: PatientChartData['plan']): PatientChartData => ({ ...chart, plan });
+
+        it('shows the patient plan and what it includes', () => {
+            render(
+                <PatientChartPanel
+                    chart={withPlan({
+                        name: 'Plan Familiar', kind: 'familiar', status: 'active',
+                        bonifiedConsultations: 4, isUnlimited: false, maxFamilyMembers: 3, pharmacyDiscountPercent: 20,
+                    })}
+                />
+            );
+            expect(screen.getByText('Plan Familiar')).toBeInTheDocument();
+            expect(screen.getByText('Familiar')).toBeInTheDocument();
+            expect(screen.getByText('Activo')).toBeInTheDocument();
+            expect(screen.getByText('4 consultas bonificadas por mes')).toBeInTheDocument();
+            expect(screen.getByText('Hasta 3 integrantes además del titular')).toBeInTheDocument();
+            expect(screen.getByText('20% de descuento en farmacia')).toBeInTheDocument();
+        });
+
+        it('says so when the plan has unlimited consultations and no pharmacy discount', () => {
+            render(
+                <PatientChartPanel
+                    chart={withPlan({
+                        name: 'Plan Libre', kind: 'individual', status: 'suspended',
+                        bonifiedConsultations: 0, isUnlimited: true, maxFamilyMembers: 0, pharmacyDiscountPercent: 0,
+                    })}
+                />
+            );
+            expect(screen.getByText('Consultas ilimitadas')).toBeInTheDocument();
+            expect(screen.getByText('Sin descuento en farmacia')).toBeInTheDocument();
+            expect(screen.getByText('Suspendido')).toBeInTheDocument();
+            expect(screen.getByText('Solo el titular')).toBeInTheDocument();
+        });
+
+        it('falls back to the plan name on the profile when the plan details are missing', () => {
+            render(<PatientChartPanel chart={withPlan(null)} />);
+            expect(screen.getByText('Plan X')).toBeInTheDocument();
+            expect(screen.queryByText(/consultas bonificadas/)).not.toBeInTheDocument();
+        });
+    });
+
     it('shows a fallback when there is no chart', () => {
         render(<PatientChartPanel chart={null} />);
         expect(screen.getByText(/No se pudieron cargar/)).toBeInTheDocument();
