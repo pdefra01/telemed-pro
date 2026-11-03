@@ -101,12 +101,14 @@ describe('mapAdvisorRow', () => {
       phone: '3416123456',
       status: 'active',
       commission_rate: 10,
+      created_at: '2026-07-20T15:00:00.000Z',
     };
     const profile = { id: 'adv-1', first_name: 'Pedro', last_name: 'Gómez', dni: '30123456', is_active: true };
 
     const mapped = mapAdvisorRow(producer, profile, 3);
 
     expect(mapped).toEqual({
+      createdAt: '2026-07-20T15:00:00.000Z',
       id: 'adv-1',
       name: 'Pedro Gómez',
       firstName: 'Pedro',

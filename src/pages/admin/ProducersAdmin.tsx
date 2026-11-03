@@ -250,7 +250,7 @@ export const ProducersAdmin: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div className="bg-slate-900/40 border border-white/5 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Asesores Activos</span>
-          <div className="text-3xl font-extrabold text-white font-mono">{producers.length}</div>
+          <div className="text-3xl font-extrabold text-white font-mono">{producers.filter(p => p.status === 'active').length}</div>
         </div>
 
         <div className="bg-slate-900/40 border border-teal-500/30 p-6 rounded-3xl backdrop-blur-xl relative overflow-hidden">
@@ -303,6 +303,11 @@ export const ProducersAdmin: React.FC = () => {
                   </span>
                   <h3 className="text-lg font-bold text-white tracking-tight">{p.name}</h3>
                   <p className="text-xs text-slate-400">{p.email}</p>
+                  {p.createdAt && (
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Alta: {new Date(p.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-start gap-2">
                   <span

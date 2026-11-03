@@ -236,6 +236,7 @@ export class ProducerRepository {
       commissionRate: Number(row.commissionRate),
       status: row.status,
       totalAffiliatesReferred: row.totalAffiliatesReferred || 0,
+      createdAt: row.createdAt,
     }));
   }
 
