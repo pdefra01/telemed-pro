@@ -102,6 +102,8 @@ Las recetas se envían al paciente **desde el número de la empresa**, nunca des
 4. **No publicar el puerto ni asignarle dominio público.** El gateway debe ser alcanzable solo por la red interna de Coolify.
 5. En la app, cargar `WHATSAPP_GATEWAY_URL` con la URL interna que Coolify muestra para ese servicio (ej. `http://waha:3000`) y las otras dos variables de la sección 1.B. Redeploy de la app.
 
+6. **Aviso si cae la sesión (opcional pero recomendado):** en la app, cargar `WHATSAPP_ALERT_EMAIL` con el mail del admin. El servidor consulta la sesión cada 2 minutos y manda un mail cuando lleva más de 10 minutos sin estar en `WORKING` (margen para el arranque nocturno), y otro cuando se recupera. Requiere SMTP configurado.
+
 > [!NOTE]
 > Los nombres de variables y rutas de WAHA pueden cambiar entre versiones. Confirmalos en la documentación de la versión que instales antes de desplegar.
 
