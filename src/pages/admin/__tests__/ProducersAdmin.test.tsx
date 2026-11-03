@@ -202,6 +202,13 @@ describe('ProducersAdmin', () => {
       expect(screen.getByRole('button', { name: 'Activos' })).toHaveAttribute('aria-pressed', 'true');
     });
 
+    it('counts only active advisors in the "Total Asesores Activos" card', async () => {
+      render(<ProducersAdmin />);
+      await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
+
+      expect(screen.getByText('Total Asesores Activos').nextElementSibling).toHaveTextContent(/^1$/);
+    });
+
     it('switches to the inactive advisors and back', async () => {
       render(<ProducersAdmin />);
       await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
