@@ -108,6 +108,44 @@ export class PharmacyRepository {
   }
 
   /**
+   * Corrige el número de lote y el vencimiento de un lote existente
+   */
+  async updateBatchDetails(
+    batchId: string,
+    details: { batchNumber: string; expirationDate: string }
+  ): Promise<void> {
+    const { error } = await supabase
+      .from('pharmacy_inventory')
+      .update({
+        batch_number: details.batchNumber.trim(),
+        expiration_date: details.expirationDate,
+      })
+      .eq('id', batchId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Elimina un lote solo si no tiene stock ni reservas. El filtro va en la propia
+   * sentencia para que un lote con stock nunca se borre aunque la UI esté desactualizada.
+   * Su historial de auditoría se elimina en cascada.
+   */
+  async deleteEmptyBatch(batchId: string): Promise<void> {
+    const { data, error } = await supabase
+      .from('pharmacy_inventory')
+      .delete()
+      .eq('id', batchId)
+      .eq('stock_quantity', 0)
+      .eq('reserved_quantity', 0)
+      .select('id');
+
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error('Solo se puede eliminar un lote sin stock ni reservas.');
+    }
+  }
+
+  /**
    * Registra o acumula stock en un lote de producto en el inventario
    */
   async addInventoryBatch(batchData: {

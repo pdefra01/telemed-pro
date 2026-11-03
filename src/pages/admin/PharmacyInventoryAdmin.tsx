@@ -14,7 +14,7 @@ import {
   Package, Plus, AlertTriangle, Calendar, Layers, Search, 
   CheckCircle, Truck, Building2, CreditCard, ShoppingCart, 
   Edit3, ShieldAlert, ArrowDownLeft, ArrowUpRight, DollarSign, RefreshCw, BarChart3, Zap,
-  Sliders, History, Clock
+  Sliders, History, Clock, Pencil, Trash2
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 
@@ -47,6 +47,9 @@ export const PharmacyInventoryAdmin: React.FC = () => {
   const [adjNotes, setAdjNotes] = useState<string>('');
 
   // Adjustment History Modal State
+  const [editingBatch, setEditingBatch] = useState<PharmacyInventory | null>(null);
+  const [editBatchNumber, setEditBatchNumber] = useState<string>('');
+  const [editExpirationDate, setEditExpirationDate] = useState<string>('');
   const [historyBatch, setHistoryBatch] = useState<PharmacyInventory | null>(null);
   const [adjustmentsList, setAdjustmentsList] = useState<PharmacyStockAdjustment[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
@@ -263,6 +266,49 @@ export const PharmacyInventoryAdmin: React.FC = () => {
       alert(err.message || 'Error al procesar el ajuste de stock.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenEditBatch = (inv: PharmacyInventory) => {
+    setEditingBatch(inv);
+    setEditBatchNumber(inv.batchNumber);
+    setEditExpirationDate(inv.expirationDate);
+  };
+
+  const handleSaveBatchDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBatch || !editBatchNumber.trim() || !editExpirationDate) return;
+    setIsSubmitting(true);
+    try {
+      await pharmacyRepository.updateBatchDetails(editingBatch.id, {
+        batchNumber: editBatchNumber,
+        expirationDate: editExpirationDate,
+      });
+      setToastMsg('Lote actualizado correctamente.');
+      setEditingBatch(null);
+      if (selectedProductId) {
+        await handleSelectProduct(selectedProductId);
+      }
+    } catch (err: any) {
+      console.error('Error al editar lote:', err);
+      alert(err.message || 'Error al editar el lote.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteBatch = async (inv: PharmacyInventory) => {
+    if (!window.confirm(`¿Eliminar el lote ${inv.batchNumber}? Se borra también su historial de ajustes.`)) return;
+    try {
+      await pharmacyRepository.deleteEmptyBatch(inv.id);
+      setToastMsg('Lote eliminado.');
+      if (selectedProductId) {
+        await handleSelectProduct(selectedProductId);
+      }
+      await loadAllData();
+    } catch (err: any) {
+      console.error('Error al eliminar lote:', err);
+      alert(err.message || 'Error al eliminar el lote.');
     }
   };
 
@@ -670,6 +716,26 @@ export const PharmacyInventoryAdmin: React.FC = () => {
                                 <History size={13} />
                                 Historial
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditBatch(inv)}
+                                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                title="Corregir número de lote y vencimiento"
+                              >
+                                <Pencil size={13} />
+                                Editar
+                              </button>
+                              {inv.stockQuantity === 0 && inv.reservedQuantity === 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteBatch(inv)}
+                                  className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                  title="Eliminar lote sin stock"
+                                >
+                                  <Trash2 size={13} />
+                                  Eliminar
+                                </button>
+                              )}
                             </div>
                             <div className="text-right min-w-[70px]">
                               <span className="font-extrabold text-teal-400 text-base font-mono block">{inv.stockQuantity} un.</span>
@@ -1074,6 +1140,42 @@ export const PharmacyInventoryAdmin: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR LOTE */}
+      {editingBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <form onSubmit={handleSaveBatchDetails} className="bg-[#0f172a] border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl space-y-5">
+            <h3 className="text-xl font-bold text-white">Editar lote</h3>
+            <div>
+              <label htmlFor="edit-batch-number" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Nº de lote</label>
+              <input
+                id="edit-batch-number"
+                required
+                value={editBatchNumber}
+                onChange={e => setEditBatchNumber(e.target.value)}
+                className="w-full p-3 bg-slate-900 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-batch-expiry" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Vencimiento</label>
+              <input
+                id="edit-batch-expiry"
+                type="date"
+                required
+                value={editExpirationDate}
+                onChange={e => setEditExpirationDate(e.target.value)}
+                className="w-full p-3 bg-slate-900 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button type="button" onClick={() => setEditingBatch(null)} className="px-4 py-2 text-xs font-bold text-slate-300 bg-white/5 hover:bg-white/10 rounded-xl">Cancelar</button>
+              <button type="submit" disabled={isSubmitting} className="px-4 py-2 text-xs font-bold text-slate-950 bg-teal-500 hover:bg-teal-400 rounded-xl">
+                {isSubmitting ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
