@@ -1,5 +1,5 @@
 import React from 'react';
-import { PatientChartData } from '../../repositories/PatientChartRepository';
+import { PatientChartData, PatientChartPlan } from '../../repositories/PatientChartRepository';
 
 interface PatientChartPanelProps {
     chart: PatientChartData | null;
@@ -24,6 +24,53 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
         {children}
     </section>
 );
+
+const PLAN_STATUS_LABEL: Record<string, string> = {
+    active: 'Activo',
+    pending: 'Pendiente',
+    suspended: 'Suspendido',
+};
+
+const PLAN_KIND_LABEL: Record<string, string> = {
+    individual: 'Individual',
+    familiar: 'Familiar',
+};
+
+const PlanSection: React.FC<{ plan: PatientChartPlan | null | undefined; fallbackName: string | null }> = ({ plan, fallbackName }) => {
+    if (!plan) {
+        return (
+            <Section title="Plan">
+                <dl><Field label="Plan" value={fallbackName} /></dl>
+            </Section>
+        );
+    }
+
+    const inclusions = [
+        plan.isUnlimited ? 'Consultas ilimitadas' : `${plan.bonifiedConsultations} consultas bonificadas por mes`,
+        plan.maxFamilyMembers > 0
+            ? `Hasta ${plan.maxFamilyMembers} integrantes además del titular`
+            : 'Solo el titular',
+        plan.pharmacyDiscountPercent > 0
+            ? `${plan.pharmacyDiscountPercent}% de descuento en farmacia`
+            : 'Sin descuento en farmacia',
+    ];
+
+    return (
+        <Section title="Plan">
+            <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
+                <Field label="Plan" value={plan.name} />
+                <Field label="Tipo" value={plan.kind ? PLAN_KIND_LABEL[plan.kind] : null} />
+                <Field label="Estado" value={plan.status ? PLAN_STATUS_LABEL[plan.status] ?? plan.status : null} />
+            </dl>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Qué incluye</p>
+            <ul className="space-y-1">
+                {inclusions.map((line) => (
+                    <li key={line} className="text-sm text-slate-200">{line}</li>
+                ))}
+            </ul>
+        </Section>
+    );
+};
 
 export const PatientChartPanel: React.FC<PatientChartPanelProps> = ({ chart }) => {
     if (!chart) {
@@ -56,10 +103,11 @@ export const PatientChartPanel: React.FC<PatientChartPanelProps> = ({ chart }) =
                     <Field label="Teléfono" value={profile.phone} />
                     <Field label="Email" value={profile.email} />
                     <Field label="Domicilio" value={address} />
-                    <Field label="Plan" value={profile.planName} />
                     <Field label="Cobertura médica" value={intake?.healthInsurance} />
                 </dl>
             </Section>
+
+            <PlanSection plan={chart.plan} fallbackName={profile.planName} />
 
             <Section title="Declaración de salud del alta">
                 {intake ? (

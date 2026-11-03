@@ -17,6 +17,17 @@ export interface PatientChartProfile {
   planStatus: string | null;
 }
 
+/** What the patient's plan includes. Absent when the patient has no plan row. */
+export interface PatientChartPlan {
+  name: string;
+  kind: 'individual' | 'familiar' | null;
+  status: string | null;
+  bonifiedConsultations: number;
+  isUnlimited: boolean;
+  maxFamilyMembers: number;
+  pharmacyDiscountPercent: number;
+}
+
 export interface PatientChartIntake {
   medicalHistory: string[];
   medicalHistoryOther: string | null;
@@ -36,6 +47,8 @@ export interface PatientChartGroupMember {
 
 export interface PatientChartData {
   profile: PatientChartProfile;
+  /** Optional: older deployments of the RPC do not return it. */
+  plan?: PatientChartPlan | null;
   intake: PatientChartIntake | null;
   groupMembers: PatientChartGroupMember[];
 }
