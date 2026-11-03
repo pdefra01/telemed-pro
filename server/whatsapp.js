@@ -115,15 +115,20 @@ export function createWahaClient({ baseUrl, apiKey, session = 'default', fetchFn
     return response.json();
   }
 
-  async function isSessionReady() {
+  /** Raw WAHA session status (WORKING, SCAN_QR_CODE, STOPPED, ...); UNREACHABLE when the gateway does not answer. */
+  async function getSessionStatus() {
     try {
       const response = await fetchFn(`${root}/api/sessions/${session}`, { headers });
-      if (!response.ok) return false;
+      if (!response.ok) return 'UNREACHABLE';
       const body = await response.json();
-      return body?.status === 'WORKING';
+      return typeof body?.status === 'string' ? body.status : 'UNREACHABLE';
     } catch {
-      return false;
+      return 'UNREACHABLE';
     }
+  }
+
+  async function isSessionReady() {
+    return (await getSessionStatus()) === 'WORKING';
   }
 
   async function sendText({ phone, text }) {
@@ -140,7 +145,7 @@ export function createWahaClient({ baseUrl, apiKey, session = 'default', fetchFn
     return response.json();
   }
 
-  return { sendFile, sendText, isSessionReady };
+  return { sendFile, sendText, isSessionReady, getSessionStatus };
 }
 
 // Minimum gap between two successful sends of the same prescription. Protects

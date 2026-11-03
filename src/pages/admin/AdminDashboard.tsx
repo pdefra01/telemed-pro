@@ -10,6 +10,7 @@ import {
   CreditCard, Clock, Stethoscope
 } from 'lucide-react';
 import { dashboardRepository, AdminMetrics, WeeklyStat } from '../../repositories/DashboardRepository';
+import { WhatsappStatusBadge } from '../../components/admin/WhatsappStatusBadge';
 import { doctorRepository } from '../../repositories/DoctorRepository';
 import { Doctor } from '../../types';
 import { formatDoctorName } from '../../utils/doctorName';
@@ -159,9 +160,12 @@ const AdminDashboard: React.FC = () => {
             Operational <span className="text-slate-500 font-light italic">Command</span> Center
           </h1>
         </div>
-        <div className="flex items-center space-x-3 bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-sm">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></div>
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Sistemas Estables</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <WhatsappStatusBadge />
+          <div className="flex items-center space-x-3 bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-sm">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></div>
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Sistemas Estables</span>
+          </div>
         </div>
       </div>
 

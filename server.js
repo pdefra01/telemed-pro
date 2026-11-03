@@ -20,6 +20,7 @@ import { createDniUploadUrls, cleanupOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/whatsappSessionMonitor.js';
+import { whatsappStatusHandler } from './server/whatsappStatus.js';
 import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
 import { sendAdhesionPaymentLink } from './server/adhesionPaymentLinkDelivery.js';
@@ -353,6 +354,8 @@ app.post('/api/adhesion/:id/send-payment-link', async (req, res) => {
  * Admin. Resends the MP payment link of an already-approved affiliate that
  * never finished paying (the adhesion form blocks a retry: the DNI exists).
  */
+app.get('/api/admin/whatsapp-status', requireAuth, requireAdmin, whatsappStatusHandler({ waha }));
+
 app.post('/api/affiliates/:id/send-payment-link', requireAuth, requireAdmin, async (req, res) => {
   if (!mercadoPagoEnabled) {
     return res.status(503).json({ ok: false, error: 'Servicio de pagos no configurado.' });
