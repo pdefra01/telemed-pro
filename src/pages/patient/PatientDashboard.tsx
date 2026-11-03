@@ -55,6 +55,15 @@ export function getQuotaBadgeContent(quotaStatus: QuotaStatus): { className: str
         };
     }
 
+    // Finite plan with no total: its coverage window was never opened (e.g. débito
+    // automático before the first charge). There is no cap to show, never "x/null".
+    if (quotaStatus.totalBonified === null) {
+        return {
+            className: 'bg-slate-500/10 border-slate-500/30 text-slate-300',
+            label: 'Primer débito/pago pendiente',
+        };
+    }
+
     if (quotaStatus.isOverQuota) {
         return {
             className: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
