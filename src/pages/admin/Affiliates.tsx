@@ -33,6 +33,15 @@ export function shouldShowRenewCoverage(patient: Patient, coverageActiveMap: Rec
   return !!patient.planId && coverageActiveMap[patient.id] === false;
 }
 
+/**
+ * Afiliado con plan cuya cobertura nunca se abrió (sin ventana): típico del
+ * débito automático antes del primer cobro. Distinto de una cobertura vencida,
+ * que sí tiene ventana. Sin dato cargado, nunca se asume.
+ */
+export function shouldShowPaymentPending(patient: Patient, noWindowMap: Record<string, boolean>): boolean {
+  return !!patient.planId && noWindowMap[patient.id] === true;
+}
+
 const Affiliates: React.FC = () => {
   const { toast } = useToast();
   const [affiliates, setAffiliates] = useState<Patient[]>([]);
@@ -48,6 +57,8 @@ const Affiliates: React.FC = () => {
   // de entrada (no `false`) significa "todavía no verificado" — nunca se
   // asume vencida sin haber leído el estado real.
   const [coverageActiveMap, setCoverageActiveMap] = useState<Record<string, boolean>>({});
+  // patientId -> true cuando el afiliado tiene plan pero nunca se abrió su ventana de cobertura.
+  const [noWindowMap, setNoWindowMap] = useState<Record<string, boolean>>({});
   // Fila individual en curso de renovación — separado de `isSubmitting` para
   // no deshabilitar el botón "Renovar cobertura" de TODAS las filas mientras
   // se renueva (o edita) una sola.
@@ -153,14 +164,16 @@ const Affiliates: React.FC = () => {
         .map(async (p) => {
           try {
             const status = await affiliateRepository.getConsultationQuotaStatus(p.id);
-            return [p.id, status.coverageActive] as const;
+            return [p.id, status.coverageActive, !status.coverageActive && status.paidThrough === null] as const;
           } catch (error) {
             console.error(`Error obteniendo estado de cobertura de ${p.id}:`, error);
             return null;
           }
         })
     );
-    setCoverageActiveMap(Object.fromEntries(entries.filter((e): e is readonly [string, boolean] => e !== null)));
+    const known = entries.filter((e): e is readonly [string, boolean, boolean] => e !== null);
+    setCoverageActiveMap(Object.fromEntries(known.map(([id, active]) => [id, active])));
+    setNoWindowMap(Object.fromEntries(known.map(([id, , noWindow]) => [id, noWindow])));
   };
 
   const handleResendActivation = async (patient: Patient) => {
@@ -555,6 +568,9 @@ const Affiliates: React.FC = () => {
                     <td className="px-6 py-5">
                       <div className="text-sm font-semibold text-slate-300">{patient.planName}</div>
                       <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-tighter">Premium Network</div>
+                      {shouldShowPaymentPending(patient, noWindowMap) && (
+                        <div className="text-[10px] text-amber-400 font-bold mt-1">Débito/pago aún no realizado</div>
+                      )}
                     </td>
                     <td className="px-6 py-5 text-center">
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest
