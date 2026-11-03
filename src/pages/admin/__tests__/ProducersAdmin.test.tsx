@@ -32,6 +32,7 @@ const ACTIVE_PRODUCER = {
   commissionRate: 10,
   status: 'active' as const,
   totalAffiliatesReferred: 3,
+  createdAt: '2026-07-20T15:00:00.000Z',
 };
 
 const INACTIVE_PRODUCER = {
@@ -61,6 +62,18 @@ describe('ProducersAdmin', () => {
 
     await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
     expect(producerRepository.searchAdvisors).not.toHaveBeenCalled();
+  });
+
+  it('shows the advisor registration date, and nothing when it is unknown', async () => {
+    vi.mocked(producerRepository.getProducers).mockResolvedValue([
+      ACTIVE_PRODUCER,
+      { ...ACTIVE_PRODUCER, id: 'adv-sin-fecha', name: 'Sin Fecha', createdAt: undefined },
+    ]);
+
+    render(<ProducersAdmin />);
+
+    await waitFor(() => expect(screen.getByText('Sin Fecha')).toBeInTheDocument());
+    expect(screen.getAllByText('Alta: 20/07/2026')).toHaveLength(1);
   });
 
   it('renders the loaded list unfiltered while the search term has fewer than 2 characters (Esc.15)', async () => {

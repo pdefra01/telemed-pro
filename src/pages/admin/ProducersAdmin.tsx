@@ -303,6 +303,11 @@ export const ProducersAdmin: React.FC = () => {
                   </span>
                   <h3 className="text-lg font-bold text-white tracking-tight">{p.name}</h3>
                   <p className="text-xs text-slate-400">{p.email}</p>
+                  {p.createdAt && (
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Alta: {new Date(p.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-start gap-2">
                   <span
