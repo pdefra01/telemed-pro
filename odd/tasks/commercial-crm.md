@@ -38,7 +38,7 @@ Objective: a one-level commercial hierarchy (supervisor → advisors) with a lig
 
 ### Delivery 3 tasks (collections follow-up)
 - [x] T12 S12,S13 inline: migration 20261111040000 (`collection_actions` append-only log; internal `advisor_for_affiliate()`; boolean helpers `can_read_collections`/`can_log_collections`; `advisor_collections()` SECURITY DEFINER scoped to self/team/admin, every status listed) + pgTAP collections.sql. Risk: item 2 (RLS + SECURITY DEFINER over the receivables ledger, self/admin-only today). RED (table missing; fixtures load) → GREEN 31 tests; full pgTAP only the pre-existing doctor_patient_chart_data.sql fails. Finding: Supabase default privileges grant ALL on new public tables to anon/authenticated, so append-only needed explicit `REVOKE UPDATE, DELETE, TRUNCATE` (my first `GRANT SELECT, INSERT` left them; RLS already blocked edits silently). The same default grants exist on D1/D2 tables (prospects, advisor_goals) but RLS has no anon policy there.
-- [ ] T13 S12,S13 inline: types + CollectionRepository (rpc list, actions list/create) + Vitest.
+- [x] T13 S12,S13 inline: types (CollectionAffiliate, CollectionAction, ...) + `CollectionRepository` (rpc list, actions list newest first, create with client-side promise-date/note checks) + Vitest. Risk: none (additive client code). RED (module missing) → GREEN 13 tests; tsc clean.
 - [ ] T14 S12,S13 inline: advisor Collections page (list with status filter, register action, history) + nav + route + Vitest.
 - [ ] T15 S12,S13 inline: read-only team view for supervisor/admin (advisor filter, summary by advisor) + nav + route + manual + Vitest.
 

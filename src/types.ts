@@ -19,6 +19,44 @@ export interface AdvisorMonthMetrics {
   goalRevenue?: number;
 }
 
+export type CollectionStatus = 'current' | 'pending' | 'overdue';
+export type CollectionActionType = 'call' | 'whatsapp' | 'visit' | 'note' | 'promise';
+
+/** An affiliate an advisor brought, with the state of their account, from `advisor_collections`. */
+export interface CollectionAffiliate {
+  affiliateId: string;
+  affiliateName: string;
+  affiliatePhone?: string;
+  advisorId: string;
+  advisorName: string;
+  planName?: string;
+  paymentStatus: CollectionStatus;
+  balance: number;
+  paidThrough?: string;
+  lastActionAt?: string;
+  lastActionType?: CollectionActionType;
+  promisedDate?: string;
+  actionsCount: number;
+}
+
+export interface CollectionAction {
+  id: string;
+  affiliateId: string;
+  actionType: CollectionActionType;
+  note?: string;
+  promisedDate?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
+export interface CollectionActionInput {
+  actionType: CollectionActionType;
+  note?: string;
+  /** `YYYY-MM-DD`; only meaningful (and required) for a promise to pay. */
+  promisedDate?: string;
+}
+
 export interface GoalTargets {
   targetAffiliates?: number | null;
   targetRevenue?: number | null;
