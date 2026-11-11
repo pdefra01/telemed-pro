@@ -49,7 +49,7 @@ import { ToastProvider, useToast } from './context/ToastContext';
 
 import { authRepository } from './repositories/AuthRepository';
 import { supabase } from './services/supabase';
-import { getSessionExpiryReason, resolveMaxSessionHours } from './utils/sessionExpiry';
+import { getSessionExpiryReason, resolveMaxSessionHours, resolvePersistentSession, resolveTimeoutMinutes } from './utils/sessionExpiry';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 // Error Boundary simple para capturar errores de renderizado
@@ -130,7 +130,8 @@ const SessionTimeoutHandler: React.FC<{ user: User | null; onLogout: () => void 
       const cached = localStorage.getItem('medinex_session_policy') || sessionStorage.getItem('medinex_session_policy');
       if (cached) {
         const policy = JSON.parse(cached);
-        timeoutMinutes = policy[user.role]?.timeoutMinutes || 0;
+        // A cached policy that lacks the role (e.g. saved before supervisors) falls back to the role's default.
+        timeoutMinutes = resolveTimeoutMinutes(policy, user.role);
         maxSessionHours = resolveMaxSessionHours(policy, user.role);
       } else {
         // Fallback defaults
@@ -247,7 +248,7 @@ const App: React.FC = () => {
       const cached = localStorage.getItem('medinex_session_policy') || sessionStorage.getItem('medinex_session_policy');
       if (cached) {
         const policy = JSON.parse(cached);
-        isPersistent = policy[loggedInUser.role]?.persistent ?? true;
+        isPersistent = resolvePersistentSession(policy, loggedInUser.role);
       } else {
         if (['admin', 'doctor', 'advisor', 'supervisor'].includes(loggedInUser.role)) {
           isPersistent = false;

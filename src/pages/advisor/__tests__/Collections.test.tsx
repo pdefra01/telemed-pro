@@ -172,6 +172,42 @@ describe('Collections (advisor)', () => {
     expect(within(screen.getByTestId('history-aff-1')).getByText(/llamada/i)).toBeInTheDocument();
   });
 
+  it('shows a loading line, not the empty state, while the history loads', async () => {
+    let resolve: (rows: CollectionAction[]) => void = () => {};
+    vi.mocked(collectionRepository.listActions).mockReturnValue(new Promise((r) => { resolve = r; }));
+    render(<Collections />);
+    const laura = await screen.findByTestId('collection-aff-1');
+
+    fireEvent.click(within(laura).getByRole('button', { name: /ver historial/i }));
+
+    const panel = screen.getByTestId('history-aff-1');
+    expect(within(panel).getByText(/cargando historial/i)).toBeInTheDocument();
+    expect(within(panel).queryByText(/todavía no hay gestiones/i)).not.toBeInTheDocument();
+
+    resolve([]);
+    expect(await within(panel).findByText(/todavía no hay gestiones/i)).toBeInTheDocument();
+  });
+
+  it('ignores a slow history of a previously opened affiliate', async () => {
+    const pending: Record<string, (rows: CollectionAction[]) => void> = {};
+    vi.mocked(collectionRepository.listActions).mockImplementation((id: string) => new Promise((r) => { pending[id] = r; }));
+    render(<Collections />);
+    const laura = await screen.findByTestId('collection-aff-1');
+    const marcos = screen.getByTestId('collection-aff-2');
+
+    fireEvent.click(within(laura).getByRole('button', { name: /ver historial/i }));
+    fireEvent.click(within(marcos).getByRole('button', { name: /ver historial/i }));
+
+    pending['aff-2']([action({ id: 'act-2', affiliateId: 'aff-2', note: 'prometió pagar' })]);
+    const panel = await screen.findByTestId('history-aff-2');
+    expect(await within(panel).findByText(/prometió pagar/i)).toBeInTheDocument();
+
+    pending['aff-1']([action()]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(within(screen.getByTestId('history-aff-2')).queryByText(/llamé y no atendió/i)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('history-aff-2')).getByText(/prometió pagar/i)).toBeInTheDocument();
+  });
+
   it('shows an empty state when there are no affiliates', async () => {
     vi.mocked(collectionRepository.listAffiliates).mockResolvedValue([]);
     render(<Collections />);

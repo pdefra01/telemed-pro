@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Phone } from 'lucide-react';
 import { CollectionAction, CollectionActionType, CollectionAffiliate, CollectionStatus } from '../../types';
 import { collectionRepository } from '../../repositories/CollectionRepository';
@@ -48,6 +48,9 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [history, setHistory] = useState<CollectionAction[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  // The affiliate whose history is open now: a late answer for another one is dropped.
+  const openHistoryRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,16 +135,22 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
 
   const toggleHistory = async (affiliateId: string) => {
     if (historyId === affiliateId) {
+      openHistoryRef.current = null;
       setHistoryId(null);
       return;
     }
+    openHistoryRef.current = affiliateId;
     setHistoryId(affiliateId);
     setHistory([]);
     setHistoryError(null);
+    setHistoryLoading(true);
     try {
-      setHistory(await collectionRepository.listActions(affiliateId));
+      const rows = await collectionRepository.listActions(affiliateId);
+      if (openHistoryRef.current === affiliateId) setHistory(rows);
     } catch {
-      setHistoryError('No se pudo cargar el historial.');
+      if (openHistoryRef.current === affiliateId) setHistoryError('No se pudo cargar el historial.');
+    } finally {
+      if (openHistoryRef.current === affiliateId) setHistoryLoading(false);
     }
   };
 
@@ -325,6 +334,8 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
                 <div data-testid={`history-${a.affiliateId}`} className="rounded-xl bg-gray-50 p-4 space-y-2">
                   {historyError ? (
                     <p role="alert" className="text-sm text-red-600">{historyError}</p>
+                  ) : historyLoading ? (
+                    <p className="text-sm text-gray-500">Cargando historial…</p>
                   ) : history.length === 0 ? (
                     <p className="text-sm text-gray-500">Todavía no hay gestiones registradas.</p>
                   ) : (

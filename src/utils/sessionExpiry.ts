@@ -15,6 +15,31 @@ export const DEFAULT_MAX_SESSION_HOURS: Record<string, number> = {
   doctor: 8,
 };
 
+/**
+ * Inactivity timeout and persistence per role, used when no policy is cached
+ * or the cached one lacks the role (for example a policy saved before the
+ * supervisor role existed). The admin overrides them in OCCSettings.
+ */
+export const DEFAULT_SESSION_POLICY: Record<string, { timeoutMinutes: number; persistent: boolean }> = {
+  admin: { timeoutMinutes: 15, persistent: false },
+  doctor: { timeoutMinutes: 30, persistent: false },
+  advisor: { timeoutMinutes: 30, persistent: false },
+  supervisor: { timeoutMinutes: 15, persistent: false },
+  patient: { timeoutMinutes: 0, persistent: true },
+};
+
+export function resolveTimeoutMinutes(policy: SessionPolicy, role: string): number {
+  const stored = policy?.[role]?.timeoutMinutes;
+  if (typeof stored === 'number' && stored >= 0) return stored;
+  return DEFAULT_SESSION_POLICY[role]?.timeoutMinutes ?? 0;
+}
+
+export function resolvePersistentSession(policy: SessionPolicy, role: string): boolean {
+  const stored = policy?.[role]?.persistent;
+  if (typeof stored === 'boolean') return stored;
+  return DEFAULT_SESSION_POLICY[role]?.persistent ?? true;
+}
+
 export function resolveMaxSessionHours(policy: SessionPolicy, role: string): number {
   const stored = policy?.[role]?.maxSessionHours;
   if (typeof stored === 'number' && stored >= 0) return stored;

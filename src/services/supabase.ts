@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { DEFAULT_SESSION_POLICY, resolvePersistentSession } from '../utils/sessionExpiry';
 
 export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -7,12 +8,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Faltan las variables de entorno de Supabase. Verificá tu archivo .env.local');
 }
 
-const DEFAULT_POLICY = {
-  admin: { timeoutMinutes: 15, persistent: false },
-  doctor: { timeoutMinutes: 30, persistent: false },
-  advisor: { timeoutMinutes: 30, persistent: false },
-  patient: { timeoutMinutes: 0, persistent: true }
-};
+const DEFAULT_POLICY = DEFAULT_SESSION_POLICY;
 
 const getPolicy = () => {
   try {
@@ -33,9 +29,8 @@ const customStorage = {
       const data = JSON.parse(value);
       const role = data?.user?.user_metadata?.role || data?.user?.app_metadata?.role;
       const policy = getPolicy();
-      const rolePolicy = policy[role] || { persistent: true };
-      
-      if (rolePolicy.persistent) {
+      // A role missing from the cached policy uses its default (supervisors are not persistent).
+      if (resolvePersistentSession(policy, role)) {
         localStorage.setItem(key, value);
         sessionStorage.removeItem(key);
       } else {

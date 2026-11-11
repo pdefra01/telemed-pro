@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Phone, Mail, Plus, Trash2, PhoneCall } from 'lucide-react';
 import { Prospect, ProspectStatus, User } from '../../types';
-import { prospectRepository } from '../../repositories/ProspectRepository';
+import { PROSPECT_PAGE_SIZE, prospectRepository } from '../../repositories/ProspectRepository';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PROSPECT_STATUSES, PROSPECT_STATUS_BADGE, PROSPECT_STATUS_LABELS } from '../../utils/prospectStatus';
@@ -29,16 +29,46 @@ export const Prospects: React.FC<ProspectsProps> = ({ user }) => {
 
   const [statusFilter, setStatusFilter] = useState<ProspectStatus | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
+  // rows read from the server so far: the offset of the next page
+  const loadedFromServer = useRef(0);
+  const filtering = statusFilter !== 'all' || search.trim() !== '';
 
   useEffect(() => {
     let cancelled = false;
     prospectRepository
-      .list()
-      .then((rows) => { if (!cancelled) setProspects(rows); })
+      .list({ limit: PROSPECT_PAGE_SIZE, offset: 0 })
+      .then((rows) => {
+        if (cancelled) return;
+        loadedFromServer.current = rows.length;
+        setProspects(rows);
+        setHasMore(rows.length === PROSPECT_PAGE_SIZE);
+      })
       .catch(() => { if (!cancelled) setLoadError('No se pudieron cargar los prospectos.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    setMoreError(false);
+    try {
+      const rows = await prospectRepository.list({ limit: PROSPECT_PAGE_SIZE, offset: loadedFromServer.current });
+      loadedFromServer.current += rows.length;
+      // a prospect created meanwhile shifts the pages: skip the ones already listed
+      setProspects((current) => {
+        const known = new Set(current.map((p) => p.id));
+        return [...current, ...rows.filter((p) => !known.has(p.id))];
+      });
+      setHasMore(rows.length === PROSPECT_PAGE_SIZE);
+    } catch {
+      setMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -62,6 +92,7 @@ export const Prospects: React.FC<ProspectsProps> = ({ user }) => {
     setFormError(null);
     try {
       const created = await prospectRepository.create(user.id, form);
+      loadedFromServer.current += 1;
       setProspects((current) => [created, ...current]);
       setForm(EMPTY_FORM);
       setShowForm(false);
@@ -97,6 +128,7 @@ export const Prospects: React.FC<ProspectsProps> = ({ user }) => {
     if (!window.confirm(`¿Eliminar a ${p.fullName}?`)) return;
     return run(async () => {
       await prospectRepository.remove(p.id);
+      loadedFromServer.current = Math.max(0, loadedFromServer.current - 1);
       setProspects((current) => current.filter((x) => x.id !== p.id));
     }, 'No se pudo eliminar el prospecto.');
   };
@@ -248,6 +280,13 @@ export const Prospects: React.FC<ProspectsProps> = ({ user }) => {
             </li>
           ))}
         </ul>
+      )}
+      {!loading && !loadError && hasMore && (
+        <div className="text-center space-y-2">
+          {filtering && <p className="text-xs text-gray-500">La búsqueda y el filtro buscan solo entre los prospectos cargados.</p>}
+          {moreError && <p role="alert" className="text-xs text-red-600">No se pudieron cargar más prospectos.</p>}
+          <Button type="button" variant="outline" onClick={loadMore} isLoading={loadingMore}>Cargar más</Button>
+        </div>
       )}
     </div>
   );

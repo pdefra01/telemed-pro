@@ -10,7 +10,7 @@ import { systemSettingsRepository } from '../../repositories/SystemSettingsRepos
 import { officeLocationRepository } from '../../repositories/OfficeLocationRepository';
 import { useToast } from '../../context/ToastContext';
 import { TaxConfiguration, OfficeLocation } from '../../types';
-import { DEFAULT_MAX_SESSION_HOURS, resolveMaxSessionHours } from '../../utils/sessionExpiry';
+import { DEFAULT_MAX_SESSION_HOURS, DEFAULT_SESSION_POLICY, resolveMaxSessionHours } from '../../utils/sessionExpiry';
 
 const GlassCard: React.FC<{
   children: React.ReactNode;
@@ -20,6 +20,14 @@ const GlassCard: React.FC<{
     {children}
   </div>
 );
+
+const SESSION_ROLE_LABELS = {
+  admin: 'Administrador',
+  doctor: 'Médico',
+  advisor: 'Asesor',
+  supervisor: 'Supervisor',
+  patient: 'Paciente',
+} as const;
 
 const OCCSettings: React.FC = () => {
   const { toast } = useToast();
@@ -42,10 +50,8 @@ const OCCSettings: React.FC = () => {
   const [sessionPolicy, setSessionPolicy] = useState<{
     [role: string]: { timeoutMinutes: number; persistent: boolean; maxSessionHours?: number };
   }>({
-    admin: { timeoutMinutes: 15, persistent: false },
-    doctor: { timeoutMinutes: 30, persistent: false, maxSessionHours: DEFAULT_MAX_SESSION_HOURS.doctor },
-    advisor: { timeoutMinutes: 30, persistent: false },
-    patient: { timeoutMinutes: 0, persistent: true }
+    ...DEFAULT_SESSION_POLICY,
+    doctor: { ...DEFAULT_SESSION_POLICY.doctor, maxSessionHours: DEFAULT_MAX_SESSION_HOURS.doctor },
   });
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
 
@@ -66,7 +72,8 @@ const OCCSettings: React.FC = () => {
         setTaxes(taxesData);
         if (policy) setDelinquencyPolicy(policy);
         setOffices(officesData);
-        if (sessionPolicyData) setSessionPolicy(sessionPolicyData);
+        // Roles missing from a stored policy (e.g. supervisor) start from their default
+        if (sessionPolicyData) setSessionPolicy({ ...DEFAULT_SESSION_POLICY, ...sessionPolicyData });
         if (Array.isArray(debitDaysData) && debitDaysData.length > 0) {
           setDebitBillingDays(debitDaysData.sort((a: number, b: number) => a - b));
         }
@@ -296,12 +303,12 @@ const OCCSettings: React.FC = () => {
             </p>
             
             <div className="space-y-6">
-              {(['admin', 'doctor', 'advisor', 'patient'] as const).map((role) => {
-                const roleConfig = sessionPolicy[role] || { timeoutMinutes: 0, persistent: true };
-                const roleLabel = role === 'admin' ? 'Administrador' : role === 'doctor' ? 'Médico' : role === 'advisor' ? 'Asesor' : 'Paciente';
+              {(['admin', 'doctor', 'advisor', 'supervisor', 'patient'] as const).map((role) => {
+                const roleConfig = sessionPolicy[role] || DEFAULT_SESSION_POLICY[role];
+                const roleLabel = SESSION_ROLE_LABELS[role];
                 
                 return (
-                  <div key={role} className="border-b border-white/5 pb-4 last:border-b-0 last:pb-0">
+                  <div key={role} data-testid={`session-role-${role}`} className="border-b border-white/5 pb-4 last:border-b-0 last:pb-0">
                     <h4 className="font-bold text-sm text-white mb-2 capitalize">{roleLabel}</h4>
                     
                     <div className="space-y-2.5">
@@ -325,6 +332,7 @@ const OCCSettings: React.FC = () => {
                         <input 
                           type="number"
                           min={0}
+                          aria-label="Minutos de inactividad"
                           value={roleConfig.timeoutMinutes}
                           onChange={(e) => {
                             setSessionPolicy({

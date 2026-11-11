@@ -9,7 +9,7 @@ vi.mock('../../services/supabase', () => ({
 /** Chainable, awaitable stand-in for a PostgREST query builder. */
 function chain(result: { data?: unknown; error?: unknown }) {
   const c: any = {};
-  for (const m of ['select', 'order', 'eq', 'insert', 'update', 'delete', 'single']) {
+  for (const m of ['select', 'order', 'eq', 'range', 'insert', 'update', 'delete', 'single']) {
     c[m] = vi.fn(() => c);
   }
   c.then = (resolve: any, reject: any) => Promise.resolve({ data: null, error: null, ...result }).then(resolve, reject);
@@ -65,6 +65,25 @@ describe('ProspectRepository', () => {
       }]);
     });
 
+    it('reads one page of 100 by default, in a stable order', async () => {
+      const q = chain({ data: [] });
+      vi.mocked(supabase.from).mockReturnValueOnce(q);
+
+      await repository.list();
+
+      expect(q.order).toHaveBeenCalledWith('id', { ascending: false });
+      expect(q.range).toHaveBeenCalledWith(0, 99);
+    });
+
+    it('reads the requested page', async () => {
+      const q = chain({ data: [] });
+      vi.mocked(supabase.from).mockReturnValueOnce(q);
+
+      await repository.list({ limit: 100, offset: 200 });
+
+      expect(q.range).toHaveBeenCalledWith(200, 299);
+    });
+
     it('narrows to one advisor when asked', async () => {
       const q = chain({ data: [] });
       vi.mocked(supabase.from).mockReturnValueOnce(q);
@@ -91,6 +110,32 @@ describe('ProspectRepository', () => {
     it('throws the database error', async () => {
       vi.mocked(supabase.from).mockReturnValueOnce(chain({ error: new Error('denied') }));
       await expect(repository.list()).rejects.toThrow('denied');
+    });
+  });
+
+  describe('countByStatus', () => {
+    it('asks the database for an exact head count per status (scoped by RLS), never reading the rows', async () => {
+      const queries: any[] = [];
+      vi.mocked(supabase.from).mockImplementation(() => {
+        const q = chain({});
+        q.then = (resolve: any, reject: any) => {
+          const status = q.eq.mock.calls[0]?.[1];
+          return Promise.resolve({ count: { new: 1500, contacted: 3, interested: 2, affiliated: 1, lost: 0 }[status as string] ?? null, error: null }).then(resolve, reject);
+        };
+        queries.push(q);
+        return q;
+      });
+
+      const counts = await repository.countByStatus();
+
+      expect(counts).toEqual({ new: 1500, contacted: 3, interested: 2, affiliated: 1, lost: 0 });
+      expect(queries).toHaveLength(5);
+      queries.forEach((q) => expect(q.select).toHaveBeenCalledWith('id', { count: 'exact', head: true }));
+    });
+
+    it('throws the database error', async () => {
+      vi.mocked(supabase.from).mockImplementation(() => chain({ error: new Error('denied') }));
+      await expect(repository.countByStatus()).rejects.toThrow('denied');
     });
   });
 
