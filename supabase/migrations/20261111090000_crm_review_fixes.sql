@@ -3,13 +3,15 @@
 --   * S6.3 Drift guard: prospects.status_changed_at records the last STATUS change (a BEFORE UPDATE trigger,
 --     NULL until the first one). A pending adhesion request advances a prospect unless its status was changed
 --     after the request; a prospect just created by the intake or one whose contact was registered (notes,
---     last_contact_at) still advances. An approved request still converts regardless.
+--     last_contact_at) still advances. An approved request still converts regardless. Existing prospects touched
+--     after creation are backfilled with their updated_at before the trigger exists, so the old guard still
+--     protects them on the first run.
 --   * S6.2 Starvation: every adhesion request the intake handles is logged in prospect_intake_log
 --     (source 'adhesion_pending' or 'adhesion_approved', source_ref = the request id, outcome 'processed'),
 --     matched or not, and logged requests are left out of the scan. The 90-day window, the 500-row cap and the
 --     oldest-first order stay. A request that goes pending -> approved is handled again under its approved
 --     source. Approved requests without an approved profile cannot be linked yet, so they are not scanned
---     (and not logged) until the profile exists.
+--     (and not logged) until the profile exists. A survey or request that raises is logged once as 'error'.
 --   * S6.5 The function no longer carries a statement_timeout setting: a SET on a function does not bound the
 --     statement that calls it, so it promised nothing.
 --   * S6.8 A survey prospect's created_at is when it enters the CRM (now()), not the client-settable survey date.
@@ -22,6 +24,34 @@
 -- ── S6.3: status_changed_at ─────────────────────────────────────────────────
 ALTER TABLE public.prospects ADD COLUMN IF NOT EXISTS status_changed_at TIMESTAMPTZ;
 COMMENT ON COLUMN public.prospects.status_changed_at IS 'Last time the status changed (NULL until the first change). The automatic intake does not overrule a status set after an adhesion request.';
+
+-- Existing rows: no status history exists, so a prospect touched after it was created keeps the old guard
+-- (its last update counts as its last status change). Without this, the first run after the migration would
+-- rescan every pending request of the last 90 days and overrule statuses advisors set by hand. Untouched rows
+-- stay NULL. Only for this migration (rerunning it later would stamp contact-only updates): no API role runs it.
+CREATE OR REPLACE FUNCTION public.backfill_prospect_status_changed_at()
+RETURNS BIGINT
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_rows BIGINT;
+BEGIN
+  -- the backfill must not look like an edit
+  ALTER TABLE public.prospects DISABLE TRIGGER touch_prospect_updated_at;
+  UPDATE public.prospects
+     SET status_changed_at = updated_at
+   WHERE status_changed_at IS NULL
+     AND updated_at > created_at;
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  ALTER TABLE public.prospects ENABLE TRIGGER touch_prospect_updated_at;
+  RETURN v_rows;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.backfill_prospect_status_changed_at() FROM PUBLIC, anon, authenticated, service_role;
+
+-- Runs BEFORE the trigger below exists.
+SELECT public.backfill_prospect_status_changed_at();
 
 CREATE OR REPLACE FUNCTION public.stamp_prospect_status_change()
 RETURNS TRIGGER
@@ -47,7 +77,25 @@ ALTER TABLE public.prospect_intake_log ADD CONSTRAINT prospect_intake_log_source
   CHECK (source IN ('lead_survey', 'adhesion_pending', 'adhesion_approved'));
 ALTER TABLE public.prospect_intake_log DROP CONSTRAINT IF EXISTS prospect_intake_log_outcome_check;
 ALTER TABLE public.prospect_intake_log ADD CONSTRAINT prospect_intake_log_outcome_check
-  CHECK (outcome IN ('created', 'duplicate', 'invalid', 'processed'));
+  CHECK (outcome IN ('created', 'duplicate', 'invalid', 'processed', 'error'));
+
+-- A source row that raises is logged once as 'error' and not retried, so a few broken rows can never fill the
+-- scan window again. Never raises itself.
+CREATE OR REPLACE FUNCTION public.log_prospect_intake_error(p_source TEXT, p_source_ref UUID, p_advisor_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.prospect_intake_log (source, source_ref, advisor_id, outcome)
+  VALUES (p_source, p_source_ref, p_advisor_id, 'error')
+  ON CONFLICT (source, source_ref) DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'sync_prospects_intake: could not log the error of % %: %', p_source, p_source_ref, SQLERRM;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.log_prospect_intake_error(TEXT, UUID, UUID) FROM PUBLIC, anon, authenticated, service_role;
 
 -- CREATE OR REPLACE keeps the grants (service role only); the statement_timeout setting is reset below.
 CREATE OR REPLACE FUNCTION public.sync_prospects_intake()
@@ -129,6 +177,7 @@ BEGIN
       v_created := v_created + 1;
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING 'sync_prospects_intake: lead survey % skipped: %', r.id, SQLERRM;
+      PERFORM public.log_prospect_intake_error('lead_survey', r.id, r.advisor_id);
     END;
   END LOOP;
 
@@ -188,6 +237,7 @@ BEGIN
       VALUES (v_source, r.id, v_prospect, r.advisor_id, 'processed');
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING 'sync_prospects_intake: adhesion request % skipped: %', r.id, SQLERRM;
+      PERFORM public.log_prospect_intake_error(r.log_source, r.id, r.advisor_id);
     END;
   END LOOP;
 

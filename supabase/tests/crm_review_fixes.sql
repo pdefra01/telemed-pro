@@ -20,6 +20,25 @@ VALUES
 UPDATE public.profiles SET promoter_code = 'REV-ONE', supervisor_id = 'c7c7c7c7-0000-0000-0000-000000000001' WHERE id = 'c7c7c7c7-0000-0000-0000-000000000002';
 UPDATE public.profiles SET promoter_code = 'REV-TWO' WHERE id = 'c7c7c7c7-0000-0000-0000-000000000004';
 
+-- ── S6.3 migration: prospects that existed before status_changed_at ─────────
+-- The old intake moved this prospect to interested, then the advisor reset it to contacted (5 days ago, after the
+-- still-pending request of 10 days ago). Existing rows have no status_changed_at, so without the backfill the first
+-- run after the migration would flip it back to interested.
+INSERT INTO public.prospects (id, advisor_id, full_name, phone, status, created_at, updated_at) VALUES
+  ('c7c7c7c7-0000-0000-0000-0000000000d0', 'c7c7c7c7-0000-0000-0000-000000000002', 'Legacy Reset', '3881000010', 'contacted', now() - interval '40 days', now() - interval '5 days'),
+  ('c7c7c7c7-0000-0000-0000-0000000000c0', 'c7c7c7c7-0000-0000-0000-000000000002', 'Legacy Untouched', '3881000011', 'new', now() - interval '40 days', now() - interval '40 days');
+INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
+  titular_email, titular_phone, titular_civil_status, payment_method, signature_base64, status, promoter_id, created_at)
+VALUES ('c7c7c7c7-0000-0000-0000-0000000000a0', 'R0', '93100000', '1990-01-01', 'x', 'x', 'x', 'r0@test.local', '3881000010', 'soltero', 'cash', 'sig', 'pending', 'REV-ONE', now() - interval '10 days');
+
+SELECT public.backfill_prospect_status_changed_at();   -- what the migration runs before creating the trigger
+SELECT is((SELECT status_changed_at FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-0000-0000000000d0'), now() - interval '5 days',
+  'the backfill takes the last update of a touched existing prospect as its last status change');
+SELECT is((SELECT updated_at FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-0000-0000000000d0'), now() - interval '5 days',
+  'and does not bump updated_at');
+SELECT is((SELECT status_changed_at FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-0000-0000000000c0'), NULL::timestamptz,
+  'a never-touched existing prospect stays without a status change');
+
 -- ── S6.3: status_changed_at tracks the last STATUS change only ──────────────
 INSERT INTO public.prospects (id, advisor_id, full_name, phone, status, created_at) VALUES
   ('c7c7c7c7-0000-0000-0000-0000000000d1', 'c7c7c7c7-0000-0000-0000-000000000002', 'Contact Logged', '3881000001', 'contacted',  now() - interval '40 days'),
@@ -65,10 +84,13 @@ SELECT is((SELECT status FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-00
   'registering a contact after the request does not block the advance');
 SELECT is((SELECT status FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-0000-0000000000d2'), 'new',
   'a status reset by the advisor after the request is not overruled');
+SELECT is((SELECT status FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-0000-0000000000d0'), 'contacted',
+  'an existing prospect the advisor reset before the migration is not flipped back by its old pending request');
 
 SELECT results_eq($$SELECT source, source_ref::text, outcome FROM public.prospect_intake_log
                      WHERE source LIKE 'adhesion%' ORDER BY source_ref::text$$,
-  $$VALUES ('adhesion_pending', 'c7c7c7c7-0000-0000-0000-0000000000a1', 'processed'),
+  $$VALUES ('adhesion_pending', 'c7c7c7c7-0000-0000-0000-0000000000a0', 'processed'),
+           ('adhesion_pending', 'c7c7c7c7-0000-0000-0000-0000000000a1', 'processed'),
            ('adhesion_pending', 'c7c7c7c7-0000-0000-0000-0000000000a2', 'processed'),
            ('adhesion_pending', 'c7c7c7c7-0000-0000-0000-0000000000a3', 'processed')$$,
   'every handled pending request is logged, matched or not');
@@ -86,12 +108,42 @@ VALUES ('c7c7c7c7-0000-0000-0000-0000000000a4', 'R4', '93100004', '1990-01-01', 
 
 SELECT results_eq($$SELECT prospects_interested::int FROM public.sync_prospects_intake()$$, $$VALUES (0)$$,
   'the first run handles the 500 oldest unhandled requests');
-SELECT is((SELECT count(*)::int FROM public.prospect_intake_log WHERE source = 'adhesion_pending'), 503,
+SELECT is((SELECT count(*)::int FROM public.prospect_intake_log WHERE source = 'adhesion_pending'), 504,
   'and logs them');
 SELECT results_eq($$SELECT prospects_interested::int FROM public.sync_prospects_intake()$$, $$VALUES (1)$$,
   'the next run skips the handled ones and reaches the new request');
 SELECT is((SELECT status FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-0000-0000000000d3'), 'interested',
   'so the new request advances its prospect');
+
+-- ── A row that raises is logged once as 'error', so it cannot starve the queue ──
+INSERT INTO public.prospects (id, advisor_id, full_name, phone, status, created_at) VALUES
+  ('c7c7c7c7-0000-0000-0000-0000000000d9', 'c7c7c7c7-0000-0000-0000-000000000002', 'Boom Target', '3881000099', 'new', now() - interval '40 days');
+
+CREATE FUNCTION public.test_crm_boom() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF NEW.full_name = 'Boom Lead' OR NEW.phone = '3881000099' THEN RAISE EXCEPTION 'boom'; END IF;
+  RETURN NEW;
+END;
+$fn$;
+CREATE TRIGGER test_crm_boom BEFORE INSERT OR UPDATE ON public.prospects FOR EACH ROW EXECUTE FUNCTION public.test_crm_boom();
+
+INSERT INTO public.lead_survey_responses (id, promoter_code, full_name, whatsapp, pain_point, who_gets_sick_more, knew_remote_care,
+  interested_in_easier_access, fair_monthly_value, consent_contact, created_at)
+VALUES ('c7c7c7c7-0000-0000-0000-0000000000e9', 'REV-TWO', 'Boom Lead', '3881000098', 'x', 'me', false, true, 5000, true, now());
+INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
+  titular_email, titular_phone, titular_civil_status, payment_method, signature_base64, status, promoter_id, created_at)
+VALUES ('c7c7c7c7-0000-0000-0000-0000000000a9', 'R9', '93100009', '1990-01-01', 'x', 'x', 'x', 'r9@test.local', '3881000099', 'soltero', 'cash', 'sig', 'pending', 'REV-ONE', now() - interval '1 minute');
+
+SELECT lives_ok($$SELECT * FROM public.sync_prospects_intake()$$, 'a row that raises does not stop the run');
+SELECT lives_ok($$SELECT * FROM public.sync_prospects_intake()$$, 'nor the next one');
+SELECT results_eq($$SELECT source, source_ref::text, outcome FROM public.prospect_intake_log
+                     WHERE source_ref IN ('c7c7c7c7-0000-0000-0000-0000000000e9', 'c7c7c7c7-0000-0000-0000-0000000000a9') ORDER BY source$$,
+  $$VALUES ('adhesion_pending', 'c7c7c7c7-0000-0000-0000-0000000000a9', 'error'), ('lead_survey', 'c7c7c7c7-0000-0000-0000-0000000000e9', 'error')$$,
+  'a survey and a request that raise are logged once as errors and not rescanned');
+SELECT is((SELECT status FROM public.prospects WHERE id = 'c7c7c7c7-0000-0000-0000-0000000000d9'), 'new', 'the failed advance changed nothing');
+
+DROP TRIGGER test_crm_boom ON public.prospects;
+DROP FUNCTION public.test_crm_boom();
 
 -- ── S6.5: no statement_timeout promise on the function ──────────────────────
 SELECT is((SELECT array_to_string(proconfig, ',') FROM pg_proc WHERE oid = 'public.sync_prospects_intake()'::regprocedure), 'search_path=public',
@@ -135,6 +187,8 @@ SELECT is((SELECT count(*)::int FROM public.confirmed_affiliate_ids('{}'::uuid[]
 SELECT is(has_function_privilege('service_role', 'public.confirmed_affiliate_ids(uuid[])', 'execute'), true, 'the server can call confirmed_affiliate_ids');
 SELECT is(has_function_privilege('authenticated', 'public.confirmed_affiliate_ids(uuid[])', 'execute'), false, 'signed-in users cannot');
 SELECT is(has_function_privilege('anon', 'public.confirmed_affiliate_ids(uuid[])', 'execute'), false, 'anonymous callers cannot');
+SELECT is(has_function_privilege('authenticated', 'public.backfill_prospect_status_changed_at()', 'execute'), false, 'signed-in users cannot run the backfill');
+SELECT is(has_function_privilege('service_role', 'public.backfill_prospect_status_changed_at()', 'execute'), false, 'nor the API service role');
 
 -- ── S6.1: the session policy covers supervisors ─────────────────────────────
 SELECT results_eq($$SELECT (value->'supervisor'->>'timeoutMinutes')::int, (value->'supervisor'->>'persistent')::boolean
