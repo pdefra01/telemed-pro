@@ -191,6 +191,27 @@ describe('deriveSubscriptionEventKey', () => {
     });
   });
 
+  // MP docs: an invoice status is scheduled | processed | recycling | canceled; a debit that
+  // fails every retry ends 'processed' with a rejected nested payment.
+  // https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md
+  it('maps a processed authorized_payment whose payment was rejected to subscription_authorized_payment_rejected / payment_failed', () => {
+    const resource = { id: 'ap-2b', status: 'processed', payment: { id: 'pay-2b', status: 'rejected' } };
+    expect(deriveSubscriptionEventKey(resource, 'authorized_payment')).toEqual({
+      eventType: 'subscription_authorized_payment_rejected',
+      mpResourceId: 'ap-2b',
+      newStatus: 'payment_failed',
+    });
+  });
+
+  it('keeps mapping a processed authorized_payment whose payment was approved to authorized', () => {
+    const resource = { id: 'ap-2c', status: 'processed', payment: { id: 'pay-2c', status: 'approved' } };
+    expect(deriveSubscriptionEventKey(resource, 'authorized_payment')).toEqual({
+      eventType: 'subscription_authorized_payment_processed',
+      mpResourceId: 'ap-2c',
+      newStatus: 'authorized',
+    });
+  });
+
   it('returns null for authorized_payment scheduled and recycling statuses (non-terminal)', () => {
     expect(deriveSubscriptionEventKey({ id: 'ap-3', status: 'scheduled' }, 'authorized_payment')).toBeNull();
     expect(deriveSubscriptionEventKey({ id: 'ap-4', status: 'recycling' }, 'authorized_payment')).toBeNull();
@@ -1165,6 +1186,33 @@ describe('routeWebhookNotification', () => {
     );
   });
 
+  it('records a processed authorized_payment with a rejected payment as payment_failed, never posting to the ledger', async () => {
+    const mpFetch = createMpFetchStub({
+      '/authorized_payments/ap-2r': {
+        id: 'ap-2r', status: 'processed', preapproval_id: 'preap-2r',
+        last_modified: '2026-10-10T12:00:00Z', payment: { id: 'pay-2r', status: 'rejected' },
+      },
+      '/v1/payments/pay-2r': { id: 'pay-2r', status: 'rejected' },
+    });
+    const supabaseAdmin = createSupabaseStub({ rpcResult: { data: 'status_applied', error: null } });
+
+    const result = await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_authorized_payment', dataId: 'ap-2r' }
+    );
+
+    expect(result).toEqual({ status: 200, body: { outcome: 'not_approved', lifecycleOutcome: 'status_applied' } });
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalledWith('post_payment_movement_from_webhook', expect.anything());
+    // The RPC sets last_failure_at = p_occurred_at and increments failure_count for payment_failed.
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_subscription_event', expect.objectContaining({
+      p_mp_preapproval_id: 'preap-2r',
+      p_event_type: 'subscription_authorized_payment_rejected',
+      p_mp_resource_id: 'ap-2r',
+      p_new_status: 'payment_failed',
+      p_occurred_at: '2026-10-10T12:00:00Z',
+    }));
+  });
+
   it('acks a non-terminal authorized_payment status (scheduled/recycling) without any RPC call', async () => {
     const mpFetch = createMpFetchStub({
       '/authorized_payments/ap-3': { id: 'ap-3', status: 'scheduled', preapproval_id: 'preap-3' },
@@ -1626,6 +1674,47 @@ describe('runDeferredReconciliation', () => {
         p_resolution_state: 'needs_admin',
         p_outcome: 'adhesion_rejected',
       });
+    });
+  });
+
+  describe('Pass C — recovers charges whose webhook never arrived', () => {
+    it('lists the invoices through the documented /authorized_payments/search endpoint and replays a rejected one', async () => {
+      // https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md
+      const tables = {
+        affiliate_payment_subscriptions: [
+          { id: 'sub-c1', profile_id: 'prof-c1', mp_preapproval_id: 'preap-c1', status: 'authorized' },
+        ],
+        mercadopago_events: [],
+      };
+      const mpFetch = vi.fn(async (path) => {
+        if (path === '/authorized_payments/search?preapproval_id=preap-c1') {
+          return {
+            paging: { offset: 0, limit: 30, total: 2 },
+            results: [
+              { id: 'ap-c1', status: 'processed', preapproval_id: 'preap-c1', last_modified: '2026-10-10T12:00:00Z', payment: { id: 'pay-c1', status: 'rejected' } },
+              { id: 'ap-c2', status: 'scheduled', preapproval_id: 'preap-c1' },
+            ],
+          };
+        }
+        if (path === '/v1/payments/pay-c1') return { id: 'pay-c1', status: 'rejected' };
+        throw new Error(`Unexpected path: ${path}`);
+      });
+      const rpcHandler = (name) => {
+        if (name === 'record_mercadopago_subscription_event') return { data: 'status_applied', error: null };
+        if (name === 'record_mercadopago_payment_audit_event') return { data: null, error: null };
+        throw new Error(`Unexpected RPC: ${name}`);
+      };
+      const supabaseAdmin = createReconciliationStub({ tables, rpcHandler });
+
+      const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
+
+      expect(mpFetch).toHaveBeenCalledWith('/authorized_payments/search?preapproval_id=preap-c1');
+      expect(summary.chargesRecovered).toBe(1);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_subscription_event', expect.objectContaining({
+        p_event_type: 'subscription_authorized_payment_rejected',
+        p_mp_resource_id: 'ap-c1',
+        p_new_status: 'payment_failed',
+      }));
     });
   });
 

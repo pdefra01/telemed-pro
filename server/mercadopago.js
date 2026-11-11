@@ -177,8 +177,17 @@ export function deriveSubscriptionEventKey(resource, kind) {
   if (kind === 'authorized_payment') {
     switch (resource.status) {
       case 'processed':
+        // MP documents the invoice status as scheduled | processed | recycling | canceled:
+        // a debit whose last retry failed ends 'processed' with a rejected nested payment
+        // ("collected or exceeded retries"), never with a top-level 'rejected'.
+        // https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md
+        // https://www.mercadopago.com.ar/developers/en/docs/subscriptions/integration-configuration/subscription-no-associated-plan/authorized-payments
+        if (TERMINAL_REJECTED_PAYMENT_STATUSES.includes(resource.payment?.status)) {
+          return { eventType: 'subscription_authorized_payment_rejected', mpResourceId: resource.id, newStatus: 'payment_failed' };
+        }
         return { eventType: 'subscription_authorized_payment_processed', mpResourceId: resource.id, newStatus: 'authorized' };
       case 'rejected':
+        // Kept for compatibility with the earlier sandbox observation; MP's reference does not list it.
         return { eventType: 'subscription_authorized_payment_rejected', mpResourceId: resource.id, newStatus: 'payment_failed' };
       default:
         return null; // 'scheduled', 'recycling': non-terminal, ack/audit only
@@ -1197,10 +1206,12 @@ async function runPassA(ctx, options, summary) {
  * is stale or absent, so MP API cost is proportional to the problem, not the
  * roster.
  *
- * The exact shape of `GET /authorized_payments?preapproval_id={id}` is handled
- * defensively — accepts either a bare array or a `{ results: [...] }`
- * envelope, and a single bad fetch only skips that one subscription rather
- * than aborting the pass.
+ * Lists the invoices through the documented search endpoint
+ * `GET /authorized_payments/search?preapproval_id={id}`, whose response is
+ * `{ paging: { offset, limit, total }, results: [...] }`
+ * (https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md).
+ * A single bad fetch only skips that one subscription rather than aborting
+ * the pass.
  *
  * @param {{ supabaseAdmin: any, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
  * @param {{ preapprovalId?: string }} options
@@ -1241,12 +1252,12 @@ async function runPassC(ctx, options, summary) {
 
     let listResponse;
     try {
-      listResponse = await mpFetch(`/authorized_payments?preapproval_id=${sub.mp_preapproval_id}`);
+      listResponse = await mpFetch(`/authorized_payments/search?preapproval_id=${encodeURIComponent(sub.mp_preapproval_id)}`);
     } catch (err) {
       summary.fetchFailures++;
       continue;
     }
-    const items = Array.isArray(listResponse) ? listResponse : (listResponse?.results || []);
+    const items = Array.isArray(listResponse?.results) ? listResponse.results : [];
 
     for (const item of items) {
       if (item?.id === undefined || item?.id === null || !item?.status) continue;
