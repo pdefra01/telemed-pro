@@ -67,6 +67,11 @@ Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para n
 - *Asesores*: en **Prospectos** cargan sus propios prospectos (nombre, teléfono, email, notas), los pasan por Nuevo → Contactado → Interesado → Afiliado o Perdido, y registran cada contacto. Cada asesor ve solo los suyos.
 - *Supervisores*: ingresan por la pestaña **Asesor** y ven en **Mi equipo**, solo lectura, los prospectos de los asesores de su equipo, con resumen por estado y filtros por asesor y estado.
 
+**Metas mensuales y métricas**: cada asesor puede tener una meta por mes de afiliados, de ingresos o de ambas (se deja vacía la que no aplica).
+- *Supervisores*: en **Metas y métricas** eligen el mes, ven la tabla de su equipo y con **Editar meta** cargan, cambian o quitan la meta de cada asesor. *Administradores*: lo mismo para todos los asesores.
+- *Asesores*: en **Prospectos**, la tarjeta **Mi mes** muestra el avance contra sus metas y su embudo de prospectos. Cada asesor ve solo lo suyo.
+- Qué se mide: **afiliados** son las solicitudes aprobadas con el código del asesor, ubicadas en el mes en que se activaron; **ingresos** es la suma de la cuota mensual del plan de cada una de esas ventas (una venta sin plan identificable suma afiliado pero no ingresos); **prospectos cargados, contactados y afiliados** corresponden a los prospectos creados ese mes, y **conversión** es afiliados sobre cargados; **sin seguimiento** son los prospectos abiertos sin contacto hace 7 días o más (foto de hoy, no del mes); **links compartidos** es el acumulado histórico.
+
 ### 1.2. Consulta de Historia Clínica y Recetas (`/history`)
 En la pestaña **Historia Clínica**, el paciente dispone de la bóveda médica con:
 - **Evoluciones Médicas y Estudios**: Diagnósticos y adjuntos de laboratorio e imágenes.
