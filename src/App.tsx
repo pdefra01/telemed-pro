@@ -48,7 +48,7 @@ const AI_CHATBOT_ENABLED = false;
 import { ToastProvider, useToast } from './context/ToastContext';
 
 import { authRepository } from './repositories/AuthRepository';
-import { supabase } from './services/supabase';
+import { relocateAuthSession, supabase } from './services/supabase';
 import { getSessionExpiryReason, resolveMaxSessionHours, resolvePersistentSession, resolveTimeoutMinutes } from './utils/sessionExpiry';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -272,6 +272,8 @@ const App: React.FC = () => {
     const store = isPersistent ? localStorage : sessionStorage;
     store.setItem(SESSION_STARTED_KEY, loginAt);
     store.setItem(LAST_ACTIVITY_KEY, loginAt);
+    // The auth session was stored at sign-in, before the role was known.
+    relocateAuthSession();
   };
 
   // Stable identity: SessionTimeoutHandler's effect depends on it and must not
@@ -305,6 +307,7 @@ const App: React.FC = () => {
           const policyStr = JSON.stringify(data.value);
           localStorage.setItem('medinex_session_policy', policyStr);
           sessionStorage.setItem('medinex_session_policy', policyStr);
+          relocateAuthSession();
         }
       } catch (err) {
         console.error("Error fetching session security policy from DB:", err);
