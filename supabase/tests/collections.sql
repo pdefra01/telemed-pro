@@ -174,5 +174,87 @@ SELECT is((SELECT count(*)::int FROM public.collection_actions), 0, 'a demoted s
 SELECT is((SELECT count(*)::int FROM public.advisor_collections()), 0, 'a demoted supervisor lists no affiliates');
 RESET ROLE;
 
+-- ═══ Verifier BLOCKER: attribution must not be forgeable through the public adhesion insert ═══
+-- adhesion_requests allows anonymous INSERT. A forged "approved" request that points at someone
+-- else's profile must neither be stored as approved nor make that profile show up for an advisor.
+-- The public insert requires the two DNI photos to exist in Storage (uploaded through the normal
+-- signed-upload flow), so an attacker can satisfy that; simulate the uploads as the owner.
+INSERT INTO storage.objects (bucket_id, name) VALUES
+  ('adhesion-documents', 'c5c5c5c5-0000-0000-0000-0000000000f1/front.jpg'),
+  ('adhesion-documents', 'c5c5c5c5-0000-0000-0000-0000000000f1/back.jpg');
+SET LOCAL ROLE anon;
+INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
+  titular_email, titular_phone, titular_civil_status, payment_method, signature_base64, status, promoter_id, approved_profile_id,
+  titular_dni_front_path, titular_dni_back_path)
+VALUES ('c5c5c5c5-0000-0000-0000-0000000000f1', 'Forged', '91000099', '1990-01-01', 'x', 'x', 'x', 'forged@test.local', '1', 'soltero', 'cash', 'sig',
+  'approved', 'COL-TWO', 'c5c5c5c5-0000-0000-0000-000000000014',
+  'c5c5c5c5-0000-0000-0000-0000000000f1/front.jpg', 'c5c5c5c5-0000-0000-0000-0000000000f1/back.jpg');
+RESET ROLE;
+
+SELECT results_eq($$SELECT status, approved_profile_id FROM public.adhesion_requests WHERE id = 'c5c5c5c5-0000-0000-0000-0000000000f1'$$,
+  $$VALUES ('pending', NULL::uuid)$$, 'a public insert cannot arrive approved or pointing at a profile');
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000004","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.advisor_collections() WHERE affiliate_id = 'c5c5c5c5-0000-0000-0000-000000000014'), 0,
+  'a forged request does not hand the victim to the advisor whose code it carries');
+RESET ROLE;
+
+-- Defence in depth: only patients can be claimed through an approved request, even a trusted one.
+INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
+  titular_email, titular_phone, titular_civil_status, payment_method, signature_base64, status, promoter_id, approved_profile_id, activated_at)
+VALUES ('c5c5c5c5-0000-0000-0000-0000000000f2', 'To doctor', '91000098', '1990-01-01', 'x', 'x', 'x', 'todoc@test.local', '1', 'soltero', 'cash', 'sig',
+  'approved', 'COL-TWO', 'c5c5c5c5-0000-0000-0000-000000000005', now());
+UPDATE public.profiles SET role = 'doctor' WHERE id = 'c5c5c5c5-0000-0000-0000-000000000005';
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000004","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.advisor_collections() WHERE affiliate_id = 'c5c5c5c5-0000-0000-0000-000000000005'), 0,
+  'a non-patient profile is never listed as an affiliate');
+RESET ROLE;
+UPDATE public.profiles SET role = 'patient' WHERE id = 'c5c5c5c5-0000-0000-0000-000000000005';
+
+-- ═══ Verifier advisory: deterministic attribution when two approved requests disagree ═══
+-- aff 14 gets two trusted approved requests from different advisors; the earlier one wins in the
+-- list AND in the policies.
+INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
+  titular_email, titular_phone, titular_civil_status, payment_method, signature_base64, status, promoter_id, approved_profile_id, activated_at, created_at)
+VALUES
+  ('c5c5c5c5-0000-0000-0000-0000000000f3', 'Tie 1', '91000097', '1990-01-01', 'x', 'x', 'x', 'tie1@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'COL-TWO', 'c5c5c5c5-0000-0000-0000-000000000014', now(), '2026-01-01 00:00+00'),
+  ('c5c5c5c5-0000-0000-0000-0000000000f4', 'Tie 2', '91000096', '1990-01-01', 'x', 'x', 'x', 'tie2@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'COL-ONE', 'c5c5c5c5-0000-0000-0000-000000000014', now(), '2026-02-01 00:00+00');
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000004","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.advisor_collections() WHERE affiliate_id = 'c5c5c5c5-0000-0000-0000-000000000014'), 1, 'the earlier request wins in the list');
+SELECT is(public.can_log_collections('c5c5c5c5-0000-0000-0000-000000000014'), true, 'and in the policies');
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000003","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.advisor_collections() WHERE affiliate_id = 'c5c5c5c5-0000-0000-0000-000000000014'), 0, 'the other advisor does not get it in the list');
+SELECT is(public.can_log_collections('c5c5c5c5-0000-0000-0000-000000000014'), false, 'nor in the policies');
+RESET ROLE;
+
+-- ═══ Verifier advisory: a deactivated advisor's affiliates keep being followed ═══
+-- (the supervisor was demoted earlier in this file, which also released the team: restore both)
+UPDATE public.profiles SET role = 'supervisor' WHERE id = 'c5c5c5c5-0000-0000-0000-000000000002';
+UPDATE public.profiles SET supervisor_id = 'c5c5c5c5-0000-0000-0000-000000000002' WHERE id = 'c5c5c5c5-0000-0000-0000-000000000003';
+UPDATE public.profiles SET is_active = false WHERE id = 'c5c5c5c5-0000-0000-0000-000000000003';
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000001","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.advisor_collections() WHERE affiliate_id = 'c5c5c5c5-0000-0000-0000-000000000011'), 1,
+  'an admin still sees the affiliates of a deactivated advisor (they still owe)');
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000002","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.advisor_collections() WHERE affiliate_id = 'c5c5c5c5-0000-0000-0000-000000000011'), 1,
+  'and so does the supervisor of that advisor');
+RESET ROLE;
+
+-- ═══ Verifier test gaps: privileges ═══
+SELECT is(has_table_privilege('authenticated', 'public.collection_actions', 'TRUNCATE'), false, 'authenticated cannot truncate the log');
+SELECT is(has_table_privilege('anon', 'public.collection_actions', 'SELECT'), false, 'anon cannot read the log');
+SELECT is(has_table_privilege('anon', 'public.collection_actions', 'INSERT'), false, 'anon cannot write the log');
+SELECT is(has_function_privilege('authenticated', 'public.advisor_for_affiliate(uuid)', 'execute'), false, 'the attribution resolver is not callable by API roles');
+SELECT is(has_function_privilege('anon', 'public.advisor_for_affiliate(uuid)', 'execute'), false, 'nor by anon');
+
 SELECT * FROM finish();
 ROLLBACK;
