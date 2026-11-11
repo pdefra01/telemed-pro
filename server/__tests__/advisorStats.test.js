@@ -6,9 +6,14 @@ import { computeAdvisorStats } from '../advisorStats.js';
  * query asks: head count queries, the 100-row sales list, and the approved list.
  */
 function createStub({ profile = { promoter_code: 'ADV-1' }, profileError = null, sales = [], approved = [], counts = {}, producer = null, paidIds = [], errors = {} } = {}) {
+  const rangeCalls = [];
   return {
+    rangeCalls,
+    rpc: async (fn, args) => (errors.ledger
+      ? { data: null, error: errors.ledger }
+      : { data: fn === 'confirmed_affiliate_ids' ? paidIds.filter((id) => (args?.p_profile_ids || []).includes(id)) : [], error: null }),
     from(table) {
-      const f = { eq: {}, head: false, limit: null, in: {} };
+      const f = { eq: {}, head: false, limit: null, in: {}, range: null };
       const builder = {
         select: (_cols, opts) => { f.head = Boolean(opts?.head); return builder; },
         eq: (c, v) => { f.eq[c] = v; return builder; },
@@ -16,6 +21,7 @@ function createStub({ profile = { promoter_code: 'ADV-1' }, profileError = null,
         in: (c, v) => { f.in[c] = v; return builder; },
         order: () => builder,
         limit: (n) => { f.limit = n; return builder; },
+        range: (from, to) => { f.range = [from, to]; rangeCalls.push([from, to]); return builder; },
         single: async () => ({ data: profile, error: profileError }),
         maybeSingle: async () => ({ data: producer, error: null }),
         then: (resolve, reject) => {
@@ -24,11 +30,11 @@ function createStub({ profile = { promoter_code: 'ADV-1' }, profileError = null,
             if (errors.adhesion) result = { data: null, count: null, error: errors.adhesion };
             else if (f.head) result = { count: counts[f.eq.status ?? 'total'] ?? 0, error: null };
             else if (f.limit) result = { data: sales, error: null };
-            else result = { data: approved, error: null };
-          } else if (table === 'affiliate_account_movements') {
-            result = errors.ledger
-              ? { data: null, error: errors.ledger }
-              : { data: paidIds.filter((id) => (f.in.entity_id || []).includes(id)).map((entity_id) => ({ entity_id })), error: null };
+            else if (f.range) {
+              // PostgREST caps every response at 1000 rows, whatever range is asked
+              const [from, to] = f.range;
+              result = { data: approved.slice(from, Math.min(to + 1, from + 1000)), error: null };
+            } else result = { data: approved.slice(0, 1000), error: null };
           } else {
             result = { data: [], error: null };
           }
@@ -128,6 +134,28 @@ describe('computeAdvisorStats', () => {
     );
 
     expect(result.sales[0].paymentConfirmed).toBe(true);
+  });
+
+  it('reads the approved sales in pages, so an advisor with more than 1000 approved sales is counted fully', async () => {
+    const approved = Array.from({ length: 2500 }, (_, i) => ({ approved_profile_id: `p-${i}`, plan_type: 'Plan Familiar', payment_method: 'cash' }));
+    const paidIds = approved.slice(0, 1200).map((r) => r.approved_profile_id);
+    const computeCommissions = vi.fn().mockResolvedValue(0);
+    const stub = createStub({ approved, paidIds, counts: { approved: 2500 } });
+
+    const result = await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions }, 'adv-1');
+
+    expect(result.confirmedSales).toBe(1200);
+    expect(result.unconfirmedSales).toBe(1300);
+    expect(computeCommissions.mock.calls[0][1]).toHaveLength(1200);
+    expect(stub.rangeCalls).toEqual([[0, 999], [1000, 1999], [2000, 2999]]);
+  });
+
+  it('stops after the first short page', async () => {
+    const stub = createStub({ approved: [{ approved_profile_id: 'a' }] });
+
+    await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions: async () => 0 }, 'adv-1');
+
+    expect(stub.rangeCalls).toEqual([[0, 999]]);
   });
 
   it('throws when a query fails, so the route can answer 500', async () => {
