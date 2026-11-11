@@ -2,16 +2,22 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prospects } from '../Prospects';
 import { prospectRepository } from '../../../repositories/ProspectRepository';
+import { supervisorRepository } from '../../../repositories/SupervisorRepository';
 import { Prospect, User } from '../../../types';
 
 vi.mock('../../../repositories/ProspectRepository', () => ({
   PROSPECT_PAGE_SIZE: 100,
   prospectRepository: {
     list: vi.fn(),
+    countByStatus: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
   },
+}));
+
+vi.mock('../../../repositories/SupervisorRepository', () => ({
+  supervisorRepository: { listAdvisors: vi.fn() },
 }));
 
 vi.mock('../MonthlyProgress', () => ({
@@ -19,6 +25,8 @@ vi.mock('../MonthlyProgress', () => ({
 }));
 
 const user: User = { id: 'adv-1', name: 'Pedro Gómez', email: 'pedro@test.local', role: 'advisor' };
+
+const openDetail = (row: HTMLElement) => fireEvent.click(within(row).getByRole('button', { name: /detalle/i }));
 
 const build = (over: Partial<Prospect> = {}): Prospect => ({
   id: 'p-1',
@@ -39,6 +47,7 @@ describe('Prospects (advisor CRM)', () => {
       build(),
       build({ id: 'p-2', fullName: 'Marcos Díaz', status: 'interested', phone: undefined }),
     ]);
+    vi.mocked(prospectRepository.countByStatus).mockResolvedValue({ new: 1, contacted: 0, interested: 1, affiliated: 0, lost: 0 });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -50,6 +59,18 @@ describe('Prospects (advisor CRM)', () => {
     expect(prospectRepository.list).toHaveBeenCalledTimes(1);
     expect(within(screen.getByTestId('prospect-p-1')).getByLabelText('Estado')).toHaveValue('new');
     expect(within(screen.getByTestId('prospect-p-2')).getByLabelText('Estado')).toHaveValue('interested');
+  });
+
+  it('shows the own counts of the advisor per status in the header, without an advisor column or picker', async () => {
+    render(<Prospects user={user} />);
+    await screen.findByText('Laura Pérez');
+
+    expect(within(screen.getByTestId('summary-new')).getByText('1')).toBeInTheDocument();
+    expect(within(screen.getByTestId('summary-interested')).getByText('1')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Filtrar por asesor')).not.toBeInTheDocument();
+    expect(supervisorRepository.listAdvisors).not.toHaveBeenCalled();
+    openDetail(screen.getByTestId('prospect-p-1'));
+    expect(screen.queryByLabelText('Reasignar a')).not.toBeInTheDocument();
   });
 
   it('shows the advisor\'s month (goals and metrics) above the prospect list', async () => {
@@ -91,6 +112,7 @@ describe('Prospects (advisor CRM)', () => {
     await screen.findByText('Laura Pérez');
 
     fireEvent.click(screen.getByRole('button', { name: /nuevo prospecto/i }));
+    expect(screen.queryByLabelText('Asesor')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Nombre y apellido'), { target: { value: 'Nuevo Cliente' } });
     fireEvent.change(screen.getByLabelText('Teléfono'), { target: { value: '3875000000' } });
     fireEvent.click(screen.getByRole('button', { name: /guardar prospecto/i }));
@@ -144,6 +166,7 @@ describe('Prospects (advisor CRM)', () => {
     render(<Prospects user={user} />);
     await screen.findByText('Laura Pérez');
 
+    openDetail(screen.getByTestId('prospect-p-1'));
     fireEvent.click(within(screen.getByTestId('prospect-p-1')).getByRole('button', { name: /registrar contacto/i }));
 
     await waitFor(() => expect(prospectRepository.update).toHaveBeenCalledWith('p-1', {
@@ -156,6 +179,7 @@ describe('Prospects (advisor CRM)', () => {
     render(<Prospects user={user} />);
     await screen.findByText('Laura Pérez');
 
+    openDetail(screen.getByTestId('prospect-p-1'));
     fireEvent.click(within(screen.getByTestId('prospect-p-1')).getByRole('button', { name: /eliminar/i }));
 
     await waitFor(() => expect(prospectRepository.remove).toHaveBeenCalledWith('p-1'));
@@ -167,6 +191,7 @@ describe('Prospects (advisor CRM)', () => {
     render(<Prospects user={user} />);
     await screen.findByText('Laura Pérez');
 
+    openDetail(screen.getByTestId('prospect-p-1'));
     fireEvent.click(within(screen.getByTestId('prospect-p-1')).getByRole('button', { name: /eliminar/i }));
 
     expect(prospectRepository.remove).not.toHaveBeenCalled();

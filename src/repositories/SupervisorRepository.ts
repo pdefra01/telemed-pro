@@ -23,7 +23,8 @@ export interface NewSupervisor {
 }
 
 /**
- * Commercial hierarchy administration (admin only). Reads and the assignment
+ * Commercial hierarchy administration. The admin reads and assigns everything;
+ * a supervisor reads their own team (RLS) to act on it. Reads and the assignment
  * go straight to `profiles` (admin RLS; a database trigger validates that the
  * supervisor really holds the supervisor role). Account creation needs the
  * server because it creates an auth user.
@@ -45,12 +46,15 @@ export class SupervisorRepository {
     }));
   }
 
-  async listAdvisors(): Promise<TeamAdvisor[]> {
-    const { data, error } = await supabase
+  /** Every advisor (admin), or only one supervisor's team when `supervisorId` is given. */
+  async listAdvisors(filter: { supervisorId?: string } = {}): Promise<TeamAdvisor[]> {
+    let query = supabase
       .from('profiles')
       .select('id, full_name, email, supervisor_id')
-      .eq('role', 'advisor')
-      .order('full_name', { ascending: true });
+      .eq('role', 'advisor');
+    if (filter.supervisorId) query = query.eq('supervisor_id', filter.supervisorId);
+
+    const { data, error } = await query.order('full_name', { ascending: true });
 
     if (error) throw error;
     return (data || []).map((row: any) => ({

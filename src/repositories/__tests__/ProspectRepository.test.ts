@@ -183,6 +183,15 @@ describe('ProspectRepository', () => {
       expect(q.eq).toHaveBeenCalledWith('id', 'p-1');
     });
 
+    it('reassigns the prospect to another advisor', async () => {
+      const q = chain({ data: row });
+      vi.mocked(supabase.from).mockReturnValueOnce(q);
+
+      await repository.update('p-1', { advisorId: 'adv-2' });
+
+      expect(q.update).toHaveBeenCalledWith({ advisor_id: 'adv-2' });
+    });
+
     it('clears an optional field when it is sent empty', async () => {
       const q = chain({ data: row });
       vi.mocked(supabase.from).mockReturnValueOnce(q);

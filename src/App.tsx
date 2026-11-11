@@ -37,7 +37,6 @@ import { LeadSurvey } from './pages/LeadSurvey';
 import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 import { Prospects } from './pages/advisor/Prospects';
-import { TeamProspects } from './pages/advisor/TeamProspects';
 import { TeamPerformance } from './pages/advisor/TeamPerformance';
 import { Collections } from './pages/advisor/Collections';
 import { getBranding } from './config/branding';
@@ -379,7 +378,7 @@ const App: React.FC = () => {
             {user?.role === 'patient' ? <PatientDashboard user={user as Patient} /> :
               user?.role === 'doctor' ? <DoctorDashboard user={user as Doctor} /> :
                 user?.role === 'advisor' ? <AdvisorDashboard user={user} /> :
-                  user?.role === 'supervisor' ? <TeamProspects title="Mi equipo" /> :
+                  user?.role === 'supervisor' ? <Prospects user={user} title="Mi equipo" /> :
                     <AdminDashboard />}
           </ProtectedRoute>
         }
@@ -418,7 +417,7 @@ const App: React.FC = () => {
         path="/team/collections"
         element={
           <ProtectedRoute user={user} allowedRoles={['supervisor', 'admin']}>
-            <Collections readOnly title={user?.role === 'admin' ? 'Cobranzas comerciales' : 'Cobranzas del equipo'} />
+            <Collections team title={user?.role === 'admin' ? 'Cobranzas comerciales' : 'Cobranzas del equipo'} />
           </ProtectedRoute>
         }
       />
@@ -436,7 +435,7 @@ const App: React.FC = () => {
         path="/admin/prospects"
         element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
-            <TeamProspects title="Prospectos comerciales" />
+            <Prospects user={user as User} title="Prospectos comerciales" />
           </ProtectedRoute>
         }
       />
