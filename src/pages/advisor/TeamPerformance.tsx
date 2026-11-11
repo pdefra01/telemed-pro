@@ -161,6 +161,7 @@ export const TeamPerformance: React.FC<TeamPerformanceProps> = ({ title = 'Metas
                   <th className="p-3">Asesor</th>
                   <th className="p-3">Afiliados</th>
                   <th className="p-3">Ingresos (cuota mensual)</th>
+                  <th className="p-3">Pendientes de pago</th>
                   <th className="p-3">Prospectos cargados</th>
                   <th className="p-3">Conversión</th>
                   <th className="p-3">Sin seguimiento (7+ días)</th>
@@ -180,6 +181,7 @@ export const TeamPerformance: React.FC<TeamPerformanceProps> = ({ title = 'Metas
                       <td className="p-3">
                         <Against testId={`revenue-${r.advisorId}`} value={r.revenue} goal={r.goalRevenue} format={formatCurrency} label={`Avance de ingresos de ${r.advisorName}`} />
                       </td>
+                      <td className="p-3" data-testid={`unconfirmed-${r.advisorId}`}>{r.affiliatesUnconfirmed}</td>
                       <td className="p-3">{r.prospectsLoaded}</td>
                       <td className="p-3" data-testid={`conversion-${r.advisorId}`}>{rate === null ? '—' : `${rate}%`}</td>
                       <td className="p-3" data-testid={`stale-${r.advisorId}`}>{r.prospectsStale}</td>
@@ -209,6 +211,7 @@ export const TeamPerformance: React.FC<TeamPerformanceProps> = ({ title = 'Metas
                     {formatCurrency(sum(rows.map((r) => r.revenue)))}
                     {goalRevenueTotal !== undefined && ` de ${formatCurrency(goalRevenueTotal)}`}
                   </td>
+                  <td className="p-3">{sum(rows.map((r) => r.affiliatesUnconfirmed))}</td>
                   <td className="p-3">{sum(rows.map((r) => r.prospectsLoaded))}</td>
                   <td className="p-3" />
                   <td className="p-3">{sum(rows.map((r) => r.prospectsStale))}</td>

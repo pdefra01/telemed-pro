@@ -106,6 +106,15 @@ export const MonthlyProgress: React.FC = () => {
             <Figure testId="funnel-conversion" label="Conversión">{rate === null ? '—' : `${rate}%`}</Figure>
           </div>
 
+          {metrics.affiliatesUnconfirmed > 0 && (
+            <div data-testid="unconfirmed-sales" className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-xl font-black text-amber-800">{metrics.affiliatesUnconfirmed}</p>
+              <p className="text-xs font-semibold text-amber-800">
+                Ventas aprobadas pendientes de pago: suman a tus metas y comisiones cuando se acredita el primer pago
+              </p>
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <div data-testid="stale-prospects" className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <p className="text-xl font-black text-slate-900">{metrics.prospectsStale}</p>
