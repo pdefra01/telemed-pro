@@ -68,6 +68,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       ];
     }
 
+    if (role === 'supervisor') {
+      return [
+        { name: 'Mi equipo', icon: <Users size={20} />, path: '/' },
+      ];
+    }
+
     if (role === 'admin') {
       return [
         ...common,
@@ -79,6 +85,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         },
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
         { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
+        { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/admin/prospects' },
         {
           name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys',
         },

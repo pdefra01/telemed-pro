@@ -36,6 +36,7 @@ import { LeadSurvey } from './pages/LeadSurvey';
 import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 import { Prospects } from './pages/advisor/Prospects';
+import { TeamProspects } from './pages/advisor/TeamProspects';
 import { getBranding } from './config/branding';
 
 // Temporarily hides the floating AI chatbot everywhere. Set to true to bring it back.
@@ -371,7 +372,8 @@ const App: React.FC = () => {
             {user?.role === 'patient' ? <PatientDashboard user={user as Patient} /> :
               user?.role === 'doctor' ? <DoctorDashboard user={user as Doctor} /> :
                 user?.role === 'advisor' ? <AdvisorDashboard user={user} /> :
-                  <AdminDashboard />}
+                  user?.role === 'supervisor' ? <TeamProspects title="Mi equipo" /> :
+                    <AdminDashboard />}
           </ProtectedRoute>
         }
       />
@@ -387,6 +389,14 @@ const App: React.FC = () => {
       />
 
       {/* Admin Routes */}
+      <Route
+        path="/admin/prospects"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <TeamProspects title="Prospectos comerciales" />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/doctors"
         element={
