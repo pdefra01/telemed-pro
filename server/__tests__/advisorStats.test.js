@@ -1,0 +1,149 @@
+import { describe, it, expect, vi } from 'vitest';
+import { computeAdvisorStats } from '../advisorStats.js';
+
+/**
+ * Stub of the tables the stats read. `adhesion` rows are split by what the
+ * query asks: head count queries, the 100-row sales list, and the approved list.
+ */
+function createStub({ profile = { promoter_code: 'ADV-1' }, profileError = null, sales = [], approved = [], counts = {}, producer = null, paidIds = [], errors = {} } = {}) {
+  return {
+    from(table) {
+      const f = { eq: {}, head: false, limit: null, in: {} };
+      const builder = {
+        select: (_cols, opts) => { f.head = Boolean(opts?.head); return builder; },
+        eq: (c, v) => { f.eq[c] = v; return builder; },
+        gt: () => builder,
+        in: (c, v) => { f.in[c] = v; return builder; },
+        order: () => builder,
+        limit: (n) => { f.limit = n; return builder; },
+        single: async () => ({ data: profile, error: profileError }),
+        maybeSingle: async () => ({ data: producer, error: null }),
+        then: (resolve, reject) => {
+          let result;
+          if (table === 'adhesion_requests') {
+            if (errors.adhesion) result = { data: null, count: null, error: errors.adhesion };
+            else if (f.head) result = { count: counts[f.eq.status ?? 'total'] ?? 0, error: null };
+            else if (f.limit) result = { data: sales, error: null };
+            else result = { data: approved, error: null };
+          } else if (table === 'affiliate_account_movements') {
+            result = errors.ledger
+              ? { data: null, error: errors.ledger }
+              : { data: paidIds.filter((id) => (f.in.entity_id || []).includes(id)).map((entity_id) => ({ entity_id })), error: null };
+          } else {
+            result = { data: [], error: null };
+          }
+          return Promise.resolve(result).then(resolve, reject);
+        },
+      };
+      return builder;
+    },
+  };
+}
+
+const sale = (id, status, approved_profile_id = null) => ({
+  id, titular_name: `Titular ${id}`, titular_dni: '30123456', plan_type: 'Plan Familiar', status, created_at: '2026-10-01T00:00:00Z', approved_profile_id,
+});
+
+describe('computeAdvisorStats', () => {
+  it('returns zeros when the advisor has no promoter code', async () => {
+    const result = await computeAdvisorStats({ supabaseAdmin: createStub({ profile: { promoter_code: null } }) }, 'adv-1');
+
+    expect(result).toEqual({
+      totalSales: 0, approvedSales: 0, pendingSales: 0, confirmedSales: 0, unconfirmedSales: 0,
+      commissions: 0, linksSharedCount: 0, sales: [],
+    });
+  });
+
+  it('returns zeros when the profile cannot be read', async () => {
+    const result = await computeAdvisorStats({ supabaseAdmin: createStub({ profile: null, profileError: new Error('x') }) }, 'adv-1');
+    expect(result.totalSales).toBe(0);
+    expect(result.sales).toEqual([]);
+  });
+
+  it('keeps the request counts and the links shared', async () => {
+    const stub = createStub({ counts: { total: 12, approved: 5, pending: 4 }, producer: { links_shared_count: 30 } });
+
+    const result = await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions: async () => 0 }, 'adv-1');
+
+    expect(result.totalSales).toBe(12);
+    expect(result.approvedSales).toBe(5);
+    expect(result.pendingSales).toBe(4);
+    expect(result.linksSharedCount).toBe(30);
+  });
+
+  it('computes the commission only over the sales with a confirmed payment', async () => {
+    const approved = [
+      { approved_profile_id: 'paid', plan_type: 'Plan Familiar', payment_method: 'cash' },
+      { approved_profile_id: 'unpaid', plan_type: 'Plan Familiar', payment_method: 'cash' },
+      { approved_profile_id: null, plan_type: 'Plan Familiar', payment_method: 'cash' },
+    ];
+    const computeCommissions = vi.fn().mockResolvedValue(25000);
+    const stub = createStub({ approved, paidIds: ['paid'], counts: { approved: 3 } });
+
+    const result = await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions }, 'adv-1');
+
+    expect(computeCommissions).toHaveBeenCalledTimes(1);
+    expect(computeCommissions.mock.calls[0][1]).toEqual([approved[0]]);
+    expect(result.commissions).toBe(25000);
+    expect(result.confirmedSales).toBe(1);
+    expect(result.unconfirmedSales).toBe(2);
+  });
+
+  it('pays no commission and reports every approved sale as unconfirmed when nothing was paid', async () => {
+    const approved = [{ approved_profile_id: 'a' }, { approved_profile_id: 'b' }];
+    const computeCommissions = vi.fn().mockResolvedValue(0);
+
+    const result = await computeAdvisorStats({ supabaseAdmin: createStub({ approved, paidIds: [] }), computeCommissions }, 'adv-1');
+
+    expect(computeCommissions.mock.calls[0][1]).toEqual([]);
+    expect(result.confirmedSales).toBe(0);
+    expect(result.unconfirmedSales).toBe(2);
+  });
+
+  it('flags each approved sale as paid or not, leaves other statuses unflagged and never leaks the profile id', async () => {
+    const sales = [sale('s1', 'approved', 'paid'), sale('s2', 'approved', 'unpaid'), sale('s3', 'pending'), sale('s4', 'rejected')];
+    const approved = [{ approved_profile_id: 'paid' }, { approved_profile_id: 'unpaid' }];
+
+    const result = await computeAdvisorStats(
+      { supabaseAdmin: createStub({ sales, approved, paidIds: ['paid'] }), computeCommissions: async () => 0 },
+      'adv-1'
+    );
+
+    const byId = Object.fromEntries(result.sales.map((s) => [s.id, s]));
+    expect(byId.s1.paymentConfirmed).toBe(true);
+    expect(byId.s2.paymentConfirmed).toBe(false);
+    expect(byId.s3.paymentConfirmed).toBeUndefined();
+    expect(byId.s4.paymentConfirmed).toBeUndefined();
+    expect(result.sales.every((s) => !('approved_profile_id' in s))).toBe(true);
+    expect(byId.s1.titular_name).toBe('Titular s1');
+  });
+
+  it('flags a listed approved sale from the ledger even when it is not among the commission rows', async () => {
+    // A listed sale (latest 100) whose profile is confirmed must be flagged on its own merits.
+    const sales = [sale('s1', 'approved', 'paid-elsewhere')];
+
+    const result = await computeAdvisorStats(
+      { supabaseAdmin: createStub({ sales, approved: [], paidIds: ['paid-elsewhere'] }), computeCommissions: async () => 0 },
+      'adv-1'
+    );
+
+    expect(result.sales[0].paymentConfirmed).toBe(true);
+  });
+
+  it('throws when a query fails, so the route can answer 500', async () => {
+    await expect(computeAdvisorStats({ supabaseAdmin: createStub({ errors: { adhesion: new Error('db') } }) }, 'adv-1')).rejects.toThrow('db');
+    await expect(computeAdvisorStats({ supabaseAdmin: createStub({ approved: [{ approved_profile_id: 'a' }], errors: { ledger: new Error('ledger') } }), computeCommissions: async () => 0 }, 'adv-1')).rejects.toThrow('ledger');
+  });
+});
+
+describe('route wiring', () => {
+  it('server.js delegates /api/advisor/stats to computeAdvisorStats behind requireAuth', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const { dirname, resolve } = await import('node:path');
+    const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../server.js'), 'utf8');
+
+    expect(source).toMatch(/app\.get\(\s*'\/api\/advisor\/stats'\s*,\s*requireAuth\s*,/);
+    expect(source).toMatch(/computeAdvisorStats\(\s*\{\s*supabaseAdmin\s*\}\s*,\s*req\.user\.id\s*\)/);
+  });
+});

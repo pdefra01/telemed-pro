@@ -21,7 +21,8 @@ import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/whatsappSessionMonitor.js';
 import { whatsappStatusHandler } from './server/whatsappStatus.js';
-import { preapprovalTerms, computeAdvisorCommissions } from './server/pricing.js';
+import { preapprovalTerms } from './server/pricing.js';
+import { computeAdvisorStats } from './server/advisorStats.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
 import { sendAdhesionPaymentLink } from './server/adhesionPaymentLinkDelivery.js';
 import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
@@ -1265,81 +1266,7 @@ app.post('/api/adhesion/dni-upload-urls', dniUploadUrlsLimiter, async (req, res)
  */
 app.get('/api/advisor/stats', requireAuth, async (req, res) => {
   try {
-    // 1. Obtener promoter_code del perfil
-    const { data: profile, error: profError } = await supabaseAdmin
-      .from('profiles')
-      .select('promoter_code')
-      .eq('id', req.user.id)
-      .single();
-    
-    if (profError || !profile || !profile.promoter_code) {
-      return res.status(200).json({
-        totalSales: 0,
-        approvedSales: 0,
-        pendingSales: 0,
-        commissions: 0,
-        linksSharedCount: 0,
-        sales: []
-      });
-    }
-
-    const promoterCode = profile.promoter_code;
-
-    // 2. Obtener solicitudes de adhesion (limitadas a las 100 más recientes para evitar cargas masivas)
-    const { data: sales, error: salesError } = await supabaseAdmin
-      .from('adhesion_requests')
-      .select('id, titular_name, titular_dni, plan_type, status, created_at')
-      .eq('promoter_id', promoterCode)
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (salesError) throw salesError;
-
-    // 3. Obtener totales reales sin límite (para métricas precisas)
-    const { count: totalCount } = await supabaseAdmin
-      .from('adhesion_requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('promoter_id', promoterCode);
-
-    const { count: approvedCount } = await supabaseAdmin
-      .from('adhesion_requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('promoter_id', promoterCode)
-      .eq('status', 'approved');
-
-    const { count: pendingCount } = await supabaseAdmin
-      .from('adhesion_requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('promoter_id', promoterCode)
-      .eq('status', 'pending');
-
-    // 4. Obtener links_shared_count desde producers
-    const { data: producer } = await supabaseAdmin
-      .from('producers')
-      .select('links_shared_count')
-      .eq('id', req.user.id)
-      .maybeSingle();
-
-    const linksSharedCount = producer?.links_shared_count || 0;
-    const approvedSales = approvedCount || 0;
-
-    // 5. Comisión fija por plan vendido (plans.advisor_commission_amount)
-    const { data: approvedRequests, error: approvedError } = await supabaseAdmin
-      .from('adhesion_requests')
-      .select('approved_profile_id, plan_type, payment_method')
-      .eq('promoter_id', promoterCode)
-      .eq('status', 'approved');
-    if (approvedError) throw approvedError;
-    const commissions = await computeAdvisorCommissions({ supabaseAdmin }, approvedRequests);
-
-    res.status(200).json({
-      totalSales: totalCount || 0,
-      approvedSales,
-      pendingSales: pendingCount || 0,
-      commissions,
-      linksSharedCount,
-      sales: sales || []
-    });
+    res.status(200).json(await computeAdvisorStats({ supabaseAdmin }, req.user.id));
   } catch (err) {
     console.error('[advisor/stats] Error:', err);
     res.status(500).json({ error: 'Error al recuperar estadísticas de venta.' });
