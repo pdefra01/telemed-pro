@@ -19,6 +19,9 @@ const toAffiliate = (row: any): CollectionAffiliate => ({
   lastActionType: row.last_action_type ?? undefined,
   promisedDate: row.promised_date ?? undefined,
   actionsCount: Number(row.actions_count),
+  debitRejected: row.debit_rejected === true,
+  debitRejectedAt: row.debit_rejected_at ?? undefined,
+  debitFailures: Number(row.debit_failures ?? 0),
 });
 
 const toAction = (row: any): CollectionAction => ({

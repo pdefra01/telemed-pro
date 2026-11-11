@@ -39,6 +39,11 @@ export interface CollectionAffiliate {
   lastActionType?: CollectionActionType;
   promisedDate?: string;
   actionsCount: number;
+  /** The current Mercado Pago debit subscription is 'payment_failed'. */
+  debitRejected: boolean;
+  /** Date of the last rejected debit (kept after a recovery, as history). */
+  debitRejectedAt?: string;
+  debitFailures: number;
 }
 
 export interface CollectionAction {

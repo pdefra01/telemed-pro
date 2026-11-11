@@ -9,12 +9,16 @@ import {
   COLLECTION_ACTION_TYPES,
   COLLECTION_STATUS_BADGE,
   COLLECTION_STATUS_LABELS,
+  DEBIT_REJECTED_BADGE,
+  DEBIT_REJECTED_LABEL,
+  debitRejectedCount,
+  debitRejectionDetail,
   formatDateOnly,
   formatTimestamp,
   gestionesLabel,
 } from '../../utils/collections';
 
-type StatusFilter = 'debt' | 'all' | CollectionStatus;
+type StatusFilter = 'debt' | 'all' | 'debit' | CollectionStatus;
 
 interface CollectionsProps {
   title?: string;
@@ -72,6 +76,8 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', t
     return result;
   }, [affiliates]);
 
+  const debitRejected = useMemo(() => affiliates.filter((a) => a.debitRejected).length, [affiliates]);
+
   const totalOwed = useMemo(
     () => affiliates.filter((a) => a.paymentStatus !== 'current').reduce((sum, a) => sum + a.balance, 0),
     [affiliates]
@@ -93,7 +99,11 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', t
     return affiliates.filter((a) => {
       const matchesStatus =
         statusFilter === 'all' ||
-        (statusFilter === 'debt' ? a.paymentStatus !== 'current' : a.paymentStatus === statusFilter);
+        (statusFilter === 'debt'
+          ? a.paymentStatus !== 'current'
+          : statusFilter === 'debit'
+            ? a.debitRejected
+            : a.paymentStatus === statusFilter);
       const matchesAdvisor = !team || advisorFilter === 'all' || a.advisorId === advisorFilter;
       return matchesStatus && matchesAdvisor && (!term || a.affiliateName.toLowerCase().includes(term));
     });
@@ -168,6 +178,11 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', t
               <strong className="text-slate-900">{counts[s]}</strong> {COLLECTION_STATUS_LABELS[s]}
             </span>
           ))}
+          {debitRejected > 0 && (
+            <span data-testid="summary-debit" className="text-red-700">
+              {debitRejectedCount(debitRejected)}
+            </span>
+          )}
           <span data-testid="summary-debt">
             Deuda <strong className="text-slate-900">{formatCurrency(totalOwed)}</strong>
           </span>
@@ -220,6 +235,7 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', t
           <option value="overdue">En mora</option>
           <option value="pending">Pendientes</option>
           <option value="current">Al día</option>
+          <option value="debit">{DEBIT_REJECTED_LABEL}</option>
         </select>
       </div>
 
@@ -242,6 +258,9 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', t
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${COLLECTION_STATUS_BADGE[a.paymentStatus]}`}>
                     {COLLECTION_STATUS_LABELS[a.paymentStatus]}
                   </span>
+                  {a.debitRejected && (
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${DEBIT_REJECTED_BADGE}`}>{DEBIT_REJECTED_LABEL}</span>
+                  )}
                   {team && <span className="text-sm text-gray-500">{a.advisorName}</span>}
                   {a.affiliatePhone && <span className="text-sm text-gray-500">{a.affiliatePhone}</span>}
                   {a.promisedDate && <span className="text-sm font-semibold text-gray-700">Promete pagar el {formatDateOnly(a.promisedDate)}</span>}
@@ -315,6 +334,7 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', t
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-gray-600">
                       {a.planName && <span>{a.planName}</span>}
                       {a.paidThrough && <span>Cobertura hasta {formatTimestamp(a.paidThrough)}</span>}
+                      {a.debitRejected && <span className="text-red-700">{debitRejectionDetail(a.debitRejectedAt, a.debitFailures)}</span>}
                       <span>{gestionesLabel(a.actionsCount)}</span>
                       {a.lastActionType && a.lastActionAt && (
                         <span>Última: {COLLECTION_ACTION_LABELS[a.lastActionType]} ({formatTimestamp(a.lastActionAt)})</span>

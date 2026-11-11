@@ -5,7 +5,8 @@ import {
   Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw, FileText, Unlock
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
-import { affiliateRepository, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../../repositories/AffiliateRepository';
+import { affiliateRepository, DebitRejection, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../../repositories/AffiliateRepository';
+import { DEBIT_REJECTED_LABEL, debitRejectedCount, debitRejectionDetail } from '../../utils/collections';
 import { adhesionRepository, AdhesionRequest } from '../../repositories/AdhesionRepository';
 import { AffiliateLedgerModal } from './AffiliateLedgerModal';
 import { AdhesionEmailEditor } from './AdhesionEmailEditor';
@@ -105,10 +106,13 @@ const Affiliates: React.FC = () => {
     return () => { isCurrent = false; };
   }, [selectedRequest]);
   const [promoterFilter, setPromoterFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended' | 'debit'>('active');
+  // Mercado Pago debit rejections by profile id (S5); empty when they cannot be read.
+  const [debitRejections, setDebitRejections] = useState<Record<string, DebitRejection>>({});
 
   useEffect(() => {
     loadAffiliates();
+    loadDebitRejections();
     loadRequests();
     loadPlans();
   }, []);
@@ -135,6 +139,14 @@ const Affiliates: React.FC = () => {
       console.error("Error cargando solicitudes pendientes:", error);
     } finally {
       setIsRequestsLoading(false);
+    }
+  };
+
+  const loadDebitRejections = async () => {
+    try {
+      setDebitRejections(await affiliateRepository.getDebitRejections());
+    } catch (error) {
+      console.error("Error cargando débitos rechazados:", error);
     }
   };
 
@@ -422,7 +434,10 @@ const Affiliates: React.FC = () => {
     p.isActive ? 'active' : p.planStatus === 'suspended' ? 'suspended' : 'pending';
   const filteredAffiliates = statusFilter === 'all'
     ? affiliates
-    : affiliates.filter(p => affiliateStatus(p) === statusFilter);
+    : statusFilter === 'debit'
+      ? affiliates.filter(p => debitRejections[p.id])
+      : affiliates.filter(p => affiliateStatus(p) === statusFilter);
+  const debitRejectedTotal = affiliates.filter(p => debitRejections[p.id]).length;
 
   const filteredRequests = promoterFilter === 'all'
     ? requests
@@ -435,6 +450,9 @@ const Affiliates: React.FC = () => {
         <div>
           <h2 className="text-emerald-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Comercial / CRM</h2>
           <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tighter">Padrón de <span className="text-slate-500 font-light italic">Afiliados</span></h1>
+          {debitRejectedTotal > 0 && (
+            <p data-testid="debit-rejections-count" className="mt-2 text-sm font-bold text-rose-400">{debitRejectedCount(debitRejectedTotal)}</p>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
@@ -448,6 +466,7 @@ const Affiliates: React.FC = () => {
             <option value="active">Activos</option>
             <option value="pending">Pendientes</option>
             <option value="suspended">Suspendidos</option>
+            <option value="debit">{DEBIT_REJECTED_LABEL}</option>
             <option value="all">Todos los estados</option>
           </select>
           <div className="relative group flex-1 sm:flex-initial">
@@ -595,6 +614,16 @@ const Affiliates: React.FC = () => {
                             : 'Pendiente'
                         }
                       </span>
+                      {debitRejections[patient.id] && (
+                        <div className="mt-1">
+                          <span
+                            title={debitRejectionDetail(debitRejections[patient.id].rejectedAt, debitRejections[patient.id].failures)}
+                            className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                          >
+                            {DEBIT_REJECTED_LABEL}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end space-x-3">

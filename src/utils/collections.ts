@@ -30,5 +30,17 @@ export const formatDateOnly = (value: string): string => {
 
 export const formatTimestamp = (iso: string): string => new Date(iso).toLocaleDateString('es-AR');
 
+/** Mercado Pago debit rejection mark (S5), shared by Cobranzas and the Padrón de Afiliados. */
+export const DEBIT_REJECTED_LABEL = 'Débito rechazado';
+export const DEBIT_REJECTED_BADGE = 'bg-red-600 text-white';
+
+export const debitRejectedCount = (count: number): string =>
+  count === 1 ? '1 débito rechazado' : `${count} débitos rechazados`;
+
+export const debitRejectionDetail = (rejectedAt: string | undefined, failures: number): string => {
+  const count = failures === 1 ? '1 rechazo' : `${failures} rechazos`;
+  return rejectedAt ? `Rechazado el ${formatTimestamp(rejectedAt)} · ${count}` : count;
+};
+
 export const gestionesLabel = (count: number): string =>
   count === 0 ? 'Sin gestiones' : count === 1 ? '1 gestión' : `${count} gestiones`;
