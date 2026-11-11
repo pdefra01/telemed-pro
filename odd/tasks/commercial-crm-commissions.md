@@ -17,12 +17,13 @@ Objective: close the defects of the CRM code review, let the supervisor act on t
   7. Prospect lists are unpaginated: admin/supervisor views and their per-status totals are truncated at 1000.
   8. Backdated anonymous surveys: the prospect's created_at must be the time it entered the CRM, not the client-settable survey date.
   Also (consistency): `advisor_monthly_metrics` must scope the team with `is_supervisor_of()` like the policies.
+- S7 (user, applies to every CRM screen): "Necesito que sea fácil de leer la información, minimalista, práctica la o las interfases". Additions stay minimal (no extra cards, badges or explanatory text unless needed); existing screens are not redesigned in delivery A.
 
 ## Tasks
 ### Delivery A (branch feat/commercial-crm-fixes): review fixes
-- [ ] A1 S6.2,S6.3,S6.5,S6.8,S6.9 DB: intake fixes + metrics scope + pgTAP. Risk: item 2.
-- [ ] A2 S6.4 server: confirmed ids and approved count without the 1000-row cap + Vitest. Risk: item 3.
-- [ ] A3 S6.1,S6.6,S6.7 client: supervisor session policy (4 places), history race, prospect pagination + Vitest. Risk: item 2 (session policy).
+- [x] A1 S6.1(DB),S6.2,S6.3,S6.4(DB),S6.5,S6.8,S6.9 DB: intake fixes + metrics scope + pgTAP. Route: delegated writer. Commit 892faf6. RED: crm_review_fixes.sql and prospect_intake.sql failed (column status_changed_at missing). GREEN: `supabase test db --local` all ok except the known doctor_patient_chart_data.sql. Risk: item 2 (metrics scope) and item 1 (prospect_intake_log CHECK constraints widened; the intake now writes adhesion rows).
+- [x] A2 S6.4 server: confirmed ids and approved count without the 1000-row cap + Vitest. Route: delegated writer. Commit 7279306. RED: 5 salesConfirmation + 6 advisorStats tests failed (ledger read through .from, no .range pages). GREEN: `npx vitest run server` 538/538. Risk: item 3 (server now depends on the confirmed_affiliate_ids RPC: migration 20261111090000 must be applied before the server deploy).
+- [x] A3 S6.1,S6.6,S6.7,S7 client: supervisor session policy (4 places), history race, prospect pagination + Vitest. Route: delegated writer. Commit 99e2a4d. RED: sessionExpiry (4), OCCSettings (2), Collections (2), ProspectRepository (4), Prospects/TeamProspects pagination (5) failed. GREEN: full `npx vitest run` only the 5 known failures; `npx tsc --noEmit` clean. Risk: item 2 (session policy).
 ### Delivery B: supervisor acts on the team (S1)
 - [ ] B1 RLS + UI for supervisor actions on prospects and collection actions + pgTAP/Vitest. Risk: item 2.
 ### Delivery C: MP debit rejections (S4, S5)
@@ -34,3 +35,5 @@ Objective: close the defects of the CRM code review, let the supervisor act on t
 ## Log
 - L1 (2026-11-11): "Quiero repasar la feature completa, para aclarar los objetivos de la misma"; "El supervisor puede mirar y actuar, es su equipo, en esta feature necesito que se vea la comision a cobrar (definamos exactamente el mecanismo que aprueba el pago de la comisión)"; "Necesito que se consulte MP para ver rechazos en los debitos"; "Admin aprueba la liquidación, ambas razones para ver los rechazos"; "Retenida, y se avisa al asesor y admin (se debe ver en la ventana gestión de afiliados)"; "Bien tenemos todo"; consolidated definition (with no supervisor commission, no clawback, on-screen notice only) confirmed: "Dale arranquemos".
 - L2 (2026-11-11): route: the parent session is past the long-session context backstop, so each task goes to one bounded delegated writer, sequentially (no parallel writers: the 7.5 GB machine cannot run two Docker stacks).
+- L3 (2026-11-11): "Necesito que sea fácil de leer la información, minimalista, práctica la o las interfases" (recorded as S7).
+- L4 (2026-11-11): delivery A written (A1 892faf6, A2 7279306, A3 99e2a4d). Decisions: supervisor default is 15 min / non-persistent as S6.1 states (the advisor default stays 30 in DEFAULT_POLICY/OCCSettings); advisors and supervisors keep no max session (DEFAULT_MAX_SESSION_HOURS unchanged); handled adhesion requests are logged and never rescanned, so a request whose prospect is created after it was handled no longer advances it; approved requests without an approved profile are not scanned until the profile exists; prospect search/filters work on the loaded pages (short note shown only while more pages remain). Next: delivery B.
