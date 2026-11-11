@@ -34,6 +34,7 @@ Objective: a one-level commercial hierarchy (supervisor → advisors) with a lig
 
 ## Delivery
 - Strategy: single-pr (exception-ok). Forecast was not made at creation; final D1 diff is ~2,240 authored lines over 6 work-unit commits (slice boundaries: T1, T2 | T3 | T4 | T5 | T6). User chose one large PR instead of chained PRs on 2026-11-11 ("PR grande").
+- D2 (branch feat/commercial-crm-goals, stacked on D1, ~1,400 changed lines over 4 commits T7-T10): `gentle-ai review assess` = medium (executable_change in src/App.tsx), no review due. Independent verifier for T7 (item 2): no blockers. Advisories: (1) a demoted supervisor keeps team access and now also revenue/sales counts through the metrics function (fix: require role = 'supervisor' in the supervisor branch / is_supervisor_of); (2) deactivated advisors drop out of past-month totals; (3) revenue uses the affiliate's current plan, not the plan at sale time (matches S9); (4) tests lack a sale near Argentina midnight, a deactivated advisor, a demoted supervisor and an out-of-scope upsert; (5) `search_path` without `pg_temp` (same pattern as existing functions).
 - RDD enabled globally on 2026-11-11; `gentle-ai review assess` over master..HEAD = medium (executable_change in server.js), no review due. Independent verifier for T1/T2 (risk item 2): no blockers, 5 advisories (inactive advisor keeps prospect access via RLS; supervisor role change leaves dangling team; advisor delete blocked by ON DELETE RESTRICT; non-string phone in create-supervisor; supervisor reads full advisor profile).
 
 ## Log
