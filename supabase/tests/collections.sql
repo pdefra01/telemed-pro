@@ -145,12 +145,12 @@ RESET ROLE;
 SELECT results_eq($$SELECT created_by::text FROM public.collection_actions WHERE note = 'sent reminder'$$,
   $$VALUES ('c5c5c5c5-0000-0000-0000-000000000003')$$, 'created_by defaults to the logged-in advisor');
 
--- ── S12: the supervisor only reads; other advisors see nothing of it ────────
+-- ── S12 + commercial-crm-commissions S1: the supervisor reads and logs; other advisors see nothing of it ──
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000002","role":"authenticated"}', true);
 SELECT is((SELECT count(*)::int FROM public.collection_actions), 4, 'a supervisor reads every action on their team''s affiliates');
-SELECT throws_ok($$INSERT INTO public.collection_actions (affiliate_id, action_type, note) VALUES ('c5c5c5c5-0000-0000-0000-000000000011', 'note', 'by supervisor')$$,
-  '42501', NULL, 'a supervisor cannot log actions (read-only)');
+SELECT lives_ok($$INSERT INTO public.collection_actions (affiliate_id, action_type, note) VALUES ('c5c5c5c5-0000-0000-0000-000000000011', 'note', 'by supervisor')$$,
+  'a supervisor logs actions on their team''s affiliates');
 RESET ROLE;
 
 SET LOCAL ROLE authenticated;
@@ -161,7 +161,7 @@ RESET ROLE;
 -- ── S12: the admin reads and logs everywhere ────────────────────────────────
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"c5c5c5c5-0000-0000-0000-000000000001","role":"authenticated"}', true);
-SELECT is((SELECT count(*)::int FROM public.collection_actions), 4, 'an admin reads all actions');
+SELECT is((SELECT count(*)::int FROM public.collection_actions), 5, 'an admin reads all actions (including the supervisor''s)');
 SELECT lives_ok($$INSERT INTO public.collection_actions (affiliate_id, action_type, note) VALUES ('c5c5c5c5-0000-0000-0000-000000000013', 'call', 'admin follow-up')$$,
   'an admin logs an action on any brought affiliate');
 RESET ROLE;

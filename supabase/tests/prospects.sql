@@ -67,13 +67,13 @@ SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"c2c2c2c2-0000-0000-0000-000000000002","role":"authenticated"}', true);
 SELECT results_eq($$SELECT id::text FROM public.prospects$$, $$VALUES ('c2c2c2c2-0000-0000-0000-00000000000a')$$,
   'a supervisor sees only the prospects of their team');
-SELECT throws_ok($$INSERT INTO public.prospects (advisor_id, full_name) VALUES ('c2c2c2c2-0000-0000-0000-000000000003', 'By Supervisor')$$,
-  '42501', NULL, 'a supervisor cannot add prospects');
+SELECT lives_ok($$INSERT INTO public.prospects (advisor_id, full_name) VALUES ('c2c2c2c2-0000-0000-0000-000000000003', 'By Supervisor')$$,
+  'a supervisor adds prospects for an advisor of their team');
 UPDATE public.prospects SET status = 'lost' WHERE id = 'c2c2c2c2-0000-0000-0000-00000000000a';
 DELETE FROM public.prospects WHERE id = 'c2c2c2c2-0000-0000-0000-00000000000a';
 RESET ROLE;
-SELECT results_eq($$SELECT status FROM public.prospects WHERE id = 'c2c2c2c2-0000-0000-0000-00000000000a'$$, $$VALUES ('contacted')$$,
-  'a supervisor can neither edit nor delete their team''s prospects');
+SELECT results_eq($$SELECT status FROM public.prospects WHERE id = 'c2c2c2c2-0000-0000-0000-00000000000a'$$, $$VALUES ('lost')$$,
+  'a supervisor edits but cannot delete their team''s prospects');
 
 -- ── S5: nobody else sees prospects ──────────────────────────────────────────
 SET LOCAL ROLE authenticated;
@@ -86,7 +86,7 @@ RESET ROLE;
 -- ── S5: the admin sees and manages all ──────────────────────────────────────
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"c2c2c2c2-0000-0000-0000-000000000001","role":"authenticated"}', true);
-SELECT is((SELECT count(*)::int FROM public.prospects), 2, 'an admin sees every prospect');
+SELECT is((SELECT count(*)::int FROM public.prospects), 3, 'an admin sees every prospect (including the supervisor''s)');
 SELECT lives_ok($$INSERT INTO public.prospects (advisor_id, full_name) VALUES ('c2c2c2c2-0000-0000-0000-000000000004', 'By Admin')$$,
   'an admin can add a prospect for any advisor');
 RESET ROLE;
