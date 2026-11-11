@@ -67,6 +67,10 @@ Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para n
 - *Asesores*: en **Prospectos** cargan sus propios prospectos (nombre, teléfono, email, notas), los pasan por Nuevo → Contactado → Interesado → Afiliado o Perdido, y registran cada contacto. Cada asesor ve solo los suyos.
 - *Supervisores*: ingresan por la pestaña **Asesor** y ven en **Mi equipo**, solo lectura, los prospectos de los asesores de su equipo, con resumen por estado y filtros por asesor y estado.
 
+**Ingreso y avance automático de prospectos**: el sistema también trabaja solo, cada unos 10 minutos.
+- Las personas que completan la **encuesta de opinión** con el código de un asesor y aceptan que las contacten aparecen como prospectos nuevos de ese asesor, marcados **Desde encuesta**, con el resumen de sus respuestas en las notas. Si el asesor elimina uno, no vuelve a aparecer.
+- La **adhesión es el paso posterior al prospecto**: cuando alguien se adhiere con el código de un asesor y su teléfono o su email coinciden con un prospecto de ese mismo asesor, el prospecto pasa a **Interesado** mientras la solicitud está pendiente y a **Afiliado** cuando se activa. Nunca retrocede de estado, y una solicitud convierte un solo prospecto.
+
 **Seguimiento de cobranzas**: cada asesor sigue las cobranzas de los afiliados que trajo.
 - *Asesores*: en **Cobranzas** ven a sus afiliados con el estado de cuenta (**En mora**, **Pendiente** o **Al día**), el saldo, el fin de la cobertura y la última gestión. Por defecto se muestran los que tienen deuda; el filtro permite ver todos. Con **Registrar gestión** anotan una llamada, un WhatsApp, una visita, una nota o una **promesa de pago** (con su fecha), y con **Ver historial** consultan todas las gestiones. Las gestiones no se editan ni se borran.
 - *Supervisores*: en **Cobranzas del equipo** ven, solo lectura, la situación de los afiliados de todos los asesores de su equipo sea cual sea (en mora, pendiente o al día), con un resumen por asesor y su historial de gestiones. *Administradores*: lo mismo para todos los asesores, en **Cobranzas comerciales**.
