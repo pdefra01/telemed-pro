@@ -33,6 +33,7 @@ import { sendPaymentReceiptEmail } from './server/paymentReceipt.js';
 import { applyProfileAccess } from './server/profileAccess.js';
 import { buildRequireAdmin } from './server/auth.js';
 import { setAdvisorStatusHandler, searchAdvisorsHandler, isAdvisorAccountActive } from './server/advisors.js';
+import { createSupervisorHandler } from './server/supervisors.js';
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1573,6 +1574,11 @@ app.post('/api/create-advisor', requireAuth, requireAdmin, async (req, res) => {
     res.status(500).json({ error: 'Error interno en el servidor.' });
   }
 });
+
+// Alta de supervisores comerciales (OCC Admin Only). Logic: server/supervisors.js
+app.post('/api/create-supervisor', requireAuth, requireAdmin, (req, res) =>
+  createSupervisorHandler(supabaseAdmin, req, res)
+);
 
 /**
  * PATCH /api/advisors/:id/status
