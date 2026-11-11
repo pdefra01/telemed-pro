@@ -189,4 +189,72 @@ describe('Collections (advisor)', () => {
     render(<Collections />);
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudieron cargar/i);
   });
+
+  it('has no advisor filter or per-advisor summary: an advisor only sees their own affiliates', async () => {
+    render(<Collections />);
+    await screen.findByTestId('collection-aff-1');
+
+    expect(screen.queryByLabelText('Filtrar por asesor')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('advisor-summary-adv-1')).not.toBeInTheDocument();
+  });
+});
+
+describe('Collections (read-only team view for supervisors and admins)', () => {
+  const team = [
+    build({}),
+    build({ affiliateId: 'aff-2', affiliateName: 'Marcos Díaz', paymentStatus: 'pending', balance: 800 }),
+    build({ affiliateId: 'aff-4', affiliateName: 'Ana Torres', advisorId: 'adv-2', advisorName: 'Luis Paz', paymentStatus: 'overdue', balance: 500 }),
+    build({ affiliateId: 'aff-5', affiliateName: 'Bruno Sosa', advisorId: 'adv-2', advisorName: 'Luis Paz', paymentStatus: 'current', balance: 0 }),
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(collectionRepository.listAffiliates).mockResolvedValue(team);
+    vi.mocked(collectionRepository.listActions).mockResolvedValue([action()]);
+  });
+
+  it('shows the advisor that owns each affiliate', async () => {
+    render(<Collections readOnly title="Cobranzas del equipo" />);
+
+    expect(await screen.findByRole('heading', { name: 'Cobranzas del equipo' })).toBeInTheDocument();
+    expect(within(await screen.findByTestId('collection-aff-1')).getByText('Pedro Gómez')).toBeInTheDocument();
+    expect(within(screen.getByTestId('collection-aff-4')).getByText('Luis Paz')).toBeInTheDocument();
+  });
+
+  it('is read-only: no way to log actions, but the history is available', async () => {
+    render(<Collections readOnly />);
+    const laura = await screen.findByTestId('collection-aff-1');
+
+    expect(screen.queryByRole('button', { name: /registrar gestión/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(laura).getByRole('button', { name: /ver historial/i }));
+    expect(await screen.findByText(/llamé y no atendió/i)).toBeInTheDocument();
+  });
+
+  it('summarizes the situation of each advisor, whatever the status', async () => {
+    render(<Collections readOnly />);
+    await screen.findByTestId('collection-aff-1');
+
+    const pedro = screen.getByTestId('advisor-summary-adv-1');
+    expect(pedro).toHaveTextContent('Pedro Gómez');
+    expect(pedro).toHaveTextContent(/en mora: 1/i);
+    expect(pedro).toHaveTextContent(/pendientes: 1/i);
+    expect(pedro).toHaveTextContent(/al día: 0/i);
+    expect(pedro).toHaveTextContent(/2\.300/);
+
+    const luis = screen.getByTestId('advisor-summary-adv-2');
+    expect(luis).toHaveTextContent(/en mora: 1/i);
+    expect(luis).toHaveTextContent(/al día: 1/i);
+    expect(luis).toHaveTextContent(/500/);
+  });
+
+  it('filters by advisor', async () => {
+    render(<Collections readOnly />);
+    await screen.findByTestId('collection-aff-1');
+
+    fireEvent.change(screen.getByLabelText('Filtrar por asesor'), { target: { value: 'adv-2' } });
+
+    expect(screen.queryByTestId('collection-aff-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('collection-aff-4')).toBeInTheDocument();
+  });
 });

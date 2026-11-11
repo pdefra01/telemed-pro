@@ -410,6 +410,15 @@ const App: React.FC = () => {
         }
       />
 
+      <Route
+        path="/team/collections"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['supervisor', 'admin']}>
+            <Collections readOnly title={user?.role === 'admin' ? 'Cobranzas comerciales' : 'Cobranzas del equipo'} />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Admin Routes */}
       <Route
         path="/admin/supervisors"

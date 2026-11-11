@@ -29,10 +29,11 @@ describe('Layout navigation by role (commercial CRM)', () => {
     expect(hrefs()).not.toContain('/collections');
   });
 
-  it('gives the supervisor their team and its goals and metrics', () => {
+  it('gives the supervisor their team, its goals and metrics, and its collections', () => {
     renderAs('supervisor');
     expect(hrefs()).toContain('/');
     expect(hrefs()).toContain('/team/performance');
+    expect(hrefs()).toContain('/team/collections');
     expect(hrefs()).not.toContain('/prospects');
     expect(hrefs()).not.toContain('/affiliates');
     expect(hrefs()).not.toContain('/admin/producers');
@@ -42,6 +43,7 @@ describe('Layout navigation by role (commercial CRM)', () => {
     renderAs('admin');
     expect(hrefs()).toContain('/admin/prospects');
     expect(hrefs()).toContain('/admin/supervisors');
+    expect(hrefs()).toContain('/team/collections');
     expect(hrefs()).toContain('/team/performance');
     expect(hrefs()).toContain('/admin/producers');
   });

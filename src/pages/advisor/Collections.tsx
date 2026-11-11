@@ -18,6 +18,11 @@ type StatusFilter = 'debt' | 'all' | CollectionStatus;
 
 interface CollectionsProps {
   title?: string;
+  /**
+   * Supervisor / admin view: every advisor in scope, with an advisor filter and a
+   * per-advisor summary, and no way to log actions (only the advisor does that).
+   */
+  readOnly?: boolean;
 }
 
 const EMPTY_FORM = { actionType: 'call' as CollectionActionType, note: '', promisedDate: '' };
@@ -26,11 +31,12 @@ const EMPTY_FORM = { actionType: 'call' as CollectionActionType, note: '', promi
  * Collections of the affiliates an advisor brought: who owes what, and the
  * advisor's follow-up (calls, messages, visits, notes, promises to pay).
  */
-export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas' }) => {
+export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', readOnly = false }) => {
   const [affiliates, setAffiliates] = useState<CollectionAffiliate[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [advisorFilter, setAdvisorFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('debt');
   const [search, setSearch] = useState('');
 
@@ -64,15 +70,27 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas' })
     [affiliates]
   );
 
+  const advisors = useMemo(() => {
+    const byId = new Map<string, { name: string; overdue: number; pending: number; current: number; owed: number }>();
+    affiliates.forEach((a) => {
+      const entry = byId.get(a.advisorId) ?? { name: a.advisorName, overdue: 0, pending: 0, current: 0, owed: 0 };
+      entry[a.paymentStatus] += 1;
+      if (a.paymentStatus !== 'current') entry.owed += a.balance;
+      byId.set(a.advisorId, entry);
+    });
+    return [...byId.entries()].sort((x, y) => x[1].name.localeCompare(y[1].name, 'es'));
+  }, [affiliates]);
+
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     return affiliates.filter((a) => {
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'debt' ? a.paymentStatus !== 'current' : a.paymentStatus === statusFilter);
-      return matchesStatus && (!term || a.affiliateName.toLowerCase().includes(term));
+      const matchesAdvisor = !readOnly || advisorFilter === 'all' || a.advisorId === advisorFilter;
+      return matchesStatus && matchesAdvisor && (!term || a.affiliateName.toLowerCase().includes(term));
     });
-  }, [affiliates, statusFilter, search]);
+  }, [affiliates, statusFilter, advisorFilter, search, readOnly]);
 
   const startAction = (affiliateId: string) => {
     setEditingId(affiliateId);
@@ -144,6 +162,20 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas' })
         </div>
       </div>
 
+      {readOnly && advisors.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {advisors.map(([id, s]) => (
+            <div key={id} data-testid={`advisor-summary-${id}`} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <p className="font-bold text-slate-900">{s.name}</p>
+              <p className="text-sm text-gray-600">
+                En mora: {s.overdue} · Pendientes: {s.pending} · Al día: {s.current}
+              </p>
+              <p className="text-sm font-semibold text-slate-900">Deuda: {formatCurrency(s.owed)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           type="search"
@@ -153,6 +185,19 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas' })
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20"
         />
+        {readOnly && (
+          <select
+            aria-label="Filtrar por asesor"
+            value={advisorFilter}
+            onChange={(e) => setAdvisorFilter(e.target.value)}
+            className="px-4 py-2.5 border border-slate-300 rounded-xl bg-white"
+          >
+            <option value="all">Todos los asesores</option>
+            {advisors.map(([id, s]) => (
+              <option key={id} value={id}>{s.name}</option>
+            ))}
+          </select>
+        )}
         <select
           aria-label="Filtrar por estado"
           value={statusFilter}
@@ -192,6 +237,7 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas' })
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
+                    {readOnly && <span className="font-semibold text-gray-700">{a.advisorName}</span>}
                     {a.affiliatePhone && <span className="inline-flex items-center gap-1"><Phone size={14} />{a.affiliatePhone}</span>}
                     {a.planName && <span>{a.planName}</span>}
                     {a.paidThrough && <span>Cobertura hasta {formatTimestamp(a.paidThrough)}</span>}
@@ -208,13 +254,15 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas' })
                 <div className="flex flex-col items-start md:items-end gap-2">
                   <p className="text-xl font-black text-slate-900">{formatCurrency(a.balance)}</p>
                   <div className="flex gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => startAction(a.affiliateId)}
-                      className="px-3 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700"
-                    >
-                      Registrar gestión
-                    </button>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => startAction(a.affiliateId)}
+                        className="px-3 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700"
+                      >
+                        Registrar gestión
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => toggleHistory(a.affiliateId)}
@@ -226,7 +274,7 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas' })
                 </div>
               </div>
 
-              {editingId === a.affiliateId && (
+              {!readOnly && editingId === a.affiliateId && (
                 <form onSubmit={(e) => handleSave(e, a)} className="rounded-xl bg-gray-50 p-4 space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
