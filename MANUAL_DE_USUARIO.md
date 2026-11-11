@@ -62,6 +62,11 @@ Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para n
 
 **Asesores**: la comisión es un monto fijo por plan (Individual $7.500, Familiar $25.000, semestral $30.000, anual $35.000).
 
+**Estructura comercial y prospectos (CRM)**: cada asesor tiene como máximo un supervisor (un solo nivel).
+- *Administradores*: en **Supervisores** se crea un supervisor (nombre, apellido, email y contraseña) y se elige, asesor por asesor, a qué supervisor pertenece o "Sin supervisor". **Prospectos** muestra los prospectos de todos los asesores.
+- *Asesores*: en **Prospectos** cargan sus propios prospectos (nombre, teléfono, email, notas), los pasan por Nuevo → Contactado → Interesado → Afiliado o Perdido, y registran cada contacto. Cada asesor ve solo los suyos.
+- *Supervisores*: ingresan por la pestaña **Asesor** y ven en **Mi equipo**, solo lectura, los prospectos de los asesores de su equipo, con resumen por estado y filtros por asesor y estado.
+
 ### 1.2. Consulta de Historia Clínica y Recetas (`/history`)
 En la pestaña **Historia Clínica**, el paciente dispone de la bóveda médica con:
 - **Evoluciones Médicas y Estudios**: Diagnósticos y adjuntos de laboratorio e imágenes.

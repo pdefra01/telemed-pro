@@ -85,6 +85,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         },
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
         { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
+        { name: 'Supervisores', icon: <Users size={20} />, path: '/admin/supervisors' },
         { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/admin/prospects' },
         {
           name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys',

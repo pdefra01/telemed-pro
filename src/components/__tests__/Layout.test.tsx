@@ -34,6 +34,7 @@ describe('Layout navigation by role (commercial CRM)', () => {
   it('gives the admin the commercial prospects overview and keeps the advisors screen', () => {
     renderAs('admin');
     expect(hrefs()).toContain('/admin/prospects');
+    expect(hrefs()).toContain('/admin/supervisors');
     expect(hrefs()).toContain('/admin/producers');
   });
 
