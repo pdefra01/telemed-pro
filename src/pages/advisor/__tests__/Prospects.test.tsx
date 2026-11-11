@@ -13,6 +13,10 @@ vi.mock('../../../repositories/ProspectRepository', () => ({
   },
 }));
 
+vi.mock('../MonthlyProgress', () => ({
+  MonthlyProgress: () => <div data-testid="monthly-progress" />,
+}));
+
 const user: User = { id: 'adv-1', name: 'Pedro Gómez', email: 'pedro@test.local', role: 'advisor' };
 
 const build = (over: Partial<Prospect> = {}): Prospect => ({
@@ -45,6 +49,13 @@ describe('Prospects (advisor CRM)', () => {
     expect(prospectRepository.list).toHaveBeenCalledTimes(1);
     expect(within(screen.getByTestId('prospect-p-1')).getByLabelText('Estado')).toHaveValue('new');
     expect(within(screen.getByTestId('prospect-p-2')).getByLabelText('Estado')).toHaveValue('interested');
+  });
+
+  it('shows the advisor\'s month (goals and metrics) above the prospect list', async () => {
+    render(<Prospects user={user} />);
+    await screen.findByText('Laura Pérez');
+
+    expect(screen.getByTestId('monthly-progress')).toBeInTheDocument();
   });
 
   it('shows an empty state when there are no prospects', async () => {
