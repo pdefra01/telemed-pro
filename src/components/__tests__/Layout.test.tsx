@@ -18,9 +18,15 @@ const renderAs = (role: Role) => {
 const hrefs = () => screen.getAllByRole('link').map((a) => a.getAttribute('href'));
 
 describe('Layout navigation by role (commercial CRM)', () => {
-  it('gives the advisor a prospects entry', () => {
+  it('gives the advisor a prospects entry and a collections entry', () => {
     renderAs('advisor');
     expect(hrefs()).toContain('/prospects');
+    expect(hrefs()).toContain('/collections');
+  });
+
+  it('does not show the advisor collections entry to patients', () => {
+    renderAs('patient');
+    expect(hrefs()).not.toContain('/collections');
   });
 
   it('gives the supervisor their team and its goals and metrics', () => {

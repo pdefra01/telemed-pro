@@ -18,7 +18,8 @@ import {
   Clock,
   ClipboardList,
   UserPlus,
-  Target
+  Target,
+  Wallet
 } from 'lucide-react';
 import { User, Role } from '../types';
 import { getBranding } from '../config/branding';
@@ -66,6 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       return [
         { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
         { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/prospects' },
+        { name: 'Cobranzas', icon: <Wallet size={20} />, path: '/collections' },
       ];
     }
 
