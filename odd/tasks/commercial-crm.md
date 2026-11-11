@@ -16,7 +16,7 @@ Objective: a one-level commercial hierarchy (supervisor → advisors) with a lig
 
 ## Tasks
 - [x] T1 S2,S3,S7 inline: migration 20261111000000 (role check + `supervisor_id` + validation trigger + guard extension + `is_supervisor_of` + team SELECT policy) + pgTAP commercial_hierarchy.sql. Risk: item 2 (RLS, guard on prod profiles). RED (supervisor role violates CHECK, file aborts) → GREEN 17 tests PASS; full pgTAP: every file ok except doctor_patient_chart_data.sql (pre-existing: adhesion_requests.titular_birth_date NOT NULL, fails without this change too).
-- [ ] T2 S4-S6 inline: `prospects` table + RLS (advisor own / supervisor team / admin all) + pgTAP. Risk: item 2.
+- [x] T2 S4-S6 inline: migration 20261111010000 (`prospects`, validation + updated_at triggers, RLS advisor own / supervisor team read-only / admin all) + pgTAP prospects.sql. Risk: item 2 (new RLS table; no existing data touched). RED (relation missing) → GREEN 21 tests PASS. Also made both validation triggers SECURITY DEFINER so they do not depend on the writer's RLS visibility (T1 migration amended before any deploy). Local pgTAP: only the pre-existing doctor_patient_chart_data.sql fails.
 - [ ] T3 S3,S7 inline: server `POST /api/create-supervisor` + assign advisor to supervisor (admin) + node tests.
 - [ ] T4 S5,S6 inline: types, ProspectRepository, advisor Prospects page (list/create/edit/status), nav + route + Vitest.
 - [ ] T5 S5 inline: supervisor team view (prospects by advisor), admin screen to create supervisors and assign advisors + Vitest.

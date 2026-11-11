@@ -26,9 +26,12 @@ CREATE INDEX IF NOT EXISTS idx_profiles_supervisor_id ON public.profiles(supervi
 COMMENT ON COLUMN public.profiles.supervisor_id IS 'Supervisor of an advisor (one level). Privileged: only admins or the server may change it.';
 
 -- 3. Validation
+-- SECURITY DEFINER so the check does not depend on which profiles the writer
+-- can see through RLS (an advisor cannot read their supervisor's row).
 CREATE OR REPLACE FUNCTION public.validate_profile_supervisor()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
