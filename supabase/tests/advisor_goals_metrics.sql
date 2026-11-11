@@ -38,7 +38,8 @@ INSERT INTO public.producers (id, name, producer_code, email, commission_rate, s
 VALUES ('c3c3c3c3-0000-0000-0000-000000000003', 'Goal Advisor One', 'ADV-ONE', 'goal-adv-1@test.local', 10, 'active', 7);
 
 -- Sales. October 2026 for ADV-ONE: r1 (plan A), r2 (plan B), r6 (no profile), r7 (activated_at null,
--- falls back to created_at). r3 is November, r4 is pending. ADV-TWO has r5 in October.
+-- falls back to created_at), r8 (plan A, Argentina-midnight boundary). r3 is November, r4 is pending.
+-- ADV-TWO has r5 in October.
 INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
   titular_email, titular_phone, titular_civil_status, payment_method, signature_base64, status, promoter_id, approved_profile_id, activated_at, created_at)
 VALUES
@@ -48,7 +49,9 @@ VALUES
   ('c3c3c3c3-0000-0000-0000-0000000000b4', 'Sale 4', '90000004', '1990-01-01', 'x', 'x', 'x', 's4@test.local', '1', 'soltero', 'cash', 'sig', 'pending', 'ADV-ONE', NULL, NULL, '2026-10-16 12:00+00'),
   ('c3c3c3c3-0000-0000-0000-0000000000b5', 'Sale 5', '90000005', '1990-01-01', 'x', 'x', 'x', 's5@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-TWO', 'c3c3c3c3-0000-0000-0000-000000000013', '2026-10-21 12:00+00', '2026-10-20 12:00+00'),
   ('c3c3c3c3-0000-0000-0000-0000000000b6', 'Sale 6', '90000006', '1990-01-01', 'x', 'x', 'x', 's6@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', NULL, '2026-10-22 12:00+00', '2026-10-21 12:00+00'),
-  ('c3c3c3c3-0000-0000-0000-0000000000b7', 'Sale 7', '90000007', '1990-01-01', 'x', 'x', 'x', 's7@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', NULL, NULL, '2026-10-25 12:00+00');
+  ('c3c3c3c3-0000-0000-0000-0000000000b7', 'Sale 7', '90000007', '1990-01-01', 'x', 'x', 'x', 's7@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', NULL, NULL, '2026-10-25 12:00+00'),
+  -- r8: 2026-11-01 01:00 UTC is 2026-10-31 22:00 in Argentina, so it belongs to October.
+  ('c3c3c3c3-0000-0000-0000-0000000000b8', 'Sale 8', '90000008', '1990-01-01', 'x', 'x', 'x', 's8@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000011', '2026-11-01 01:00+00', '2026-10-31 12:00+00');
 
 -- Prospects of advisor 1. October cohort: p1 affiliated, p2 contacted, p3 new, p5 lost-after-contact.
 INSERT INTO public.prospects (id, advisor_id, full_name, status, last_contact_at, created_at)
@@ -121,8 +124,8 @@ SELECT results_eq($$
          prospects_affiliated::int, prospects_stale::int, links_shared::int, goal_affiliates::int, goal_revenue::numeric
     FROM public.advisor_monthly_metrics('2026-10-01', '2026-11-12')
    WHERE advisor_id = 'c3c3c3c3-0000-0000-0000-000000000003'$$,
-  $$VALUES ('c3c3c3c3-0000-0000-0000-000000000003', 4, 3500::numeric, 4, 3, 1, 2, 7, 6, 4000::numeric)$$,
-  'October metrics of advisor 1: sold (incl. null activated_at fallback), plan-price revenue, prospect cohort, stale, links, goals');
+  $$VALUES ('c3c3c3c3-0000-0000-0000-000000000003', 5, 4500::numeric, 4, 3, 1, 2, 7, 6, 4000::numeric)$$,
+  'October metrics of advisor 1: sold (incl. null activated_at fallback and the Argentina-midnight sale), plan-price revenue, prospect cohort, stale, links, goals');
 
 SELECT results_eq($$
   SELECT affiliates_sold::int, revenue::numeric, prospects_loaded::int, links_shared::int, goal_affiliates::int, goal_revenue::numeric
