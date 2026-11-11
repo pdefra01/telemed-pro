@@ -174,5 +174,20 @@ SELECT is(has_function_privilege('authenticated', 'public.advisor_monthly_metric
 SELECT is(has_function_privilege('anon', 'public.is_supervisor_of(uuid)', 'execute'), false,
   'anonymous callers cannot execute is_supervisor_of');
 
+-- ── S10: the upsert the UI uses (INSERT ... ON CONFLICT DO UPDATE) respects the same scope ──
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"c3c3c3c3-0000-0000-0000-000000000002","role":"authenticated"}', true);
+SELECT throws_ok($$INSERT INTO public.advisor_goals (advisor_id, month, target_affiliates) VALUES ('c3c3c3c3-0000-0000-0000-000000000004', '2026-10-01', 99)
+                   ON CONFLICT (advisor_id, month) DO UPDATE SET target_affiliates = EXCLUDED.target_affiliates$$,
+  '42501', NULL, 'a supervisor cannot upsert over the goal of an advisor outside their team');
+SELECT lives_ok($$INSERT INTO public.advisor_goals (advisor_id, month, target_affiliates) VALUES ('c3c3c3c3-0000-0000-0000-000000000003', '2026-10-01', 8)
+                   ON CONFLICT (advisor_id, month) DO UPDATE SET target_affiliates = EXCLUDED.target_affiliates$$,
+  'a supervisor can upsert over the goal of an advisor on their team');
+RESET ROLE;
+SELECT is((SELECT target_affiliates FROM public.advisor_goals WHERE advisor_id = 'c3c3c3c3-0000-0000-0000-000000000004' AND month = '2026-10-01'), 3,
+  'the out-of-team goal was not touched by the rejected upsert');
+SELECT is((SELECT target_affiliates FROM public.advisor_goals WHERE advisor_id = 'c3c3c3c3-0000-0000-0000-000000000003' AND month = '2026-10-01'), 8,
+  'the in-team upsert was stored');
+
 SELECT * FROM finish();
 ROLLBACK;
