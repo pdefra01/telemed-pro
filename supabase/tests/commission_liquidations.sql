@@ -446,8 +446,18 @@ SELECT results_eq($$SELECT status, exclusion_reason, retained_reason, liquidatio
   $$VALUES ('retained', NULL::text, 'Débito rechazado', true)$$, 'including a commission whose debit is still rejected retains it');
 SELECT is_empty('EXECUTE commission_invariant', 'invariant after an inclusion');
 
--- Manual catch-up: a payment after the rejection releases it, although the subscription stays payment_failed.
+-- A 0-amount payment after the rejection is not a catch-up: the debit stays rejected (both branches of the rule).
 RESET ROLE;
+INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, amount, created_at) VALUES
+  ('affiliate', 'e8e8e8e8-0000-0000-0000-00000000001b', 'payment', 0, '2026-10-25 12:00+00');
+SELECT ok(public.commission_debit_pending('e8e8e8e8-0000-0000-0000-00000000001b'),
+  'a 0-amount payment after the rejection does not release the retention');
+SELECT ok(public.debit_rejection_pending('e8e8e8e8-0000-0000-0000-00000000001b', 'payment_failed', '2026-10-20 12:00+00'),
+  'payment_failed: a 0-amount payment is not a catch-up');
+SELECT ok(public.debit_rejection_pending('e8e8e8e8-0000-0000-0000-00000000001b', 'cancelled', '2026-10-20 12:00+00'),
+  'cancelled: a 0-amount payment is not a catch-up');
+
+-- Manual catch-up: a payment after the rejection releases it, although the subscription stays payment_failed.
 INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, amount, created_at) VALUES
   ('affiliate', 'e8e8e8e8-0000-0000-0000-00000000001b', 'payment', 1000, '2026-10-28 12:00+00');
 SET LOCAL ROLE authenticated;

@@ -127,9 +127,9 @@ REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.advisor_c
 GRANT SELECT ON public.advisor_commissions, public.commission_liquidations TO authenticated;
 
 -- ── S5 rule, refined: a manual catch-up resolves a rejection ───────────────
--- Same signature and grants as 20261111110000. A payment_failed subscription is no longer pending when a positive
--- 'payment' movement (any payment row, exactly as the cancelled branch already counted) was created after its last_failure_at (the affiliate caught up: S3 "MP collects or the affiliate
--- catches up"), the same proof already used for a cancelled one. This also clears the "Débito rechazado" mark in
+-- Same signature and grants as 20261111110000. A payment_failed or cancelled subscription is no longer pending when a
+-- positive 'payment' movement (amount > 0, as the generation counts a confirmed sale) was created after its
+-- last_failure_at (the affiliate caught up: S3 "MP collects or the affiliate catches up"); a 0-amount row proves nothing. This also clears the "Débito rechazado" mark in
 -- Cobranzas and the Padrón in that case. A payment_failed row without last_failure_at stays pending.
 CREATE OR REPLACE FUNCTION public.debit_rejection_pending(
   p_profile_id      UUID,
@@ -148,13 +148,14 @@ AS $$
        WHERE m.entity_type = 'affiliate'
          AND m.entity_id = p_profile_id
          AND m.type = 'payment'
+         AND m.amount > 0
          AND m.created_at > p_last_failure_at)
     WHEN p_status = 'payment_failed' THEN true
     ELSE false
   END;
 $$;
 
-COMMENT ON FUNCTION public.debit_rejection_pending IS 'Débito rechazado rule (S5): the current subscription is payment_failed or cancelled after a rejection, with no payment movement created since the last rejection (a payment_failed row without a rejection date is always pending).';
+COMMENT ON FUNCTION public.debit_rejection_pending IS 'Débito rechazado rule (S5): the current subscription is payment_failed or cancelled after a rejection, with no positive payment movement created since the last rejection (a payment_failed row without a rejection date is always pending).';
 
 REVOKE ALL ON FUNCTION public.debit_rejection_pending(UUID, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.debit_rejection_pending(UUID, TEXT, TIMESTAMPTZ) TO authenticated, service_role;
