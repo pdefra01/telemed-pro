@@ -1,4 +1,21 @@
-export type Role = 'patient' | 'doctor' | 'admin' | 'advisor';
+export type Role = 'patient' | 'doctor' | 'admin' | 'advisor' | 'supervisor';
+
+export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'affiliated' | 'lost';
+
+export interface Prospect {
+  id: string;
+  advisorId: string;
+  advisorName?: string;
+  fullName: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  status: ProspectStatus;
+  source: 'manual' | 'lead_survey' | 'adhesion';
+  lastContactAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface User {
   id: string;

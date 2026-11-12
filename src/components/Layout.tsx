@@ -16,7 +16,8 @@ import {
   ShoppingBag,
   Award,
   Clock,
-  ClipboardList
+  ClipboardList,
+  UserPlus
 } from 'lucide-react';
 import { User, Role } from '../types';
 import { getBranding } from '../config/branding';
@@ -62,7 +63,14 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
     if (role === 'advisor') {
       return [
-        { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' }
+        { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
+        { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/prospects' },
+      ];
+    }
+
+    if (role === 'supervisor') {
+      return [
+        { name: 'Mi equipo', icon: <Users size={20} />, path: '/' },
       ];
     }
 
@@ -77,6 +85,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         },
         { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
         { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
+        { name: 'Supervisores', icon: <Users size={20} />, path: '/admin/supervisors' },
+        { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/admin/prospects' },
         {
           name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys',
         },

@@ -27,6 +27,7 @@ import { PatientOrderTracking } from './pages/patient/PatientOrderTracking';
 import { PharmacyInventoryAdmin } from './pages/admin/PharmacyInventoryAdmin';
 import { PharmacySalesAdmin } from './pages/admin/PharmacySalesAdmin';
 import ProducersAdmin from './pages/admin/ProducersAdmin';
+import SupervisorsAdmin from './pages/admin/SupervisorsAdmin';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import PostConsultation from './pages/doctor/PostConsultation';
 import AdminLayout from './components/admin/AdminLayout';
@@ -35,6 +36,8 @@ import SetPassword from './pages/SetPassword';
 import { LeadSurvey } from './pages/LeadSurvey';
 import LeadSurveys from './pages/admin/LeadSurveys';
 import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
+import { Prospects } from './pages/advisor/Prospects';
+import { TeamProspects } from './pages/advisor/TeamProspects';
 import { getBranding } from './config/branding';
 
 // Temporarily hides the floating AI chatbot everywhere. Set to true to bring it back.
@@ -129,7 +132,7 @@ const SessionTimeoutHandler: React.FC<{ user: User | null; onLogout: () => void 
         maxSessionHours = resolveMaxSessionHours(policy, user.role);
       } else {
         // Fallback defaults
-        if (user.role === 'admin' || user.role === 'advisor') timeoutMinutes = 15;
+        if (user.role === 'admin' || user.role === 'advisor' || user.role === 'supervisor') timeoutMinutes = 15;
         else if (user.role === 'doctor') timeoutMinutes = 30;
       }
     } catch (e) {
@@ -244,7 +247,7 @@ const App: React.FC = () => {
         const policy = JSON.parse(cached);
         isPersistent = policy[loggedInUser.role]?.persistent ?? true;
       } else {
-        if (['admin', 'doctor', 'advisor'].includes(loggedInUser.role)) {
+        if (['admin', 'doctor', 'advisor', 'supervisor'].includes(loggedInUser.role)) {
           isPersistent = false;
         }
       }
@@ -370,12 +373,39 @@ const App: React.FC = () => {
             {user?.role === 'patient' ? <PatientDashboard user={user as Patient} /> :
               user?.role === 'doctor' ? <DoctorDashboard user={user as Doctor} /> :
                 user?.role === 'advisor' ? <AdvisorDashboard user={user} /> :
-                  <AdminDashboard />}
+                  user?.role === 'supervisor' ? <TeamProspects title="Mi equipo" /> :
+                    <AdminDashboard />}
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Advisor Routes */}
+      <Route
+        path="/prospects"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['advisor']}>
+            <Prospects user={user as User} />
           </ProtectedRoute>
         }
       />
 
       {/* Admin Routes */}
+      <Route
+        path="/admin/supervisors"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <SupervisorsAdmin />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/prospects"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['admin']}>
+            <TeamProspects title="Prospectos comerciales" />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/doctors"
         element={
