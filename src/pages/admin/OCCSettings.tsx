@@ -3,7 +3,7 @@ import {
   Percent, Plus, Trash2, Save, 
   AlertTriangle, Globe, MapPin, 
   CheckCircle2, XCircle, ShieldAlert,
-  Clock, ShieldX, Settings2
+  Clock, ShieldX, Settings2, Coins
 } from 'lucide-react';
 import { taxRepository } from '../../repositories/TaxRepository';
 import { systemSettingsRepository } from '../../repositories/SystemSettingsRepository';
@@ -58,20 +58,25 @@ const OCCSettings: React.FC = () => {
   const [debitBillingDays, setDebitBillingDays] = useState<number[]>([1, 10]);
   const [newBillingDayInput, setNewBillingDayInput] = useState<string>('');
   const [isSavingDebitDays, setIsSavingDebitDays] = useState(false);
+  // Whether advisors and supervisors see commissions; off unless stored as { visible: true }.
+  const [commissionsVisible, setCommissionsVisible] = useState(false);
+  const [isSavingCommissionVisibility, setIsSavingCommissionVisibility] = useState(false);
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [taxesData, policy, officesData, sessionPolicyData, debitDaysData] = await Promise.all([
+        const [taxesData, policy, officesData, sessionPolicyData, debitDaysData, commissionVisibility] = await Promise.all([
           taxRepository.getAll(),
           systemSettingsRepository.getByKey('delinquency_policy'),
           officeLocationRepository.getAllOffices(),
           systemSettingsRepository.getByKey('session_security_policy'),
-          systemSettingsRepository.getByKey('debit_billing_days')
+          systemSettingsRepository.getByKey('debit_billing_days'),
+          systemSettingsRepository.getByKey('commission_visibility')
         ]);
         setTaxes(taxesData);
         if (policy) setDelinquencyPolicy(policy);
         setOffices(officesData);
+        setCommissionsVisible(commissionVisibility?.visible === true);
         // Roles missing from a stored policy (e.g. supervisor) start from their default
         if (sessionPolicyData) setSessionPolicy({ ...DEFAULT_SESSION_POLICY, ...sessionPolicyData });
         if (Array.isArray(debitDaysData) && debitDaysData.length > 0) {
@@ -197,6 +202,19 @@ const OCCSettings: React.FC = () => {
     }
   };
 
+  const handleCommissionVisibilityChange = async (visible: boolean) => {
+    setIsSavingCommissionVisibility(true);
+    try {
+      await systemSettingsRepository.update('commission_visibility', { visible });
+      setCommissionsVisible(visible);
+      toast(visible ? 'Comisiones visibles para asesores y supervisores' : 'Comisiones ocultas para asesores y supervisores', 'success');
+    } catch (error) {
+      toast('Error al actualizar la visibilidad de las comisiones', 'error');
+    } finally {
+      setIsSavingCommissionVisibility(false);
+    }
+  };
+
   const handlePolicyChange = async (newPolicy: 'block' | 'grace_period') => {
     try {
       await systemSettingsRepository.update('delinquency_policy', newPolicy);
@@ -290,6 +308,26 @@ const OCCSettings: React.FC = () => {
             <h4 className="text-sm font-bold text-blue-400 mb-2">Detección Automática</h4>
             <p className="text-xs text-slate-400 leading-relaxed">
               El motor de facturación (Billing Engine) escanea diariamente los estados de pago y aplica estas políticas en tiempo real sobre el `planStatus` de cada perfil.
+            </p>
+          </GlassCard>
+
+          <h3 className="text-xl font-bold text-white flex items-center pt-2">
+            <Coins size={20} className="mr-2 text-amber-500" />
+            Comisiones comerciales
+          </h3>
+          <GlassCard className="p-6">
+            <label className="flex items-start text-sm text-white select-none cursor-pointer">
+              <input
+                type="checkbox"
+                checked={commissionsVisible}
+                disabled={isSavingCommissionVisibility}
+                onChange={(e) => handleCommissionVisibilityChange(e.target.checked)}
+                className="mr-3 mt-0.5 rounded border-white/10 bg-white/5 text-amber-500 focus:ring-amber-500/20"
+              />
+              Mostrar comisiones a asesores y supervisores
+            </label>
+            <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+              Apagado, asesores y supervisores ven solo su productividad (ventas, altas y links). Las comisiones se siguen generando y liquidando, y el administrador las ve siempre.
             </p>
           </GlassCard>
 

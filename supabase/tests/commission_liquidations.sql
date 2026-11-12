@@ -44,6 +44,10 @@ VALUES
   ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-00000000001a', 'authenticated', 'authenticated', 'com-aff-1a@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 1a"}', '{}'),
   ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-00000000001b', 'authenticated', 'authenticated', 'com-aff-1b@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 1b"}', '{}');
 
+-- These tests cover each role's scope while commissions are visible (the switch is seeded off:
+-- commission_visibility.sql covers the switch itself).
+UPDATE public.system_settings SET value = '{"visible": true}' WHERE key = 'commission_visibility';
+
 INSERT INTO public.plans (id, name, monthly_cost, bonified_consultations, max_family_members, paid_months, bonus_months, is_unlimited, advisor_commission_amount)
 VALUES
   ('e8e8e8e8-0000-0000-0000-0000000000a1', 'Com Plan A', 1000, 0, 4, 1, 0, true, 500),

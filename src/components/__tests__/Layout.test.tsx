@@ -1,8 +1,18 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Layout from '../Layout';
 import { Role, User } from '../../types';
+import { commissionRepository } from '../../repositories/CommissionRepository';
+
+vi.mock('../../repositories/CommissionRepository', () => ({
+  commissionRepository: { isVisible: vi.fn() },
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(commissionRepository.isVisible).mockResolvedValue(true);
+});
 
 const renderAs = (role: Role) => {
   const user: User = { id: 'u-1', name: 'Test', email: 'test@test.local', role };
@@ -59,22 +69,47 @@ describe('Layout navigation by role (commercial CRM)', () => {
     renderAs('advisor');
     expect(hrefs()).not.toContain('/team/performance');
   });
-  it('gives each commercial role its commissions entry', () => {
+  it('gives each commercial role its commissions entry', async () => {
     renderAs('advisor');
-    expect(hrefs()).toContain('/commissions');
+    expect(await screen.findByRole('link', { name: /comisiones/i })).toHaveAttribute('href', '/commissions');
     expect(hrefs()).not.toContain('/team/commissions');
     expect(hrefs()).not.toContain('/admin/commissions');
   });
 
-  it('gives the supervisor the team commissions', () => {
+  it('gives the supervisor the team commissions', async () => {
     renderAs('supervisor');
-    expect(hrefs()).toContain('/team/commissions');
+    expect(await screen.findByRole('link', { name: /comisiones del equipo/i })).toHaveAttribute('href', '/team/commissions');
     expect(hrefs()).not.toContain('/admin/commissions');
   });
 
-  it('gives the admin the commission liquidations', () => {
+  it('gives the admin the commission liquidations whatever the switch says', () => {
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(false);
     renderAs('admin');
     expect(hrefs()).toContain('/admin/commissions');
+    expect(hrefs()).not.toContain('/commissions');
+    expect(commissionRepository.isVisible).not.toHaveBeenCalled();
+  });
+
+  it('hides the advisor commissions entry while the switch is off', async () => {
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(false);
+    renderAs('advisor');
+    await waitFor(() => expect(commissionRepository.isVisible).toHaveBeenCalled());
+    expect(hrefs()).toContain('/prospects');
+    expect(hrefs()).not.toContain('/commissions');
+  });
+
+  it('hides the team commissions entry from the supervisor while the switch is off', async () => {
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(false);
+    renderAs('supervisor');
+    await waitFor(() => expect(commissionRepository.isVisible).toHaveBeenCalled());
+    expect(hrefs()).toContain('/team/performance');
+    expect(hrefs()).not.toContain('/team/commissions');
+  });
+
+  it('hides the commissions entry when the switch cannot be read', async () => {
+    vi.mocked(commissionRepository.isVisible).mockRejectedValue(new Error('network'));
+    renderAs('advisor');
+    await waitFor(() => expect(commissionRepository.isVisible).toHaveBeenCalled());
     expect(hrefs()).not.toContain('/commissions');
   });
 

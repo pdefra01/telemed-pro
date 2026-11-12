@@ -21,7 +21,7 @@ vi.mock('../../../services/supabase', () => ({
 }));
 
 vi.mock('../../../repositories/CommissionRepository', () => ({
-  commissionRepository: { getSummary: vi.fn() },
+  commissionRepository: { getSummary: vi.fn(), isVisible: vi.fn() },
 }));
 
 const commissionSummary = (toCollectAmount: number, collectedAmount: number) => ([{
@@ -82,6 +82,7 @@ describe('AdvisorDashboard — sales pending payment', () => {
     vi.clearAllMocks();
     mockSupabaseFrom();
     vi.mocked(commissionRepository.getSummary).mockResolvedValue([]);
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -106,6 +107,40 @@ describe('AdvisorDashboard — sales pending payment', () => {
     expect(kpi).toHaveTextContent(/Cobrado \$\s?4\.500/);
     expect(kpi).not.toHaveTextContent(/25\.000/);
     expect(screen.queryByText('Comisiones Ganadas')).not.toBeInTheDocument();
+  });
+
+  it('promises the commissions on the affiliation link while the switch is on', async () => {
+    stubStats({ approvedSales: 3, confirmedSales: 1, unconfirmedSales: 2 });
+    render(<AdvisorDashboard user={mockUser} />);
+
+    expect(await screen.findByText(/las comisiones se asignarán automáticamente/i)).toBeInTheDocument();
+  });
+
+  it('shows only the productivity while the switch is off', async () => {
+    stubStats({ approvedSales: 3, confirmedSales: 1, unconfirmedSales: 2 });
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(false);
+    vi.mocked(commissionRepository.getSummary).mockResolvedValue(commissionSummary(1300, 4500));
+    render(<AdvisorDashboard user={mockUser} />);
+
+    const accredited = await screen.findByText('Altas Acreditadas');
+    expect(accredited.closest('.rounded-3xl')).toHaveTextContent(/^Altas Acreditadas1/);
+    expect(screen.getByText('Links Compartidos')).toBeInTheDocument();
+    await waitFor(() => expect(commissionRepository.isVisible).toHaveBeenCalled());
+    expect(screen.queryByText('Comisión a cobrar')).not.toBeInTheDocument();
+    expect(screen.queryByText(/comisiones se asignarán/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/las ventas se asignarán automáticamente a tu cuenta/i)).toBeInTheDocument();
+    expect(commissionRepository.getSummary).not.toHaveBeenCalled();
+  });
+
+  it('does not mention commissions on the pending-payment notice while the switch is off', async () => {
+    stubStats({ approvedSales: 3, confirmedSales: 1, unconfirmedSales: 2 });
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(false);
+    render(<AdvisorDashboard user={mockUser} />);
+
+    const notice = await screen.findByText(/2 ventas aprobadas con el pago pendiente/i);
+    await waitFor(() => expect(commissionRepository.isVisible).toHaveBeenCalled());
+    expect(notice).toHaveTextContent(/se suman a tus metas cuando se acredite el primer pago/i);
+    expect(notice).not.toHaveTextContent(/comisiones/i);
   });
 
   it('shows zero to collect when the commission summary cannot be read', async () => {
@@ -168,6 +203,7 @@ describe('AdvisorDashboard — partial-table notice (K10)', () => {
     vi.clearAllMocks();
     mockSupabaseFrom();
     vi.mocked(commissionRepository.getSummary).mockResolvedValue([]);
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(true);
   });
 
   afterEach(() => {
