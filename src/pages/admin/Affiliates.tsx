@@ -153,7 +153,7 @@ const Affiliates: React.FC = () => {
   const loadAffiliates = async () => {
     try {
       setIsLoading(true);
-      const data = await affiliateRepository.getAllAffiliates();
+      const data = await affiliateRepository.getAllAffiliates({ includeAdvisors: true });
       setAffiliates(data);
       loadCoverageStatus(data);
     } catch (error) {
@@ -438,6 +438,8 @@ const Affiliates: React.FC = () => {
       ? affiliates.filter(p => debitRejections[p.id])
       : affiliates.filter(p => affiliateStatus(p) === statusFilter);
   const debitRejectedTotal = affiliates.filter(p => debitRejections[p.id]).length;
+  // Advisors without a plan are listed so the admin can assign one, but they are not affiliates yet.
+  const countedAffiliates = affiliates.filter(p => !p.isAdvisor || p.planId);
 
   const filteredRequests = promoterFilter === 'all'
     ? requests
@@ -495,7 +497,7 @@ const Affiliates: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total Pacientes</p>
-            <h4 className="text-xl font-bold text-white">{affiliates.length}</h4>
+            <h4 className="text-xl font-bold text-white">{countedAffiliates.length}</h4>
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 p-5 rounded-3xl flex items-center space-x-4">
@@ -505,7 +507,7 @@ const Affiliates: React.FC = () => {
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Afiliados Activos</p>
             <h4 className="text-xl font-bold text-white">
-              {affiliates.filter(p => p.isActive).length}
+              {countedAffiliates.filter(p => p.isActive).length}
             </h4>
           </div>
         </div>
@@ -516,7 +518,7 @@ const Affiliates: React.FC = () => {
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Pendientes de Aprobación</p>
             <h4 className="text-xl font-bold text-amber-400">
-              {affiliates.filter(p => !p.isActive && p.planStatus !== 'suspended').length}
+              {countedAffiliates.filter(p => !p.isActive && p.planStatus !== 'suspended').length}
             </h4>
           </div>
         </div>
@@ -532,7 +534,7 @@ const Affiliates: React.FC = () => {
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          Afiliados Activos ({affiliates.length})
+          Afiliados Activos ({countedAffiliates.length})
         </button>
         <button
           onClick={() => setActiveTab('requests')}
@@ -587,6 +589,13 @@ const Affiliates: React.FC = () => {
                     <td className="px-6 py-5">
                       <div className="text-sm font-semibold text-slate-300">{patient.planName}</div>
                       <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-tighter">Premium Network</div>
+                      {patient.isAdvisor && (
+                        <div className="mt-1">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                            Asesor · sin cargo
+                          </span>
+                        </div>
+                      )}
                       {shouldShowPaymentPending(patient, noWindowMap) && (
                         <div className="text-[10px] text-amber-400 font-bold mt-1">Débito/pago aún no realizado</div>
                       )}
@@ -643,15 +652,18 @@ const Affiliates: React.FC = () => {
                         >
                           <Key size={16} />
                         </button>
-                        <button
-                          onClick={() => handleResendActivation(patient)}
-                          disabled={resendingId === patient.id}
-                          className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5 disabled:opacity-50"
-                          title="Reenviar mail de activación"
-                        >
-                          {resendingId === patient.id ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
-                        </button>
-                        {patient.isActive && (
+                        {/* An advisor's account and status are managed from the advisors screen, and they are not billed. */}
+                        {!patient.isAdvisor && (
+                          <button
+                            onClick={() => handleResendActivation(patient)}
+                            disabled={resendingId === patient.id}
+                            className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5 disabled:opacity-50"
+                            title="Reenviar mail de activación"
+                          >
+                            {resendingId === patient.id ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+                          </button>
+                        )}
+                        {patient.isActive && !patient.isAdvisor && (
                           <button
                             onClick={() => setPaymentLinkPatient({ id: patient.id, name: patient.name })}
                             className="p-2 bg-white/5 hover:bg-sky-500/20 text-sky-400 rounded-xl transition-colors border border-white/5"
@@ -691,9 +703,9 @@ const Affiliates: React.FC = () => {
                             <RefreshCw size={16} />
                           </button>
                         )}
-                        {patient.isActive && (
-                          <button 
-                            onClick={() => setDeleteConfirmId(patient.id)} 
+                        {patient.isActive && !patient.isAdvisor && (
+                          <button
+                            onClick={() => setDeleteConfirmId(patient.id)}
                             className="p-2 bg-white/5 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-colors border border-white/5"
                             title="Suspender"
                           >

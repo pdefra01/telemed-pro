@@ -118,3 +118,28 @@ describe('Layout navigation by role (commercial CRM)', () => {
     expect(hrefs().some((h) => (h ?? '').includes('commissions'))).toBe(false);
   });
 });
+
+describe('Layout navigation for an advisor with a plan', () => {
+  const renderAdvisor = (planId?: string) => {
+    const user: User = { id: 'u-1', name: 'Test', email: 'test@test.local', role: 'advisor', planId };
+    render(
+      <MemoryRouter>
+        <Layout user={user} onLogout={() => {}}>
+          <div />
+        </Layout>
+      </MemoryRouter>
+    );
+  };
+
+  it('adds the affiliate entries next to the commercial ones', () => {
+    renderAdvisor('plan-1');
+    expect(hrefs()).toEqual(expect.arrayContaining(['/prospects', '/collections', '/pharmacy', '/history', '/payments']));
+  });
+
+  it('keeps the affiliate entries away from an advisor without a plan', () => {
+    renderAdvisor();
+    expect(hrefs()).not.toContain('/pharmacy');
+    expect(hrefs()).not.toContain('/history');
+    expect(hrefs()).not.toContain('/payments');
+  });
+});

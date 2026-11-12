@@ -198,6 +198,66 @@ describe('AffiliateRepository', () => {
     expect(result[0].planName).not.toBe('Plan Base');
   });
 
+  describe('advisors with a plan (advisor-affiliate-plan S2)', () => {
+    const paymentStatusChain = () => ({
+      select: vi.fn().mockReturnValue({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }),
+    });
+
+    it('keeps listing only patients by default', async () => {
+      const eqMock = vi.fn().mockReturnValue({ order: vi.fn().mockResolvedValue({ data: [], error: null }) });
+      vi.mocked(supabase.from).mockImplementation((table: string) =>
+        (table === 'profiles' ? { select: vi.fn().mockReturnValue({ eq: eqMock }) } : paymentStatusChain()) as any);
+
+      await affiliateRepository.getAllAffiliates();
+
+      expect(eqMock).toHaveBeenCalledWith('role', 'patient');
+    });
+
+    it('adds the active advisors when asked and flags them', async () => {
+      const orMock = vi.fn().mockReturnValue({
+        order: vi.fn().mockResolvedValue({
+          data: [
+            { id: 'p1', full_name: 'Paciente', role: 'patient', agreement_id: null },
+            { id: 'a1', full_name: 'Asesora', role: 'advisor', plan_id: 'plan-1', is_active: true, agreement_id: null },
+          ],
+          error: null,
+        }),
+      });
+      vi.mocked(supabase.from).mockImplementation((table: string) =>
+        (table === 'profiles' ? { select: vi.fn().mockReturnValue({ or: orMock }) } : paymentStatusChain()) as any);
+
+      const result = await affiliateRepository.getAllAffiliates({ includeAdvisors: true });
+
+      expect(orMock).toHaveBeenCalledWith('role.eq.patient,and(role.eq.advisor,is_active.eq.true)');
+      expect(result.find(p => p.id === 'a1')!.isAdvisor).toBe(true);
+      expect(result.find(p => p.id === 'a1')!.planId).toBe('plan-1');
+      expect(result.find(p => p.id === 'p1')!.isAdvisor).toBe(false);
+    });
+
+    it('lists the family groups of the active advisors', async () => {
+      const notMock = vi.fn().mockResolvedValue({ data: [{ family_group_id: 'fg-1' }, { family_group_id: 'fg-2' }], error: null });
+      const eqActive = vi.fn().mockReturnValue({ not: notMock });
+      const eqRole = vi.fn().mockReturnValue({ eq: eqActive });
+      vi.mocked(supabase.from).mockReturnValue({ select: vi.fn().mockReturnValue({ eq: eqRole }) } as any);
+
+      const ids = await affiliateRepository.getActiveAdvisorFamilyGroupIds();
+
+      expect(eqRole).toHaveBeenCalledWith('role', 'advisor');
+      expect(eqActive).toHaveBeenCalledWith('is_active', true);
+      expect(notMock).toHaveBeenCalledWith('family_group_id', 'is', null);
+      expect([...ids]).toEqual(['fg-1', 'fg-2']);
+    });
+
+    it('throws when the advisor family groups cannot be read', async () => {
+      const notMock = vi.fn().mockResolvedValue({ data: null, error: new Error('boom') });
+      vi.mocked(supabase.from).mockReturnValue({
+        select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ not: notMock }) }) }),
+      } as any);
+
+      await expect(affiliateRepository.getActiveAdvisorFamilyGroupIds()).rejects.toThrow('boom');
+    });
+  });
+
   describe('derived paymentStatus (affiliate_payment_status view)', () => {
     /** Builds a `profiles` select-role chain: select().eq().order() */
     const profilesChain = (rows: any[]) => ({

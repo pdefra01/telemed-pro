@@ -107,6 +107,14 @@ export async function setAdvisorStatusHandler(req, res, { supabaseAdmin }) {
     if (error.code === 'P0002') {
       return res.status(404).json({ error: 'Asesor no encontrado.' });
     }
+    if (error.message === 'advisor_identity_conflict') {
+      // Turning an advisor with a plan into an affiliate hit the identity guards:
+      // their DNI, CUIL or phone already belongs to another affiliate.
+      const detail = error.details ? ` ${error.details}` : '';
+      return res.status(409).json({
+        error: `No se puede desactivar: el asesor pasaría a ser afiliado, pero su DNI, CUIL o teléfono ya pertenece a otro afiliado.${detail} Resolvé el duplicado y volvé a intentar.`,
+      });
+    }
     console.error('[advisors/status] RPC error:', error.message);
     return res.status(500).json({ error: 'Error al actualizar el estado del asesor.' });
   }

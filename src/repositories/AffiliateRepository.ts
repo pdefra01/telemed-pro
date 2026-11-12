@@ -57,12 +57,14 @@ export class AffiliateRepository {
   /**
    * Obtiene todos los afiliados activos
    */
-  async getAllAffiliates(): Promise<Patient[]> {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'patient')
-      .order('full_name', { ascending: true });
+  async getAllAffiliates(options: { includeAdvisors?: boolean } = {}): Promise<Patient[]> {
+    const profiles = supabase.from('profiles').select('*');
+    // Active advisors can hold a plan free of charge, so the admin manages them
+    // from the affiliates screen too (advisor-affiliate-plan S2).
+    const filtered = options.includeAdvisors
+      ? profiles.or('role.eq.patient,and(role.eq.advisor,is_active.eq.true)')
+      : profiles.eq('role', 'patient');
+    const { data, error } = await filtered.order('full_name', { ascending: true });
 
     if (error) {
       console.error("Error obteniendo afiliados:", error);
@@ -86,6 +88,22 @@ export class AffiliateRepository {
         { rejectedAt: row.debit_rejected_at ?? undefined, failures: Number(row.debit_failures ?? 0) },
       ])
     );
+  }
+
+  /**
+   * Family groups whose titular is an active advisor. Nobody in them is billed
+   * while the advisor stays active (advisor-affiliate-plan S2).
+   */
+  async getActiveAdvisorFamilyGroupIds(): Promise<Set<string>> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('family_group_id')
+      .eq('role', 'advisor')
+      .eq('is_active', true)
+      .not('family_group_id', 'is', null);
+
+    if (error) throw error;
+    return new Set((data || []).map((row: { family_group_id: string }) => row.family_group_id));
   }
 
   /**
@@ -733,6 +751,7 @@ export class AffiliateRepository {
       paymentStatus: derivedPaymentStatus ?? 'current',
       currentPeriodQuotaUsed: row.current_period_quota_used || 0,
       isActive: row.is_active,
+      isAdvisor: row.role === 'advisor',
       locality: row.locality ?? undefined,
       neighborhood: row.neighborhood ?? undefined,
       cuil: row.cuil ?? undefined,

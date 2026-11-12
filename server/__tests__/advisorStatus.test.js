@@ -166,6 +166,32 @@ describe('setAdvisorStatusHandler (design 3.3)', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it('returns 409 with the duplicate detail when the advisor\'s identity is already taken by an affiliate (advisor_identity_conflict)', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '23505', message: 'advisor_identity_conflict', details: 'El DNI 30111222 ya pertenece a otro afiliado o grupo familiar.' },
+    });
+    const req = buildReq();
+    const res = buildMockRes();
+
+    await setAdvisorStatusHandler(req, res, { supabaseAdmin: { rpc } });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error).toContain('No se puede desactivar');
+    expect(res.body.error).toContain('El DNI 30111222 ya pertenece a otro afiliado o grupo familiar.');
+  });
+
+  it('still returns 500 for any other RPC error', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: 'XX000', message: 'boom' } });
+    const res = buildMockRes();
+
+    await setAdvisorStatusHandler(buildReq(), res, { supabaseAdmin: { rpc } });
+
+    expect(res.statusCode).toBe(500);
+    errorSpy.mockRestore();
+  });
+
   it('returns 404 when the RPC raises advisor_not_found (P0002)', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: 'P0002', message: 'advisor_not_found' } });
     const req = buildReq();

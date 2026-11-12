@@ -132,6 +132,7 @@ export class AuthRepository {
         avatarUrl: profileData.avatar_url,
         dni: profileData.dni,
         promoter_code: profileData.promoter_code,
+        planId: profileData.plan_id ?? undefined,
         planName: profileData.plan_name || 'Sin plan asignado',
         bloodType: profileData.blood_type ?? undefined,
         birthDate: profileData.birth_date ?? undefined,
