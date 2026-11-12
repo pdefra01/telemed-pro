@@ -656,3 +656,57 @@ export interface Producer {
   createdAt?: string;
   totalAffiliatesReferred?: number;
 }
+// ── Advisor commissions (S2/S3) ─────────────────────────────────────────────
+export type CommissionStatus = 'generated' | 'retained' | 'approved' | 'excluded' | 'paid';
+export type LiquidationStatus = 'draft' | 'approved' | 'paid';
+
+/** Per advisor: generated (not approved yet), retained (debit rejected), approved to collect, collected. */
+export interface CommissionSummary {
+  advisorId: string;
+  advisorName: string;
+  generatedAmount: number;
+  generatedCount: number;
+  retainedAmount: number;
+  retainedCount: number;
+  toCollectAmount: number;
+  toCollectCount: number;
+  collectedAmount: number;
+  collectedCount: number;
+}
+
+/** One commission (one confirmed sale). */
+export interface CommissionLine {
+  id: string;
+  advisorId: string;
+  advisorName: string;
+  affiliateName: string | null;
+  planName: string | null;
+  amount: number;
+  confirmedAt: string;
+  status: CommissionStatus;
+  exclusionReason: string | null;
+  retainedReason: string | null;
+  liquidationId: string | null;
+}
+
+/** Monthly liquidation of one advisor. `month` is the first day (YYYY-MM-01). */
+export interface CommissionLiquidation {
+  id: string;
+  advisorId: string;
+  month: string;
+  status: LiquidationStatus;
+  totalAmount: number;
+  retainedAmount: number;
+  retainedCount: number;
+  approvedAt: string | null;
+  paidAt: string | null;
+  paymentMethod: string | null;
+  paymentReference: string | null;
+}
+
+export interface CommissionGenerationResult {
+  advisors: number;
+  commissionsAttached: number;
+  retainedCount: number;
+  totalAmount: number;
+}
