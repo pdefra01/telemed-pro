@@ -5,6 +5,7 @@ import { prospectRepository } from '../../repositories/ProspectRepository';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PROSPECT_STATUSES, PROSPECT_STATUS_BADGE, PROSPECT_STATUS_LABELS } from '../../utils/prospectStatus';
+import { MonthlyProgress } from './MonthlyProgress';
 
 interface ProspectsProps {
   user: User;
@@ -115,6 +116,8 @@ export const Prospects: React.FC<ProspectsProps> = ({ user }) => {
           <Plus size={18} /> Nuevo prospecto
         </button>
       </div>
+
+      <MonthlyProgress />
 
       {showForm && (
         <form onSubmit={handleCreate} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">

@@ -23,9 +23,10 @@ describe('Layout navigation by role (commercial CRM)', () => {
     expect(hrefs()).toContain('/prospects');
   });
 
-  it('gives the supervisor only their team entry', () => {
+  it('gives the supervisor their team and its goals and metrics', () => {
     renderAs('supervisor');
     expect(hrefs()).toContain('/');
+    expect(hrefs()).toContain('/team/performance');
     expect(hrefs()).not.toContain('/prospects');
     expect(hrefs()).not.toContain('/affiliates');
     expect(hrefs()).not.toContain('/admin/producers');
@@ -35,6 +36,7 @@ describe('Layout navigation by role (commercial CRM)', () => {
     renderAs('admin');
     expect(hrefs()).toContain('/admin/prospects');
     expect(hrefs()).toContain('/admin/supervisors');
+    expect(hrefs()).toContain('/team/performance');
     expect(hrefs()).toContain('/admin/producers');
   });
 
@@ -42,5 +44,11 @@ describe('Layout navigation by role (commercial CRM)', () => {
     renderAs('patient');
     expect(hrefs()).not.toContain('/prospects');
     expect(hrefs()).not.toContain('/admin/prospects');
+    expect(hrefs()).not.toContain('/team/performance');
+  });
+
+  it('does not show the team goals and metrics to advisors', () => {
+    renderAs('advisor');
+    expect(hrefs()).not.toContain('/team/performance');
   });
 });

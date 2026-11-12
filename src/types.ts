@@ -2,6 +2,28 @@ export type Role = 'patient' | 'doctor' | 'admin' | 'advisor' | 'supervisor';
 
 export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'affiliated' | 'lost';
 
+/** Per-advisor figures for one month, from `advisor_monthly_metrics`. */
+export interface AdvisorMonthMetrics {
+  advisorId: string;
+  advisorName: string;
+  supervisorId?: string;
+  month: string;
+  affiliatesSold: number;
+  revenue: number;
+  prospectsLoaded: number;
+  prospectsContacted: number;
+  prospectsAffiliated: number;
+  prospectsStale: number;
+  linksShared: number;
+  goalAffiliates?: number;
+  goalRevenue?: number;
+}
+
+export interface GoalTargets {
+  targetAffiliates?: number | null;
+  targetRevenue?: number | null;
+}
+
 export interface Prospect {
   id: string;
   advisorId: string;
