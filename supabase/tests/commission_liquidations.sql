@@ -16,6 +16,10 @@
 --   e8..17  sale of advisor 1, plan A, paid 2026-09-01 02:00 UTC (Aug 31 in AR)-> August
 --   e8..18  sale of advisor 1, plan A, paid 2026-09-10                         -> September
 --   e8..19  sale of advisor 1, plan B, paid 2026-08-15                         -> August, excluded by the admin
+--   e8..06  advisor 6 (code COM-SIX), promoted to supervisor before October
+--   e8..1a  sale of advisor 6, plan B, paid 2026-10-05                         -> October (the promoted advisor keeps it)
+--   e8..1b  sale of advisor 1, plan A, paid 2026-10-03, debit rejected 10-20   -> retained, excluded, included (still
+--           retained), released after a manual payment, retained again at approval after a new rejection
 
 BEGIN;
 SELECT no_plan();
@@ -35,7 +39,10 @@ VALUES
   ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-000000000016', 'authenticated', 'authenticated', 'com-aff-16@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 16"}', '{}'),
   ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-000000000017', 'authenticated', 'authenticated', 'com-aff-17@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 17"}', '{}'),
   ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-000000000018', 'authenticated', 'authenticated', 'com-aff-18@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 18"}', '{}'),
-  ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-000000000019', 'authenticated', 'authenticated', 'com-aff-19@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 19"}', '{}');
+  ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-000000000019', 'authenticated', 'authenticated', 'com-aff-19@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 19"}', '{}'),
+  ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'com-adv-6@test.local', '', now(), now(), now(), '{"full_name":"Com Advisor Six"}', '{"role":"advisor"}'),
+  ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-00000000001a', 'authenticated', 'authenticated', 'com-aff-1a@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 1a"}', '{}'),
+  ('00000000-0000-0000-0000-000000000000', 'e8e8e8e8-0000-0000-0000-00000000001b', 'authenticated', 'authenticated', 'com-aff-1b@test.local', '', now(), now(), now(), '{"full_name":"Com Affiliate 1b"}', '{}');
 
 INSERT INTO public.plans (id, name, monthly_cost, bonified_consultations, max_family_members, paid_months, bonus_months, is_unlimited, advisor_commission_amount)
 VALUES
@@ -45,10 +52,14 @@ VALUES
 INSERT INTO public.producers (id, name, producer_code, email, commission_rate, status, links_shared_count)
 VALUES
   ('e8e8e8e8-0000-0000-0000-000000000003', 'Com Advisor One', 'COM-ONE', 'com-adv-1@test.local', 10, 'active', 0),
-  ('e8e8e8e8-0000-0000-0000-000000000004', 'Com Advisor Two', 'COM-TWO', 'com-adv-2@test.local', 10, 'active', 0);
+  ('e8e8e8e8-0000-0000-0000-000000000004', 'Com Advisor Two', 'COM-TWO', 'com-adv-2@test.local', 10, 'active', 0),
+  ('e8e8e8e8-0000-0000-0000-000000000006', 'Com Advisor Six', 'COM-SIX', 'com-adv-6@test.local', 10, 'active', 0);
 
 UPDATE public.profiles SET promoter_code = 'COM-ONE', supervisor_id = 'e8e8e8e8-0000-0000-0000-000000000002' WHERE id = 'e8e8e8e8-0000-0000-0000-000000000003';
 UPDATE public.profiles SET promoter_code = 'COM-TWO', supervisor_id = 'e8e8e8e8-0000-0000-0000-000000000005' WHERE id = 'e8e8e8e8-0000-0000-0000-000000000004';
+UPDATE public.profiles SET promoter_code = 'COM-SIX' WHERE id = 'e8e8e8e8-0000-0000-0000-000000000006';
+UPDATE public.profiles SET plan_id = 'e8e8e8e8-0000-0000-0000-0000000000a2' WHERE id = 'e8e8e8e8-0000-0000-0000-00000000001a';
+UPDATE public.profiles SET plan_id = 'e8e8e8e8-0000-0000-0000-0000000000a1' WHERE id = 'e8e8e8e8-0000-0000-0000-00000000001b';
 UPDATE public.profiles SET plan_id = 'e8e8e8e8-0000-0000-0000-0000000000a1'
  WHERE id IN ('e8e8e8e8-0000-0000-0000-000000000011', 'e8e8e8e8-0000-0000-0000-000000000013', 'e8e8e8e8-0000-0000-0000-000000000015',
               'e8e8e8e8-0000-0000-0000-000000000017', 'e8e8e8e8-0000-0000-0000-000000000018');
@@ -69,7 +80,9 @@ VALUES
   ('e8e8e8e8-0000-0000-0000-0000000000b8', 'Com 18', '91000018', '1990-01-01', 'x', 'x', 'x', 'c18@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'COM-ONE', 'e8e8e8e8-0000-0000-0000-000000000018', '2026-08-01 12:00+00', '2026-08-01 12:00+00'),
   ('e8e8e8e8-0000-0000-0000-0000000000b9', 'Com 19', '91000019', '1990-01-01', 'x', 'x', 'x', 'c19@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'COM-ONE', 'e8e8e8e8-0000-0000-0000-000000000019', '2026-08-01 12:00+00', '2026-08-01 12:00+00'),
   -- A pending request is never a sale.
-  ('e8e8e8e8-0000-0000-0000-0000000000ba', 'Com 1x', '91000020', '1990-01-01', 'x', 'x', 'x', 'c1x@test.local', '1', 'soltero', 'cash', 'sig', 'pending', 'COM-ONE', NULL, NULL, '2026-08-01 12:00+00');
+  ('e8e8e8e8-0000-0000-0000-0000000000ba', 'Com 1x', '91000020', '1990-01-01', 'x', 'x', 'x', 'c1x@test.local', '1', 'soltero', 'cash', 'sig', 'pending', 'COM-ONE', NULL, NULL, '2026-08-01 12:00+00'),
+  ('e8e8e8e8-0000-0000-0000-0000000000bc', 'Com 1a', '91000021', '1990-01-01', 'x', 'x', 'x', 'c1a@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'COM-SIX', 'e8e8e8e8-0000-0000-0000-00000000001a', '2026-10-01 12:00+00', '2026-10-01 12:00+00'),
+  ('e8e8e8e8-0000-0000-0000-0000000000bd', 'Com 1b', '91000022', '1990-01-01', 'x', 'x', 'x', 'c1b@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'COM-ONE', 'e8e8e8e8-0000-0000-0000-00000000001b', '2026-10-01 12:00+00', '2026-10-01 12:00+00');
 
 INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, amount, created_at) VALUES
   ('affiliate', 'e8e8e8e8-0000-0000-0000-000000000011', 'charge',  1000, '2026-08-01 12:00+00'),
@@ -85,7 +98,37 @@ INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, am
 
 -- Affiliate 12: the debit of late August was rejected and nothing was paid since.
 INSERT INTO public.affiliate_payment_subscriptions (profile_id, mp_preapproval_id, status, status_changed_at, created_at, last_failure_at, failure_count) VALUES
-  ('e8e8e8e8-0000-0000-0000-000000000012', 'com-pre-12', 'payment_failed', '2026-08-28 12:00+00', '2026-08-01 12:00+00', '2026-08-28 12:00+00', 1);
+  ('e8e8e8e8-0000-0000-0000-000000000012', 'com-pre-12', 'payment_failed', '2026-08-28 12:00+00', '2026-08-01 12:00+00', '2026-08-28 12:00+00', 1),
+  ('e8e8e8e8-0000-0000-0000-00000000001b', 'com-pre-1b', 'payment_failed', '2026-10-20 12:00+00', '2026-10-01 12:00+00', '2026-10-20 12:00+00', 1);
+INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, amount, created_at) VALUES
+  ('affiliate', 'e8e8e8e8-0000-0000-0000-00000000001a', 'payment', 2500, '2026-10-05 12:00+00'),
+  ('affiliate', 'e8e8e8e8-0000-0000-0000-00000000001b', 'payment', 1000, '2026-10-03 12:00+00');
+
+-- Invariant, checked after every write (as the admin, who reads every row): a liquidation's total equals the sum of
+-- its included lines, and every attached line has a status that matches its liquidation's status.
+PREPARE commission_invariant AS
+  SELECT l.id, 'total' AS problem FROM public.commission_liquidations l
+   WHERE l.total_amount <> COALESCE((SELECT sum(c.amount) FROM public.advisor_commissions c
+                                      WHERE c.liquidation_id = l.id AND c.status IN ('generated', 'approved', 'paid')), 0)
+  UNION ALL
+  SELECT l.id, c.status FROM public.advisor_commissions c JOIN public.commission_liquidations l ON l.id = c.liquidation_id
+   WHERE (l.status = 'draft'    AND c.status NOT IN ('generated', 'excluded'))
+      OR (l.status = 'approved' AND c.status NOT IN ('approved', 'excluded'))
+      OR (l.status = 'paid'     AND c.status NOT IN ('paid', 'excluded'));
+
+-- ── Every write function serializes on the same lock before reading state ──
+-- pgTAP runs in one session and cannot race two transactions, so the lock is pinned in the function source:
+-- it must be present and taken before the first table read.
+SELECT ok(strpos(prosrc, 'pg_advisory_xact_lock(hashtext(''public.commission_writes''))') > 0
+          AND strpos(prosrc, 'pg_advisory_xact_lock(hashtext(''public.commission_writes''))') < strpos(prosrc, 'FROM public.'),
+          proname || ' takes the commission write lock before reading state')
+  FROM pg_proc
+ WHERE oid IN ('public.generate_commission_liquidations(date)'::regprocedure,
+               'public.exclude_commission(uuid,text)'::regprocedure,
+               'public.include_commission(uuid)'::regprocedure,
+               'public.approve_commission_liquidation(uuid)'::regprocedure,
+               'public.pay_commission_liquidation(uuid,date,text,text)'::regprocedure)
+ ORDER BY proname;
 
 -- ── Privileges (checked, never called, as anon) ─────────────────────────────
 SELECT is(has_function_privilege('anon', 'public.generate_commission_liquidations(date)', 'execute'), false, 'anon cannot generate liquidations');
@@ -145,6 +188,7 @@ SELECT results_eq($$
   $$VALUES ('e8e8e8e8-0000-0000-0000-000000000003', 'draft', 1800.00::numeric, 800.00::numeric, 1),
            ('e8e8e8e8-0000-0000-0000-000000000004', 'draft',  500.00::numeric,   0.00::numeric, 0)$$,
   'August: one draft liquidation per advisor; the retained commission is informative only');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after the August generation');
 
 -- ── Amount snapshot and idempotent regeneration of a draft ──────────────────
 RESET ROLE;
@@ -173,6 +217,7 @@ SELECT results_eq($$SELECT status, exclusion_reason FROM public.advisor_commissi
   $$VALUES ('excluded', 'Venta duplicada')$$, 'the excluded commission keeps its reason');
 SELECT is((SELECT total_amount FROM public.commission_liquidations WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003'),
   1000.00::numeric, 'the exclusion recomputes the total');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after an exclusion');
 SELECT lives_ok($$SELECT public.include_commission((SELECT id FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-000000000019'))$$,
   'the admin can undo an exclusion while the liquidation is a draft');
 SELECT is((SELECT total_amount FROM public.commission_liquidations WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003'),
@@ -220,6 +265,7 @@ SELECT lives_ok($$SELECT public.approve_commission_liquidation((SELECT id FROM p
   'the admin approves advisor 1''s August liquidation');
 SELECT results_eq($$SELECT status, approved_by::text, approved_at IS NOT NULL, total_amount FROM public.commission_liquidations WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003'$$,
   $$VALUES ('approved', 'e8e8e8e8-0000-0000-0000-000000000001', true, 1000.00::numeric)$$, 'approval records who and when');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after an approval');
 SELECT results_eq($$
   SELECT affiliate_profile_id::text, status FROM public.advisor_commissions
    WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003' ORDER BY 1$$,
@@ -268,6 +314,7 @@ SELECT results_eq($$
   $$VALUES ('e8e8e8e8-0000-0000-0000-000000000003', '2026-09-01'::date, 'draft', 1300.00::numeric, 0),
            ('e8e8e8e8-0000-0000-0000-000000000004', '2026-09-01'::date, 'draft',  800.00::numeric, 0)$$,
   'September drafts');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after the September generation');
 SELECT results_eq($$SELECT status, retained_reason FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-000000000012'$$,
   $$VALUES ('generated', NULL::text)$$, 'the released commission is no longer retained');
 
@@ -282,6 +329,7 @@ SELECT results_eq($$
   SELECT status, paid_at, paid_by::text, payment_method, payment_reference FROM public.commission_liquidations
    WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003' AND month = '2026-08-01'$$,
   $$VALUES ('paid', '2026-09-05'::date, 'e8e8e8e8-0000-0000-0000-000000000001', 'transferencia', 'TRX-1')$$, 'the payment is recorded');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after a payment');
 SELECT results_eq($$
   SELECT affiliate_profile_id::text, status FROM public.advisor_commissions
    WHERE affiliate_profile_id IN ('e8e8e8e8-0000-0000-0000-000000000011', 'e8e8e8e8-0000-0000-0000-000000000017', 'e8e8e8e8-0000-0000-0000-000000000019') ORDER BY 1$$,
@@ -368,6 +416,67 @@ SELECT is((SELECT count(*)::int FROM public.advisor_commission_list(NULL)), 0, '
 -- A patient sees nothing.
 SELECT set_config('request.jwt.claims', '{"sub":"e8e8e8e8-0000-0000-0000-000000000011","role":"authenticated"}', true);
 SELECT is((SELECT count(*)::int FROM public.advisor_commissions), 0, 'an affiliate reads no commissions');
+RESET ROLE;
+
+-- ── October: promoted advisor, manual catch-up, retention at inclusion and at approval ──
+-- Advisor 6 is promoted: the sales made with their code keep generating commissions.
+UPDATE public.profiles SET role = 'supervisor' WHERE id = 'e8e8e8e8-0000-0000-0000-000000000006';
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"e8e8e8e8-0000-0000-0000-000000000001","role":"authenticated"}', true);
+SELECT results_eq($$SELECT advisors, commissions_attached, retained_count, total_amount FROM public.generate_commission_liquidations('2026-10-01')$$,
+  $$VALUES (1, 1, 1, 800::numeric)$$, 'October: the promoted advisor''s sale is liquidated; 1b is retained');
+SELECT results_eq($$SELECT advisor_id::text, amount, status FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001a'$$,
+  $$VALUES ('e8e8e8e8-0000-0000-0000-000000000006', 800.00::numeric, 'generated')$$, 'a promoted advisor keeps the commission of a sale made with their code');
+SELECT results_eq($$SELECT advisor_name, generated_amount FROM public.advisor_commission_summary() WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000006'$$,
+  $$VALUES ('Com Advisor Six', 800.00::numeric)$$, 'the admin still sees the promoted advisor in the summary');
+SELECT results_eq($$SELECT advisor_name, affiliate_name FROM public.advisor_commission_list(NULL) WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000006'$$,
+  $$VALUES ('Com Advisor Six', 'Com Affiliate 1a')$$, 'the list still shows the promoted advisor''s commission');
+SELECT results_eq($$SELECT status, retained_reason, liquidation_id IS NULL FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'$$,
+  $$VALUES ('retained', 'Débito rechazado', true)$$, '1b is retained in October');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after the October generation');
+
+-- retained -> excluded -> included while the debit is still rejected: back to retained, never to generated.
+SELECT lives_ok($$SELECT public.exclude_commission((SELECT id FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'), 'Revisión')$$,
+  'a retained commission can be excluded');
+SELECT results_eq($$SELECT status, exclusion_reason, retained_reason FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'$$,
+  $$VALUES ('excluded', 'Revisión', NULL::text)$$, 'the retained commission is excluded');
+SELECT lives_ok($$SELECT public.include_commission((SELECT id FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'))$$,
+  'the exclusion is undone');
+SELECT results_eq($$SELECT status, exclusion_reason, retained_reason, liquidation_id IS NULL FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'$$,
+  $$VALUES ('retained', NULL::text, 'Débito rechazado', true)$$, 'including a commission whose debit is still rejected retains it');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after an inclusion');
+
+-- Manual catch-up: a payment after the rejection releases it, although the subscription stays payment_failed.
+RESET ROLE;
+INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, amount, created_at) VALUES
+  ('affiliate', 'e8e8e8e8-0000-0000-0000-00000000001b', 'payment', 1000, '2026-10-28 12:00+00');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"e8e8e8e8-0000-0000-0000-000000000001","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.admin_debit_rejections() WHERE profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'), 0,
+  'a payment after the rejection clears the Débito rechazado mark');
+SELECT results_eq($$SELECT advisors, commissions_attached, retained_count, total_amount FROM public.generate_commission_liquidations('2026-10-01')$$,
+  $$VALUES (2, 2, 0, 1300::numeric)$$, 'October regenerated: 1b is released after the manual payment');
+SELECT results_eq($$SELECT status, retained_reason FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'$$,
+  $$VALUES ('generated', NULL::text)$$, 'the caught-up commission is released');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after the October regeneration');
+
+-- A new rejection after the generation: the approval re-checks every line and retains it.
+RESET ROLE;
+UPDATE public.affiliate_payment_subscriptions SET last_failure_at = '2026-10-30 12:00+00', failure_count = 2 WHERE mp_preapproval_id = 'com-pre-1b';
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"e8e8e8e8-0000-0000-0000-000000000001","role":"authenticated"}', true);
+SELECT lives_ok($$SELECT public.approve_commission_liquidation((SELECT id FROM public.commission_liquidations WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003' AND month = '2026-10-01'))$$,
+  'the admin approves advisor 1''s October liquidation');
+SELECT results_eq($$SELECT status, retained_reason, liquidation_id IS NULL FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001b'$$,
+  $$VALUES ('retained', 'Débito rechazado', true)$$, 'the approval retains a line whose debit was rejected after the generation');
+SELECT results_eq($$SELECT status, total_amount FROM public.commission_liquidations WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003' AND month = '2026-10-01'$$,
+  $$VALUES ('approved', 0.00::numeric)$$, 'the approved total leaves the retained line out');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant after an approval with a retained line');
+SELECT lives_ok($$SELECT public.approve_commission_liquidation((SELECT id FROM public.commission_liquidations WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000006' AND month = '2026-10-01'))$$,
+  'the promoted advisor''s October liquidation is approved');
+SELECT is((SELECT status FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001a'), 'approved',
+  'a line with no rejection is approved');
+SELECT is_empty('EXECUTE commission_invariant', 'invariant at the end');
 RESET ROLE;
 
 SELECT * FROM finish();

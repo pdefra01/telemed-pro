@@ -1,21 +1,30 @@
 -- Migration: advisor commissions and monthly liquidations (odd/tasks/commercial-crm-commissions.md, D1, S2/S3/S5)
 --
 -- Mechanism (S3):
---   * A sale (approved adhesion request attributed by promoter_id = the advisor's promoter_code) generates ONE
---     commission when it is confirmed: its affiliate (approved_profile_id) has a positive 'payment' movement in the
---     ledger. confirmed_at = that first payment. The amount is a SNAPSHOT of the plan's advisor_commission_amount at
---     generation time (affiliate profile plan_id -> plans); with no plan the commission is 'excluded' with amount 0
---     and reason 'Sin plan identificable'.
+--   * A sale (approved adhesion request attributed by promoter_id = the promoter_code of the profile that owns it)
+--     generates ONE commission when it is confirmed: its affiliate (approved_profile_id) has a positive 'payment'
+--     movement in the ledger. confirmed_at = that first payment. Promoter codes are unique and only given to advisors,
+--     so the attribution does not filter on the CURRENT role: an advisor promoted later keeps the commissions of the
+--     sales made with their code.
+--   * KNOWN LIMITATION: the amount (and plan) is a SNAPSHOT taken when the commission is GENERATED (the first
+--     liquidation run after the confirmation), not at the confirmation itself: affiliate profile plan_id -> plans
+--     .advisor_commission_amount at that moment. A plan or amount change between the confirmation and that run is
+--     applied. With no plan the commission is 'excluded' with amount 0 and reason 'Sin plan identificable'.
 --   * The admin generates the liquidation of a CLOSED month (Argentina time). Per advisor, a 'draft' liquidation
 --     groups the commissions confirmed up to the end of that month that are not in any liquidation yet. A commission
 --     whose affiliate has a pending debit rejection (debit_rejection_pending(), S5) is 'retained' and stays out; it is
---     released by a later generation once the rejection is resolved.
+--     released by a later generation once the rejection is resolved (MP collects, or the affiliate catches up with a
+--     manual payment: see debit_rejection_pending below). The approval re-checks every line and retains the ones
+--     whose debit was rejected after the generation; including an excluded line whose debit is rejected retains it.
 --   * Re-running a month whose liquidation is still 'draft' recalculates it (exclusions are kept). An 'approved' or
 --     'paid' liquidation is frozen: a sale confirmed late with a payment date in a frozen month goes to the next
 --     generated month, never lost.
 --   * The admin may exclude a commission (reason required) while it is unattached or in a draft, and undo it.
 --     Approval: draft -> approved (commissions 'approved'). Payment: approved -> paid with date, method, reference.
 --   * No clawback (paid stays paid) and no supervisor commission.
+--   * Concurrency: every write function (generate, exclude, include, approve, pay) takes the same transaction
+--     advisory lock ('public.commission_writes') before reading any state, so they run one at a time, and locks
+--     the rows it reads to then write (FOR UPDATE), re-checking their status inside the locked section.
 --
 -- Status of a commission: generated | retained | approved | excluded | paid.
 -- Status of a liquidation: draft | approved | paid.
@@ -117,6 +126,57 @@ REVOKE ALL ON public.advisor_commissions, public.commission_liquidations FROM an
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.advisor_commissions, public.commission_liquidations FROM authenticated;
 GRANT SELECT ON public.advisor_commissions, public.commission_liquidations TO authenticated;
 
+-- ── S5 rule, refined: a manual catch-up resolves a rejection ───────────────
+-- Same signature and grants as 20261111110000. A payment_failed subscription is no longer pending when a positive
+-- 'payment' movement (any payment row, exactly as the cancelled branch already counted) was created after its last_failure_at (the affiliate caught up: S3 "MP collects or the affiliate
+-- catches up"), the same proof already used for a cancelled one. This also clears the "Débito rechazado" mark in
+-- Cobranzas and the Padrón in that case. A payment_failed row without last_failure_at stays pending.
+CREATE OR REPLACE FUNCTION public.debit_rejection_pending(
+  p_profile_id      UUID,
+  p_status          TEXT,
+  p_last_failure_at TIMESTAMPTZ
+)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  SELECT CASE
+    WHEN p_status IN ('payment_failed', 'cancelled') AND p_last_failure_at IS NOT NULL THEN NOT EXISTS (
+      SELECT 1 FROM public.affiliate_account_movements m
+       WHERE m.entity_type = 'affiliate'
+         AND m.entity_id = p_profile_id
+         AND m.type = 'payment'
+         AND m.created_at > p_last_failure_at)
+    WHEN p_status = 'payment_failed' THEN true
+    ELSE false
+  END;
+$$;
+
+COMMENT ON FUNCTION public.debit_rejection_pending IS 'Débito rechazado rule (S5): the current subscription is payment_failed or cancelled after a rejection, with no payment movement created since the last rejection (a payment_failed row without a rejection date is always pending).';
+
+REVOKE ALL ON FUNCTION public.debit_rejection_pending(UUID, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.debit_rejection_pending(UUID, TEXT, TIMESTAMPTZ) TO authenticated, service_role;
+
+-- ── Internal: is the affiliate's current debit rejected? ────────────────────
+-- The current subscription is the newest non-reservation row (as advisor_collections and admin_debit_rejections).
+CREATE OR REPLACE FUNCTION public.commission_debit_pending(p_profile_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE((
+    SELECT public.debit_rejection_pending(p_profile_id, s.status, s.last_failure_at)
+      FROM public.affiliate_payment_subscriptions s
+     WHERE s.profile_id = p_profile_id AND s.status <> 'pending'
+     ORDER BY s.created_at DESC, s.id DESC
+     LIMIT 1), false);
+$$;
+REVOKE ALL ON FUNCTION public.commission_debit_pending(UUID) FROM PUBLIC, anon, authenticated;
+
 -- ── Internal: recompute a draft liquidation ─────────────────────────────────
 CREATE OR REPLACE FUNCTION public.recompute_commission_liquidation(p_liquidation_id UUID)
 RETURNS VOID
@@ -171,8 +231,8 @@ BEGIN
   -- the instant the month ends in Argentina
   v_end := (v_month + interval '1 month')::timestamp AT TIME ZONE v_tz;
 
-  -- one generation at a time
-  PERFORM pg_advisory_xact_lock(hashtext('public.generate_commission_liquidations'));
+  -- one commission write at a time (shared with exclude, include, approve and pay)
+  PERFORM pg_advisory_xact_lock(hashtext('public.commission_writes'));
 
   -- 1. A commission per confirmed sale not recorded yet (amount snapshot of the plan).
   INSERT INTO public.advisor_commissions
@@ -183,7 +243,7 @@ BEGIN
          CASE WHEN pl.id IS NULL THEN 'excluded' ELSE 'generated' END,
          CASE WHEN pl.id IS NULL THEN 'Sin plan identificable' END
     FROM public.adhesion_requests ar
-    JOIN public.profiles a ON a.promoter_code = ar.promoter_id AND a.role = 'advisor'
+    JOIN public.profiles a ON a.promoter_code = ar.promoter_id
     JOIN LATERAL (
       SELECT min(m.created_at) AS paid_at
         FROM public.affiliate_account_movements m
@@ -208,16 +268,8 @@ BEGIN
      SET status          = CASE WHEN r.pending THEN 'retained' ELSE 'generated' END,
          retained_reason = CASE WHEN r.pending THEN 'Débito rechazado' END
     FROM (
-      SELECT o.id,
-             COALESCE(public.debit_rejection_pending(o.affiliate_profile_id, ds.status, ds.last_failure_at), false) AS pending
+      SELECT o.id, public.commission_debit_pending(o.affiliate_profile_id) AS pending
         FROM public.advisor_commissions o
-        LEFT JOIN LATERAL (
-          SELECT s.status, s.last_failure_at
-            FROM public.affiliate_payment_subscriptions s
-           WHERE s.profile_id = o.affiliate_profile_id AND s.status <> 'pending'
-           ORDER BY s.created_at DESC, s.id DESC
-           LIMIT 1
-        ) ds ON true
        WHERE o.status IN ('generated', 'retained')
          AND o.liquidation_id IS NULL
          AND o.confirmed_at < v_end
@@ -286,6 +338,8 @@ BEGIN
   IF NULLIF(btrim(p_reason), '') IS NULL THEN
     RAISE EXCEPTION 'El motivo de la exclusión es obligatorio';
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('public.commission_writes'));
+
   SELECT * INTO v_commission FROM public.advisor_commissions WHERE id = p_commission_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'La comisión no existe' USING ERRCODE = 'P0002';
@@ -325,6 +379,8 @@ BEGIN
   IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Solo un administrador puede incluir comisiones' USING ERRCODE = '42501';
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('public.commission_writes'));
+
   SELECT * INTO v_commission FROM public.advisor_commissions WHERE id = p_commission_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'La comisión no existe' USING ERRCODE = 'P0002';
@@ -342,10 +398,16 @@ BEGIN
     RAISE EXCEPTION 'La venta no tiene un plan identificable: no hay comisión que incluir';
   END IF;
 
-  -- back to generated; the next generation re-evaluates the retention
-  UPDATE public.advisor_commissions
-     SET status = 'generated', exclusion_reason = NULL
-   WHERE id = p_commission_id;
+  IF public.commission_debit_pending(v_commission.affiliate_profile_id) THEN
+    -- the debit is still rejected: back to retained, out of any liquidation
+    UPDATE public.advisor_commissions
+       SET status = 'retained', exclusion_reason = NULL, retained_reason = 'Débito rechazado', liquidation_id = NULL
+     WHERE id = p_commission_id;
+  ELSE
+    UPDATE public.advisor_commissions
+       SET status = 'generated', exclusion_reason = NULL
+     WHERE id = p_commission_id;
+  END IF;
 
   IF v_commission.liquidation_id IS NOT NULL THEN
     PERFORM public.recompute_commission_liquidation(v_commission.liquidation_id);
@@ -353,7 +415,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.include_commission(UUID) IS 'Admin only. Undoes an exclusion while the commission is unattached or in a draft liquidation.';
+COMMENT ON FUNCTION public.include_commission(UUID) IS 'Admin only. Undoes an exclusion while the commission is unattached or in a draft liquidation; if the affiliate''s debit is rejected the commission goes back to retained (out of the liquidation).';
 
 -- ── Approval and payment ────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.approve_commission_liquidation(p_liquidation_id UUID)
@@ -368,6 +430,8 @@ BEGIN
   IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Solo un administrador puede aprobar liquidaciones' USING ERRCODE = '42501';
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('public.commission_writes'));
+
   SELECT status INTO v_status FROM public.commission_liquidations WHERE id = p_liquidation_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'La liquidación no existe' USING ERRCODE = 'P0002';
@@ -375,6 +439,13 @@ BEGIN
   IF v_status <> 'draft' THEN
     RAISE EXCEPTION 'Solo se aprueba una liquidación en borrador (estado actual: %)', v_status;
   END IF;
+  PERFORM 1 FROM public.advisor_commissions WHERE liquidation_id = p_liquidation_id FOR UPDATE;
+
+  -- S5: a line whose debit was rejected after the generation is retained, not approved
+  UPDATE public.advisor_commissions
+     SET status = 'retained', retained_reason = 'Débito rechazado', liquidation_id = NULL
+   WHERE liquidation_id = p_liquidation_id AND status = 'generated'
+     AND public.commission_debit_pending(affiliate_profile_id);
 
   PERFORM public.recompute_commission_liquidation(p_liquidation_id);
 
@@ -388,7 +459,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.approve_commission_liquidation(UUID) IS 'Admin only. draft -> approved; its included commissions become approved. Frozen from then on.';
+COMMENT ON FUNCTION public.approve_commission_liquidation(UUID) IS 'Admin only. draft -> approved; lines whose debit is rejected are retained first, the rest become approved. Frozen from then on.';
 
 CREATE OR REPLACE FUNCTION public.pay_commission_liquidation(
   p_liquidation_id UUID,
@@ -413,6 +484,8 @@ BEGIN
   IF NULLIF(btrim(p_method), '') IS NULL THEN
     RAISE EXCEPTION 'El medio de pago es obligatorio';
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('public.commission_writes'));
+
   SELECT status INTO v_status FROM public.commission_liquidations WHERE id = p_liquidation_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'La liquidación no existe' USING ERRCODE = 'P0002';
@@ -436,6 +509,8 @@ COMMENT ON FUNCTION public.pay_commission_liquidation(UUID, DATE, TEXT, TEXT) IS
 
 -- ── Reads for the UI ────────────────────────────────────────────────────────
 -- Per advisor: generated (not approved yet) / retained / approved to collect / collected (all time).
+-- The advisors are the profiles with role 'advisor' plus anyone who owns commissions (a promoted advisor, or a
+-- deleted profile: then the name is the stored id).
 CREATE OR REPLACE FUNCTION public.advisor_commission_summary()
 RETURNS TABLE (
   advisor_id        UUID,
@@ -454,8 +529,13 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT v.id,
-         v.full_name::text,
+  WITH owners AS (
+    SELECT p.id FROM public.profiles p WHERE p.role = 'advisor'
+    UNION
+    SELECT DISTINCT c.advisor_id FROM public.advisor_commissions c
+  )
+  SELECT o.id,
+         COALESCE(v.full_name::text, o.id::text),
          COALESCE(sum(c.amount) FILTER (WHERE c.status = 'generated'), 0)::numeric,
          count(c.id) FILTER (WHERE c.status = 'generated'),
          COALESCE(sum(c.amount) FILTER (WHERE c.status = 'retained'), 0)::numeric,
@@ -464,12 +544,12 @@ AS $$
          count(c.id) FILTER (WHERE c.status = 'approved'),
          COALESCE(sum(c.amount) FILTER (WHERE c.status = 'paid'), 0)::numeric,
          count(c.id) FILTER (WHERE c.status = 'paid')
-    FROM public.profiles v
-    LEFT JOIN public.advisor_commissions c ON c.advisor_id = v.id
-   WHERE v.role = 'advisor'
-     AND (v.id = auth.uid() OR public.is_supervisor_of(v.id) OR public.is_admin())
-   GROUP BY v.id, v.full_name
-   ORDER BY v.full_name;
+    FROM owners o
+    LEFT JOIN public.profiles v ON v.id = o.id
+    LEFT JOIN public.advisor_commissions c ON c.advisor_id = o.id
+   WHERE o.id = auth.uid() OR public.is_supervisor_of(o.id) OR public.is_admin()
+   GROUP BY o.id, v.full_name
+   ORDER BY 2;
 $$;
 
 COMMENT ON FUNCTION public.advisor_commission_summary() IS 'Commission summary per advisor (S3): generated, retained, approved to collect, collected. Scope: own (advisor), team (supervisor), all (admin).';
@@ -498,17 +578,18 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT c.id, c.advisor_id, v.full_name::text, c.affiliate_profile_id, ap.full_name::text,
+  -- LEFT JOIN: a deleted advisor's commissions still show, named by their stored id
+  SELECT c.id, c.advisor_id, COALESCE(v.full_name::text, c.advisor_id::text), c.affiliate_profile_id, ap.full_name::text,
          c.plan_id, pl.name::text, c.amount, c.confirmed_at, c.status, c.exclusion_reason, c.retained_reason,
          c.liquidation_id, l.month, l.status
     FROM public.advisor_commissions c
-    JOIN public.profiles v ON v.id = c.advisor_id
+    LEFT JOIN public.profiles v ON v.id = c.advisor_id
     LEFT JOIN public.profiles ap ON ap.id = c.affiliate_profile_id
     LEFT JOIN public.plans pl ON pl.id = c.plan_id
     LEFT JOIN public.commission_liquidations l ON l.id = c.liquidation_id
    WHERE (c.advisor_id = auth.uid() OR public.is_supervisor_of(c.advisor_id) OR public.is_admin())
      AND (p_liquidation_id IS NULL OR c.liquidation_id = p_liquidation_id)
-   ORDER BY v.full_name, c.confirmed_at, c.id;
+   ORDER BY 3, c.confirmed_at, c.id;
 $$;
 
 COMMENT ON FUNCTION public.advisor_commission_list(UUID) IS 'Commissions with affiliate and plan names, optionally of one liquidation. Scope: own (advisor), team (supervisor), all (admin).';
