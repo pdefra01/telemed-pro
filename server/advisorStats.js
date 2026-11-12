@@ -11,6 +11,8 @@
 import { computeAdvisorCommissions } from './pricing.js';
 import { findConfirmedProfileIds, partitionConfirmed } from './salesConfirmation.js';
 
+const APPROVED_PAGE_SIZE = 1000;
+
 const EMPTY_STATS = {
   totalSales: 0,
   approvedSales: 0,
@@ -73,12 +75,20 @@ export async function computeAdvisorStats({ supabaseAdmin, computeCommissions = 
     .maybeSingle();
 
   // 5. Approved sales, split by confirmed payment; fixed commission per plan on the confirmed ones
-  const { data: approvedRequests, error: approvedError } = await supabaseAdmin
-    .from('adhesion_requests')
-    .select('approved_profile_id, plan_type, payment_method')
-    .eq('promoter_id', promoterCode)
-    .eq('status', 'approved');
-  if (approvedError) throw approvedError;
+  //    Read in pages: the API returns at most 1000 rows per request.
+  const approvedRequests = [];
+  for (let from = 0; ; from += APPROVED_PAGE_SIZE) {
+    const { data: page, error: approvedError } = await supabaseAdmin
+      .from('adhesion_requests')
+      .select('approved_profile_id, plan_type, payment_method')
+      .eq('promoter_id', promoterCode)
+      .eq('status', 'approved')
+      .order('id', { ascending: true })
+      .range(from, from + APPROVED_PAGE_SIZE - 1);
+    if (approvedError) throw approvedError;
+    approvedRequests.push(...(page || []));
+    if (!page || page.length < APPROVED_PAGE_SIZE) break;
+  }
 
   const confirmedIds = await findConfirmedProfileIds({ supabaseAdmin }, [
     ...(approvedRequests || []).map((r) => r.approved_profile_id),

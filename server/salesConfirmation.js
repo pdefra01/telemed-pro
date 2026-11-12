@@ -8,8 +8,13 @@
 // advisor_monthly_metrics applies the same rule in SQL.
 
 const CHUNK_SIZE = 200;
+const RPC = 'confirmed_affiliate_ids';
 
 /**
+ * Asks the database (confirmed_affiliate_ids, service role only) which of the
+ * given ids have a positive ledger payment. It returns each id once, so a chunk
+ * of 200 ids can never hit the API's 1000-row cap the way one row per payment did.
+ *
  * @param {{ supabaseAdmin: object }} deps
  * @param {Array<string|null|undefined>} profileIds affiliate profile ids
  * @returns {Promise<Set<string>>} the ids that have a positive ledger payment
@@ -19,14 +24,13 @@ export async function findConfirmedProfileIds({ supabaseAdmin }, profileIds) {
   const confirmed = new Set();
 
   for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabaseAdmin
-      .from('affiliate_account_movements')
-      .select('entity_id')
-      .eq('type', 'payment')
-      .gt('amount', 0)
-      .in('entity_id', ids.slice(i, i + CHUNK_SIZE));
+    const { data, error } = await supabaseAdmin.rpc(RPC, { p_profile_ids: ids.slice(i, i + CHUNK_SIZE) });
     if (error) throw error;
-    for (const row of data || []) confirmed.add(row.entity_id);
+    for (const row of data || []) {
+      // SETOF uuid may arrive as bare values or as objects keyed by the function name
+      const id = typeof row === 'string' ? row : row?.[RPC];
+      if (id) confirmed.add(id);
+    }
   }
 
   return confirmed;
@@ -43,19 +47,4 @@ export function partitionConfirmed(requests, confirmedIds) {
     (r.approved_profile_id && confirmedIds.has(r.approved_profile_id) ? confirmed : unconfirmed).push(r);
   }
   return { confirmed, unconfirmed };
-}
-
-/**
- * Splits approved adhesion requests into confirmed and unconfirmed sales.
- *
- * @param {{ supabaseAdmin: object }} deps
- * @param {Array<{ approved_profile_id?: string|null }>} approvedRequests
- */
-export async function splitConfirmedSales({ supabaseAdmin }, approvedRequests) {
-  const requests = approvedRequests || [];
-  const confirmedIds = await findConfirmedProfileIds(
-    { supabaseAdmin },
-    requests.map((r) => r.approved_profile_id)
-  );
-  return { ...partitionConfirmed(requests, confirmedIds), confirmedIds };
 }

@@ -5,7 +5,8 @@ import { prospectRepository } from '../../../repositories/ProspectRepository';
 import { Prospect } from '../../../types';
 
 vi.mock('../../../repositories/ProspectRepository', () => ({
-  prospectRepository: { list: vi.fn() },
+  PROSPECT_PAGE_SIZE: 100,
+  prospectRepository: { list: vi.fn(), countByStatus: vi.fn() },
 }));
 
 const build = (over: Partial<Prospect>): Prospect => ({
@@ -30,6 +31,7 @@ describe('TeamProspects (supervisor / admin, read-only)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prospectRepository.list).mockResolvedValue(rows);
+    vi.mocked(prospectRepository.countByStatus).mockResolvedValue({ new: 1, contacted: 0, interested: 1, affiliated: 1, lost: 0 });
   });
 
   it('lists the prospects with the advisor that owns each one', async () => {
@@ -58,11 +60,12 @@ describe('TeamProspects (supervisor / admin, read-only)', () => {
     expect(await screen.findByRole('heading', { name: 'Prospectos del equipo' })).toBeInTheDocument();
   });
 
-  it('summarizes the pipeline with one count per status', async () => {
+  it('summarizes the pipeline with one count per status, from the server totals (not only the loaded page)', async () => {
+    vi.mocked(prospectRepository.countByStatus).mockResolvedValue({ new: 1500, contacted: 0, interested: 1, affiliated: 1, lost: 0 });
     render(<TeamProspects />);
     await screen.findByText('Laura Pérez');
 
-    expect(within(screen.getByTestId('summary-new')).getByText('1')).toBeInTheDocument();
+    expect(within(screen.getByTestId('summary-new')).getByText('1500')).toBeInTheDocument();
     expect(within(screen.getByTestId('summary-interested')).getByText('1')).toBeInTheDocument();
     expect(within(screen.getByTestId('summary-affiliated')).getByText('1')).toBeInTheDocument();
     expect(within(screen.getByTestId('summary-contacted')).getByText('0')).toBeInTheDocument();
@@ -112,5 +115,34 @@ describe('TeamProspects (supervisor / admin, read-only)', () => {
     vi.mocked(prospectRepository.list).mockRejectedValue(new Error('boom'));
     render(<TeamProspects />);
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudieron cargar/i);
+  });
+
+  describe('pagination', () => {
+    const page = (from: number, n: number) =>
+      Array.from({ length: n }, (_, i) => build({ id: `p-${from + i}`, fullName: `Prospecto ${from + i}` }));
+
+    it('loads 100 at a time and appends the next page with "Cargar más"', async () => {
+      vi.mocked(prospectRepository.list).mockResolvedValueOnce(page(0, 100)).mockResolvedValueOnce(page(100, 5));
+      render(<TeamProspects />);
+      await screen.findByText('Prospecto 0');
+      expect(prospectRepository.list).toHaveBeenCalledWith({ limit: 100, offset: 0 });
+
+      fireEvent.click(screen.getByText('Cargar más'));
+
+      expect(await screen.findByText('Prospecto 104')).toBeInTheDocument();
+      expect(prospectRepository.list).toHaveBeenLastCalledWith({ limit: 100, offset: 100 });
+      expect(screen.queryByText('Cargar más')).not.toBeInTheDocument();
+    });
+
+    it('keeps the loaded prospects when the next page fails', async () => {
+      vi.mocked(prospectRepository.list).mockResolvedValueOnce(page(0, 100)).mockRejectedValueOnce(new Error('boom'));
+      render(<TeamProspects />);
+      await screen.findByText('Prospecto 0');
+
+      fireEvent.click(screen.getByText('Cargar más'));
+
+      expect(await screen.findByText(/no se pudieron cargar más/i)).toBeInTheDocument();
+      expect(screen.getByText('Prospecto 99')).toBeInTheDocument();
+    });
   });
 });

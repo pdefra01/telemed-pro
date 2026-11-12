@@ -1,9 +1,13 @@
 import { supabase } from '../services/supabase';
 import { Prospect, ProspectStatus } from '../types';
+import { PROSPECT_STATUSES } from '../utils/prospectStatus';
 
 // Two foreign keys point from prospects to profiles, so the advisor embed
 // needs the explicit constraint name.
 const SELECT = '*, advisor:profiles!prospects_advisor_id_fkey(full_name)';
+
+/** Prospects per page; the API never returns more than 1000 rows per request. */
+export const PROSPECT_PAGE_SIZE = 100;
 
 export interface ProspectInput {
   fullName: string;
@@ -39,17 +43,37 @@ const toProspect = (row: any): Prospect => ({
  * advisor reads their own, a supervisor their team's, an admin everything.
  */
 export class ProspectRepository {
-  async list(filter?: { advisorId?: string }): Promise<Prospect[]> {
+  /** One page, newest first. A page shorter than `limit` is the last one. */
+  async list(filter: { advisorId?: string; limit?: number; offset?: number } = {}): Promise<Prospect[]> {
+    const limit = filter.limit ?? PROSPECT_PAGE_SIZE;
+    const offset = filter.offset ?? 0;
     let query = supabase
       .from('prospects')
       .select(SELECT)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
 
-    if (filter?.advisorId) query = query.eq('advisor_id', filter.advisorId);
+    if (filter.advisorId) query = query.eq('advisor_id', filter.advisorId);
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(toProspect);
+  }
+
+  /** Exact totals per status of every prospect the caller may see (RLS), without reading the rows. */
+  async countByStatus(): Promise<Record<ProspectStatus, number>> {
+    const counts = await Promise.all(
+      PROSPECT_STATUSES.map(async (status) => {
+        const { count, error } = await supabase
+          .from('prospects')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', status);
+        if (error) throw error;
+        return [status, count ?? 0] as const;
+      })
+    );
+    return Object.fromEntries(counts) as Record<ProspectStatus, number>;
   }
 
   async create(advisorId: string, input: ProspectInput): Promise<Prospect> {

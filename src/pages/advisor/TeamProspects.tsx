@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Phone, Mail } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 import { Prospect, ProspectStatus } from '../../types';
-import { prospectRepository } from '../../repositories/ProspectRepository';
+import { PROSPECT_PAGE_SIZE, prospectRepository } from '../../repositories/ProspectRepository';
 import { PROSPECT_STATUSES, PROSPECT_STATUS_BADGE, PROSPECT_STATUS_LABELS } from '../../utils/prospectStatus';
 
 interface TeamProspectsProps {
@@ -22,27 +23,55 @@ export const TeamProspects: React.FC<TeamProspectsProps> = ({ title = 'Prospecto
   const [advisorFilter, setAdvisorFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<ProspectStatus | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
+  // rows read from the server so far: the offset of the next page
+  const loadedFromServer = useRef(0);
+  const filtering = advisorFilter !== 'all' || statusFilter !== 'all' || search.trim() !== '';
+  const [counts, setCounts] = useState<Record<ProspectStatus, number>>(
+    () => Object.fromEntries(PROSPECT_STATUSES.map((s) => [s, 0])) as Record<ProspectStatus, number>
+  );
 
   useEffect(() => {
     let cancelled = false;
-    prospectRepository
-      .list()
-      .then((rows) => { if (!cancelled) setProspects(rows); })
+    // the summary counts every prospect in scope, not just the loaded page
+    Promise.all([prospectRepository.list({ limit: PROSPECT_PAGE_SIZE, offset: 0 }), prospectRepository.countByStatus()])
+      .then(([rows, totals]) => {
+        if (cancelled) return;
+        loadedFromServer.current = rows.length;
+        setProspects(rows);
+        setHasMore(rows.length === PROSPECT_PAGE_SIZE);
+        setCounts(totals);
+      })
       .catch(() => { if (!cancelled) setLoadError('No se pudieron cargar los prospectos.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
+  const loadMore = async () => {
+    setLoadingMore(true);
+    setMoreError(false);
+    try {
+      const rows = await prospectRepository.list({ limit: PROSPECT_PAGE_SIZE, offset: loadedFromServer.current });
+      loadedFromServer.current += rows.length;
+      // a prospect created meanwhile shifts the pages: skip the ones already listed
+      setProspects((current) => {
+        const known = new Set(current.map((p) => p.id));
+        return [...current, ...rows.filter((p) => !known.has(p.id))];
+      });
+      setHasMore(rows.length === PROSPECT_PAGE_SIZE);
+    } catch {
+      setMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const advisors = useMemo(() => {
     const byId = new Map<string, string>();
     prospects.forEach((p) => byId.set(p.advisorId, p.advisorName ?? 'Asesor sin nombre'));
     return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
-  }, [prospects]);
-
-  const counts = useMemo(() => {
-    const result = Object.fromEntries(PROSPECT_STATUSES.map((s) => [s, 0])) as Record<ProspectStatus, number>;
-    prospects.forEach((p) => { result[p.status] += 1; });
-    return result;
   }, [prospects]);
 
   const visible = useMemo(() => {
@@ -136,6 +165,13 @@ export const TeamProspects: React.FC<TeamProspectsProps> = ({ title = 'Prospecto
             </li>
           ))}
         </ul>
+      )}
+      {!loading && !loadError && hasMore && (
+        <div className="text-center space-y-2">
+          {filtering && <p className="text-xs text-gray-500">La búsqueda y el filtro buscan solo entre los prospectos cargados.</p>}
+          {moreError && <p role="alert" className="text-xs text-red-600">No se pudieron cargar más prospectos.</p>}
+          <Button type="button" variant="outline" onClick={loadMore} isLoading={loadingMore}>Cargar más</Button>
+        </div>
       )}
     </div>
   );

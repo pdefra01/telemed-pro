@@ -57,8 +57,9 @@ INSERT INTO public.prospects (id, advisor_id, full_name, phone, email, status, c
   ('c6c6c6c6-0000-0000-0000-0000000000b2', 'c6c6c6c6-0000-0000-0000-000000000002', 'Twin Live',   '3870000066', NULL, 'new',  '2026-09-15 12:00+00', now() - interval '60 days'),
   -- f2b was touched 10 days ago, after its request: an approved request still converts it
   ('c6c6c6c6-0000-0000-0000-0000000000b3', 'c6c6c6c6-0000-0000-0000-000000000002', 'Touched Approved', '3870000077', NULL, 'contacted', '2026-09-01 12:00+00', now() - interval '10 days'),
-  -- f5b was touched 10 days ago, after its pending request: it must not be pushed forward again
+  -- f5b had its STATUS changed 10 days ago, after its pending request (S6.3: only status changes count): it must not be pushed forward again
   ('c6c6c6c6-0000-0000-0000-0000000000b4', 'c6c6c6c6-0000-0000-0000-000000000002', 'Touched Pending', '3870000055', NULL, 'new', '2026-09-01 12:00+00', now() - interval '10 days');
+UPDATE public.prospects SET status_changed_at = now() - interval '10 days' WHERE id = 'c6c6c6c6-0000-0000-0000-0000000000b4';
 
 -- ── Adhesion requests (owner role: exempt from the public-insert guards) ────
 INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
@@ -93,15 +94,15 @@ SELECT results_eq($$SELECT prospects_created::int, prospects_interested::int, pr
 SELECT results_eq($$
   SELECT advisor_id::text, full_name, phone, status, source, created_at, (notes NOT LIKE '%pain one%' AND notes LIKE 'Encuesta de opinión%' AND length(notes) <= 500)
     FROM public.prospects WHERE full_name = 'Lead Uno'$$,
-  $$VALUES ('c6c6c6c6-0000-0000-0000-000000000002', 'Lead Uno', '+54 9 387 400-0001', 'new', 'lead_survey', '2026-10-05 12:00+00'::timestamptz, true)$$,
-  'a consenting survey lead becomes a new prospect of its advisor, with the survey date and a short summary that does not copy the free-text answer');
+  $$VALUES ('c6c6c6c6-0000-0000-0000-000000000002', 'Lead Uno', '+54 9 387 400-0001', 'new', 'lead_survey', now(), true)$$,
+  'a consenting survey lead becomes a new prospect of its advisor, dated when it enters the CRM (S6.8), with a short summary that does not copy the free-text answer');
 SELECT is((SELECT advisor_id::text FROM public.prospects WHERE full_name = 'Lead Tres'), 'c6c6c6c6-0000-0000-0000-000000000003',
   'the second advisor gets their own lead');
 SELECT is((SELECT count(*)::int FROM public.prospects WHERE source = 'lead_survey'), 3,
   'no prospect for a lead without consent, without an advisor code, with an unknown one, a duplicate phone or an unusable phone');
 SELECT is((SELECT advisor_id::text FROM public.prospects WHERE full_name = 'Other Advisor Lead'), 'c6c6c6c6-0000-0000-0000-000000000003',
   'the same phone is accepted for another advisor (deduplication is per advisor)');
-SELECT results_eq($$SELECT source_ref::text, outcome FROM public.prospect_intake_log ORDER BY source_ref::text$$,
+SELECT results_eq($$SELECT source_ref::text, outcome FROM public.prospect_intake_log WHERE source = 'lead_survey' ORDER BY source_ref::text$$,
   $$VALUES ('c6c6c6c6-0000-0000-0000-0000000000e1', 'created'), ('c6c6c6c6-0000-0000-0000-0000000000e3', 'created'), ('c6c6c6c6-0000-0000-0000-0000000000e6', 'duplicate'),
            ('c6c6c6c6-0000-0000-0000-0000000000e7', 'duplicate'), ('c6c6c6c6-0000-0000-0000-0000000000e8', 'created'), ('c6c6c6c6-0000-0000-0000-0000000000e9', 'invalid')$$,
   'the log records what happened to each processed survey, so a skipped one is not retried');
@@ -144,6 +145,9 @@ SELECT results_eq($$SELECT prospects_created::int, prospects_interested::int, pr
   $$VALUES (0, 0, 1)$$, 'a pending request that is later approved converts its prospect');
 SELECT results_eq($$SELECT status, converted_profile_id::text FROM public.prospects WHERE id = 'c6c6c6c6-0000-0000-0000-0000000000f1'$$,
   $$VALUES ('affiliated', 'c6c6c6c6-0000-0000-0000-000000000013')$$, 'the interested prospect is now affiliated, linked to the profile');
+SELECT results_eq($$SELECT source, outcome FROM public.prospect_intake_log WHERE source_ref = 'c6c6c6c6-0000-0000-0000-0000000000a1' ORDER BY source$$,
+  $$VALUES ('adhesion_approved', 'processed'), ('adhesion_pending', 'processed')$$,
+  'the request was handled once as pending and once more as approved (S6.2)');
 
 -- ── An affiliated prospect is never downgraded, a deleted automatic prospect is not recreated ──
 INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,

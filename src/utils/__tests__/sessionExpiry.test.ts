@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_MAX_SESSION_HOURS, getSessionExpiryReason, resolveMaxSessionHours } from '../sessionExpiry';
+import {
+  DEFAULT_MAX_SESSION_HOURS,
+  DEFAULT_SESSION_POLICY,
+  getSessionExpiryReason,
+  resolveMaxSessionHours,
+  resolvePersistentSession,
+  resolveTimeoutMinutes,
+} from '../sessionExpiry';
 
 const NOW = new Date('2026-10-24T20:00:00.000Z').getTime();
 const minutesAgo = (m: number) => NOW - m * 60 * 1000;
@@ -69,5 +76,34 @@ describe('resolveMaxSessionHours', () => {
   it('has no limit for the other roles unless configured', () => {
     expect(resolveMaxSessionHours({}, 'admin')).toBe(0);
     expect(resolveMaxSessionHours(null, 'patient')).toBe(0);
+  });
+});
+
+describe('session policy defaults per role', () => {
+  it('covers supervisors like advisors: an inactivity timeout and a non-persistent session', () => {
+    expect(DEFAULT_SESSION_POLICY.supervisor).toEqual({ timeoutMinutes: 15, persistent: false });
+    expect(Object.keys(DEFAULT_SESSION_POLICY).sort()).toEqual(['admin', 'advisor', 'doctor', 'patient', 'supervisor']);
+  });
+
+  it('falls back to the role default when a cached policy lacks the role, never 0 for a staff role', () => {
+    const cachedBeforeSupervisors = { admin: { timeoutMinutes: 15, persistent: false }, patient: { timeoutMinutes: 0, persistent: true } };
+    expect(resolveTimeoutMinutes(cachedBeforeSupervisors, 'supervisor')).toBe(15);
+    expect(resolvePersistentSession(cachedBeforeSupervisors, 'supervisor')).toBe(false);
+    expect(resolveTimeoutMinutes(null, 'supervisor')).toBe(15);
+    expect(resolvePersistentSession(null, 'supervisor')).toBe(false);
+  });
+
+  it('keeps the stored values, including a timeout of 0 set by the admin', () => {
+    const policy = { advisor: { timeoutMinutes: 0, persistent: true }, supervisor: { timeoutMinutes: 45, persistent: false } };
+    expect(resolveTimeoutMinutes(policy, 'advisor')).toBe(0);
+    expect(resolvePersistentSession(policy, 'advisor')).toBe(true);
+    expect(resolveTimeoutMinutes(policy, 'supervisor')).toBe(45);
+  });
+
+  it('keeps patients and unknown roles persistent without a timeout, as before', () => {
+    expect(resolveTimeoutMinutes({}, 'patient')).toBe(0);
+    expect(resolvePersistentSession({}, 'patient')).toBe(true);
+    expect(resolveTimeoutMinutes({}, 'someone')).toBe(0);
+    expect(resolvePersistentSession({}, 'someone')).toBe(true);
   });
 });

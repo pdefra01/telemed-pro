@@ -5,6 +5,7 @@ import { prospectRepository } from '../../../repositories/ProspectRepository';
 import { Prospect, User } from '../../../types';
 
 vi.mock('../../../repositories/ProspectRepository', () => ({
+  PROSPECT_PAGE_SIZE: 100,
   prospectRepository: {
     list: vi.fn(),
     create: vi.fn(),
@@ -190,5 +191,41 @@ describe('Prospects (advisor CRM)', () => {
 
     expect(screen.queryByText('Laura Pérez')).not.toBeInTheDocument();
     expect(screen.getByText('Marcos Díaz')).toBeInTheDocument();
+  });
+
+  describe('pagination', () => {
+    const page = (from: number, n: number) =>
+      Array.from({ length: n }, (_, i) => build({ id: `p-${from + i}`, fullName: `Prospecto ${from + i}` }));
+
+    it('loads 100 at a time and appends the next page with "Cargar más"', async () => {
+      vi.mocked(prospectRepository.list).mockResolvedValueOnce(page(0, 100)).mockResolvedValueOnce(page(100, 30));
+      render(<Prospects user={user} />);
+      await screen.findByText('Prospecto 0');
+      expect(prospectRepository.list).toHaveBeenCalledWith({ limit: 100, offset: 0 });
+
+      fireEvent.click(screen.getByText('Cargar más'));
+
+      expect(await screen.findByText('Prospecto 129')).toBeInTheDocument();
+      expect(prospectRepository.list).toHaveBeenLastCalledWith({ limit: 100, offset: 100 });
+      expect(screen.getByText('Prospecto 0')).toBeInTheDocument();
+      expect(screen.queryByText('Cargar más')).not.toBeInTheDocument();
+    });
+
+    it('has no "Cargar más" when everything fits in one page', async () => {
+      render(<Prospects user={user} />);
+      await screen.findByText('Laura Pérez');
+      expect(screen.queryByText('Cargar más')).not.toBeInTheDocument();
+    });
+
+    it('says the search only covers the loaded prospects while more remain', async () => {
+      vi.mocked(prospectRepository.list).mockResolvedValueOnce(page(0, 100));
+      render(<Prospects user={user} />);
+      await screen.findByText('Prospecto 0');
+      expect(screen.queryByText(/solo entre los prospectos cargados/i)).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Buscar prospecto'), { target: { value: 'zz' } });
+
+      expect(screen.getByText(/solo entre los prospectos cargados/i)).toBeInTheDocument();
+    });
   });
 });
