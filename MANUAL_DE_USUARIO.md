@@ -67,6 +67,11 @@ Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para n
 - *Asesores*: en **Prospectos** cargan sus propios prospectos (nombre, teléfono, email, notas), los pasan por Nuevo → Contactado → Interesado → Afiliado o Perdido, y registran cada contacto. Cada asesor ve solo los suyos.
 - *Supervisores*: ingresan por la pestaña **Asesor** y ven en **Mi equipo**, solo lectura, los prospectos de los asesores de su equipo, con resumen por estado y filtros por asesor y estado.
 
+**Seguimiento de cobranzas**: cada asesor sigue las cobranzas de los afiliados que trajo.
+- *Asesores*: en **Cobranzas** ven a sus afiliados con el estado de cuenta (**En mora**, **Pendiente** o **Al día**), el saldo, el fin de la cobertura y la última gestión. Por defecto se muestran los que tienen deuda; el filtro permite ver todos. Con **Registrar gestión** anotan una llamada, un WhatsApp, una visita, una nota o una **promesa de pago** (con su fecha), y con **Ver historial** consultan todas las gestiones. Las gestiones no se editan ni se borran.
+- *Supervisores*: en **Cobranzas del equipo** ven, solo lectura, la situación de los afiliados de todos los asesores de su equipo sea cual sea (en mora, pendiente o al día), con un resumen por asesor y su historial de gestiones. *Administradores*: lo mismo para todos los asesores, en **Cobranzas comerciales**.
+- El estado y el saldo salen de la cuenta corriente del afiliado. Un afiliado se asigna al asesor que lo trajo por su código de promotor.
+
 **Metas mensuales y métricas**: cada asesor puede tener una meta por mes de afiliados, de ingresos o de ambas (se deja vacía la que no aplica).
 - *Supervisores*: en **Metas y métricas** eligen el mes, ven la tabla de su equipo y con **Editar meta** cargan, cambian o quitan la meta de cada asesor. *Administradores*: lo mismo para todos los asesores.
 - *Asesores*: en **Prospectos**, la tarjeta **Mi mes** muestra el avance contra sus metas y su embudo de prospectos. Cada asesor ve solo lo suyo.

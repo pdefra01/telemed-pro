@@ -39,6 +39,7 @@ import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
 import { Prospects } from './pages/advisor/Prospects';
 import { TeamProspects } from './pages/advisor/TeamProspects';
 import { TeamPerformance } from './pages/advisor/TeamPerformance';
+import { Collections } from './pages/advisor/Collections';
 import { getBranding } from './config/branding';
 
 // Temporarily hides the floating AI chatbot everywhere. Set to true to bring it back.
@@ -390,12 +391,30 @@ const App: React.FC = () => {
         }
       />
 
+      <Route
+        path="/collections"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['advisor']}>
+            <Collections />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Supervisor and admin routes */}
       <Route
         path="/team/performance"
         element={
           <ProtectedRoute user={user} allowedRoles={['supervisor', 'admin']}>
             <TeamPerformance title={user?.role === 'admin' ? 'Metas y métricas comerciales' : 'Metas y métricas del equipo'} />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/team/collections"
+        element={
+          <ProtectedRoute user={user} allowedRoles={['supervisor', 'admin']}>
+            <Collections readOnly title={user?.role === 'admin' ? 'Cobranzas comerciales' : 'Cobranzas del equipo'} />
           </ProtectedRoute>
         }
       />

@@ -18,7 +18,8 @@ import {
   Clock,
   ClipboardList,
   UserPlus,
-  Target
+  Target,
+  Wallet
 } from 'lucide-react';
 import { User, Role } from '../types';
 import { getBranding } from '../config/branding';
@@ -66,6 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       return [
         { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
         { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/prospects' },
+        { name: 'Cobranzas', icon: <Wallet size={20} />, path: '/collections' },
       ];
     }
 
@@ -73,6 +75,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       return [
         { name: 'Mi equipo', icon: <Users size={20} />, path: '/' },
         { name: 'Metas y métricas', icon: <Target size={20} />, path: '/team/performance' },
+        { name: 'Cobranzas del equipo', icon: <Wallet size={20} />, path: '/team/collections' },
       ];
     }
 
@@ -90,6 +93,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         { name: 'Supervisores', icon: <Users size={20} />, path: '/admin/supervisors' },
         { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/admin/prospects' },
         { name: 'Metas y métricas', icon: <Target size={20} />, path: '/team/performance' },
+        { name: 'Cobranzas comerciales', icon: <Wallet size={20} />, path: '/team/collections' },
         {
           name: 'Encuesta de Opinión', icon: <ClipboardList size={20} />, path: '/admin/lead-surveys',
         },
