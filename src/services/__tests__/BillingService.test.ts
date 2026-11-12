@@ -14,6 +14,7 @@ vi.mock('../../repositories/AffiliateRepository', () => ({
     updateAffiliate: vi.fn(),
     updateStatusByAgreement: vi.fn(),
     getCoverageWindowsForBilling: vi.fn(),
+    getActiveAdvisorFamilyGroupIds: vi.fn(),
   },
 }));
 
@@ -52,11 +53,33 @@ describe('BillingService.runMonthlyBillingCycle', () => {
     vi.mocked(affiliateRepository.getAllAffiliates).mockResolvedValue([]);
     vi.mocked(affiliateRepository.getDirectAffiliates).mockResolvedValue([]);
     vi.mocked(affiliateRepository.getCoverageWindowsForBilling).mockResolvedValue(new Map());
+    vi.mocked(affiliateRepository.getActiveAdvisorFamilyGroupIds).mockResolvedValue(new Set());
     vi.mocked(invoiceRepository.getAll).mockResolvedValue([]);
     vi.mocked(invoiceRepository.createBulk).mockResolvedValue(undefined as any);
     vi.mocked(taxRepository.getAll).mockResolvedValue([]);
     vi.mocked(planRepository.getAll).mockResolvedValue([]);
     vi.mocked(accountMovementRepository.postBillingCharge).mockResolvedValue({} as any);
+  });
+
+  describe('family groups of an active advisor (advisor-affiliate-plan S2)', () => {
+    it('never charges a family member of an active advisor, and still charges everyone else', async () => {
+      vi.mocked(planRepository.getAll).mockResolvedValue([{ id: 'plan-1', monthlyCost: 15000 } as any]);
+      vi.mocked(affiliateRepository.getActiveAdvisorFamilyGroupIds).mockResolvedValue(new Set(['fg-advisor']));
+      vi.mocked(affiliateRepository.getDirectAffiliates).mockResolvedValue([
+        { id: 'aff-member', name: 'Hijo de asesora', planId: 'plan-1', familyGroupId: 'fg-advisor' } as any,
+        { id: 'aff-1', name: 'Ana', planId: 'plan-1', familyGroupId: 'fg-other' } as any,
+      ]);
+      const window = { periodStart: '2026-07-01T00:00:00.000Z', paidMonthsSnapshot: 12, bonusMonthsSnapshot: 2, monthlyCostSnapshot: 15000 };
+      vi.mocked(affiliateRepository.getCoverageWindowsForBilling).mockResolvedValue(new Map([['aff-member', window], ['aff-1', window]]));
+
+      const result = await billingService.runMonthlyBillingCycle('2026-07');
+
+      expect(accountMovementRepository.postBillingCharge).toHaveBeenCalledTimes(1);
+      expect(accountMovementRepository.postBillingCharge).toHaveBeenCalledWith(expect.objectContaining({ entityId: 'aff-1' }));
+      expect(result.processedIndividuals).toBe(1);
+      expect(result.totalAmount).toBe(15000);
+      expect(result.skippedNoWindow).toEqual([]);
+    });
   });
 
   describe('direct affiliate plan validity (legacy safety net, preserved)', () => {
@@ -158,6 +181,7 @@ describe('BillingService.runMonthlyBillingCycle', () => {
       vi.mocked(planRepository.getAll).mockResolvedValue([{ id: 'plan-1', monthlyCost: 15000 } as any]);
       vi.mocked(affiliateRepository.getDirectAffiliates).mockResolvedValue([{ id: 'aff-1', name: 'Sin Ventana', planId: 'plan-1' } as any]);
       vi.mocked(affiliateRepository.getCoverageWindowsForBilling).mockResolvedValue(new Map());
+    vi.mocked(affiliateRepository.getActiveAdvisorFamilyGroupIds).mockResolvedValue(new Set());
 
       const result = await billingService.runMonthlyBillingCycle('2026-07');
 

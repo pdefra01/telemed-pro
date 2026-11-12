@@ -104,7 +104,10 @@ export class BillingService {
     // congelado de la ventana de cobertura (D6), evitando que un cambio de
     // plan a mitad de ventana reclasifique retroactivamente meses ya
     // transcurridos.
-    const directAffiliates = await affiliateRepository.getDirectAffiliates();
+    // Family groups of an active advisor are free of charge (advisor-affiliate-plan S2).
+    const advisorFamilyGroupIds = await affiliateRepository.getActiveAdvisorFamilyGroupIds();
+    const directAffiliates = (await affiliateRepository.getDirectAffiliates())
+      .filter(affiliate => !(affiliate.familyGroupId && advisorFamilyGroupIds.has(affiliate.familyGroupId)));
     const windowsByAffiliateId = await affiliateRepository.getCoverageWindowsForBilling(directAffiliates);
 
     const skippedNoWindow: { id: string; name: string }[] = [];

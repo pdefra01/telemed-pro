@@ -120,6 +120,8 @@ export interface Patient extends User {
   birthDate?: string;
   planId?: string;
   planName?: string; // e.g., "Plan Familiar Premium"
+  /** Listed in the affiliates screen while being an active advisor: holds the plan free of charge. */
+  isAdvisor?: boolean;
   agreementId?: string;
   paymentStatus: 'current' | 'overdue' | 'pending';
   currentPeriodQuotaUsed: number;
