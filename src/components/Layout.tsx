@@ -24,6 +24,7 @@ import {
   Coins
 } from 'lucide-react';
 import { User, Role } from '../types';
+import { isAffiliate } from '../utils/affiliate';
 import { getBranding } from '../config/branding';
 
 interface LayoutProps {
@@ -55,13 +56,14 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
     ];
 
+    const affiliateItems: NavItem[] = [
+      { name: 'Farmacia Digital', icon: <ShoppingBag size={20} />, path: '/pharmacy' },
+      { name: 'Historia Clínica', icon: <Activity size={20} />, path: '/history' },
+      { name: 'Mis Pagos', icon: <CreditCard size={20} />, path: '/payments' },
+    ];
+
     if (role === 'patient') {
-      return [
-        ...common,
-        { name: 'Farmacia Digital', icon: <ShoppingBag size={20} />, path: '/pharmacy' },
-        { name: 'Historia Clínica', icon: <Activity size={20} />, path: '/history' },
-        { name: 'Mis Pagos', icon: <CreditCard size={20} />, path: '/payments' },
-      ];
+      return [...common, ...affiliateItems];
     }
 
     if (role === 'doctor') {
@@ -74,6 +76,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/prospects' },
         { name: 'Cobranzas', icon: <Wallet size={20} />, path: '/collections' },
         { name: 'Comisiones', icon: <Coins size={20} />, path: '/commissions' },
+        // An advisor that holds a plan also uses the affiliate features.
+        ...(isAffiliate(user) ? affiliateItems : []),
       ];
     }
 

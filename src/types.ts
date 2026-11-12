@@ -100,6 +100,8 @@ export interface User {
   digitalPublicKey?: string;
   encryptedPrivateKey?: string;
   promoter_code?: string;
+  /** Medinex plan held by the account (patients, and advisors with a plan). */
+  planId?: string;
 }
 
 export interface FamilyMember {

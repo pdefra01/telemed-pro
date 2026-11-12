@@ -35,7 +35,7 @@ import { AdhesionForm } from './pages/AdhesionForm';
 import SetPassword from './pages/SetPassword';
 import { LeadSurvey } from './pages/LeadSurvey';
 import LeadSurveys from './pages/admin/LeadSurveys';
-import { AdvisorDashboard } from './pages/advisor/AdvisorDashboard';
+import { AdvisorHome } from './pages/advisor/AdvisorHome';
 import { Prospects } from './pages/advisor/Prospects';
 import { TeamPerformance } from './pages/advisor/TeamPerformance';
 import { Collections } from './pages/advisor/Collections';
@@ -379,7 +379,7 @@ const App: React.FC = () => {
           <ProtectedRoute user={user}>
             {user?.role === 'patient' ? <PatientDashboard user={user as Patient} /> :
               user?.role === 'doctor' ? <DoctorDashboard user={user as Doctor} /> :
-                user?.role === 'advisor' ? <AdvisorDashboard user={user} /> :
+                user?.role === 'advisor' ? <AdvisorHome user={user} /> :
                   user?.role === 'supervisor' ? <Prospects user={user} title="Mi equipo" /> :
                     <AdminDashboard />}
           </ProtectedRoute>
@@ -553,7 +553,7 @@ const App: React.FC = () => {
       <Route
         path="/history"
         element={
-          <ProtectedRoute user={user} allowedRoles={['patient']}>
+          <ProtectedRoute user={user} affiliateOnly>
             <MedicalHistory user={user as Patient} />
           </ProtectedRoute>
         }
@@ -561,7 +561,7 @@ const App: React.FC = () => {
       <Route
         path="/payments"
         element={
-          <ProtectedRoute user={user} allowedRoles={['patient']}>
+          <ProtectedRoute user={user} affiliateOnly>
             <Payments user={user as Patient} />
           </ProtectedRoute>
         }
@@ -577,7 +577,7 @@ const App: React.FC = () => {
       <Route
         path="/profile"
         element={
-          <ProtectedRoute user={user} allowedRoles={['patient']}>
+          <ProtectedRoute user={user} affiliateOnly>
             <Profile user={user as Patient} onLogin={handleLogin} />
           </ProtectedRoute>
         }
@@ -585,7 +585,7 @@ const App: React.FC = () => {
       <Route
         path="/patient-surveys"
         element={
-          <ProtectedRoute user={user} allowedRoles={['patient']}>
+          <ProtectedRoute user={user} affiliateOnly>
             <PatientSurveys user={user as Patient} />
           </ProtectedRoute>
         }
@@ -593,7 +593,7 @@ const App: React.FC = () => {
       <Route
         path="/pharmacy"
         element={
-          <ProtectedRoute user={user} allowedRoles={['patient']}>
+          <ProtectedRoute user={user} affiliateOnly>
             <PharmacyCatalog 
               patientId={user?.id || ''} 
               patientAddress={(user as Patient)?.address || 'Av. Belgrano 1234, Salta Capital'} 
@@ -605,7 +605,7 @@ const App: React.FC = () => {
       <Route
         path="/pharmacy-tracking/:orderId"
         element={
-          <ProtectedRoute user={user} allowedRoles={['patient']}>
+          <ProtectedRoute user={user} affiliateOnly>
             <PatientOrderTrackingWrapper onBack={() => window.location.hash = '#/pharmacy'} />
           </ProtectedRoute>
         }
