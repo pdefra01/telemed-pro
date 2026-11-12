@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AdvisorDashboard } from '../AdvisorDashboard';
 import { supabase } from '../../../services/supabase';
+import { commissionRepository } from '../../../repositories/CommissionRepository';
 import { User } from '../../../types';
 
 // Judgment Day finding K10: `stats.totalSales` (unlimited count) is shown as
@@ -18,6 +19,16 @@ vi.mock('../../../services/supabase', () => ({
     from: vi.fn(),
   },
 }));
+
+vi.mock('../../../repositories/CommissionRepository', () => ({
+  commissionRepository: { getSummary: vi.fn() },
+}));
+
+const commissionSummary = (toCollectAmount: number, collectedAmount: number) => ([{
+  advisorId: 'advisor-1', advisorName: 'Pedro Gómez',
+  generatedAmount: 0, generatedCount: 0, retainedAmount: 0, retainedCount: 0,
+  toCollectAmount, toCollectCount: 1, collectedAmount, collectedCount: 1,
+}]);
 
 const mockUser: User = {
   id: 'advisor-1',
@@ -70,19 +81,42 @@ describe('AdvisorDashboard — sales pending payment', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSupabaseFrom();
+    vi.mocked(commissionRepository.getSummary).mockResolvedValue([]);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('counts only the sales with a confirmed payment as accredited, and says the commission follows the same rule', async () => {
+  it('counts only the sales with a confirmed payment as accredited', async () => {
     stubStats({ approvedSales: 3, confirmedSales: 1, unconfirmedSales: 2, commissions: 25000 });
     render(<AdvisorDashboard user={mockUser} />);
 
     const kpi = await screen.findByText('Altas Acreditadas');
     expect(kpi.closest('.rounded-3xl')).toHaveTextContent(/^Altas Acreditadas1/);
-    expect(screen.getByText(/solo ventas con pago confirmado/i)).toBeInTheDocument();
+  });
+
+  it('shows the commission to collect and the collected one from the liquidations, not the on-the-fly figure', async () => {
+    stubStats({ approvedSales: 3, confirmedSales: 1, unconfirmedSales: 2, commissions: 25000 });
+    vi.mocked(commissionRepository.getSummary).mockResolvedValue(commissionSummary(1300, 4500));
+    render(<AdvisorDashboard user={mockUser} />);
+
+    const kpi = (await screen.findByText('Comisión a cobrar')).closest('.rounded-3xl') as HTMLElement;
+    await waitFor(() => expect(kpi).toHaveTextContent(/\$\s?1\.300/));
+    expect(kpi).toHaveTextContent(/Cobrado \$\s?4\.500/);
+    expect(kpi).not.toHaveTextContent(/25\.000/);
+    expect(screen.queryByText('Comisiones Ganadas')).not.toBeInTheDocument();
+  });
+
+  it('shows zero to collect when the commission summary cannot be read', async () => {
+    stubStats({ approvedSales: 3, confirmedSales: 1, unconfirmedSales: 2, commissions: 25000 });
+    vi.mocked(commissionRepository.getSummary).mockRejectedValue(new Error('denied'));
+    render(<AdvisorDashboard user={mockUser} />);
+
+    const kpi = (await screen.findByText('Comisión a cobrar')).closest('.rounded-3xl') as HTMLElement;
+    await waitFor(() => expect(commissionRepository.getSummary).toHaveBeenCalled());
+    expect(kpi).toHaveTextContent(/\$\s?0/);
+    expect(kpi).not.toHaveTextContent(/25\.000/);
   });
 
   it('falls back to the approved count when the server does not send confirmed sales (older server)', async () => {
@@ -133,6 +167,7 @@ describe('AdvisorDashboard — partial-table notice (K10)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSupabaseFrom();
+    vi.mocked(commissionRepository.getSummary).mockResolvedValue([]);
   });
 
   afterEach(() => {

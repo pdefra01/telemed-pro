@@ -25,6 +25,8 @@ import {
 import { User } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../services/supabase';
+import { commissionRepository } from '../../repositories/CommissionRepository';
+import { formatCurrency } from '../../utils/performance';
 
 interface AdvisorDashboardProps {
   user: User;
@@ -88,6 +90,8 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
   const [copied, setCopied] = useState(false);
   const [surveyLinkCopied, setSurveyLinkCopied] = useState(false);
   const [leadSurveyCount, setLeadSurveyCount] = useState(0);
+  // Same figures as the Comisiones screen (liquidations), never an on-the-fly estimate.
+  const [commissionTotals, setCommissionTotals] = useState({ toCollect: 0, collected: 0 });
 
   const affiliateLink = `${window.location.origin}/#/adhesion?promoter=${user.promoter_code || ''}`;
   const surveyLink = `${window.location.origin}/#/encuesta?promoter=${user.promoter_code || ''}`;
@@ -214,6 +218,21 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
 
   useEffect(() => {
     loadData();
+  }, [user.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    commissionRepository
+      .getSummary()
+      .then((rows) => {
+        if (cancelled) return;
+        setCommissionTotals({
+          toCollect: rows.reduce((sum, r) => sum + r.toCollectAmount, 0),
+          collected: rows.reduce((sum, r) => sum + r.collectedAmount, 0),
+        });
+      })
+      .catch((err) => console.error('Error cargando las comisiones del asesor:', err));
+    return () => { cancelled = true; };
   }, [user.id]);
 
   const handleMarkAsRead = async (ann: Announcement) => {
@@ -351,15 +370,15 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
         {/* KPI: Comisiones */}
         <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-amber-500/20 shadow-xl hover:shadow-amber-500/5 transition-all hover:scale-[1.01] duration-300">
           <div className="flex justify-between items-start mb-3">
-            <span className="text-slate-400 font-semibold text-xs">Comisiones Ganadas</span>
+            <span className="text-slate-400 font-semibold text-xs">Comisión a cobrar</span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
               <DollarSign size={16} />
             </div>
           </div>
           <div className="text-2xl font-black text-amber-400 tracking-tight">
-            ${stats.commissions.toLocaleString('es-AR')}
+            {formatCurrency(commissionTotals.toCollect)}
           </div>
-          <p className="text-[10px] text-slate-400 mt-2">Solo ventas con pago confirmado</p>
+          <p className="text-[10px] text-slate-400 mt-2">Cobrado {formatCurrency(commissionTotals.collected)}</p>
         </div>
 
         {/* KPI: Enlaces Compartidos */}

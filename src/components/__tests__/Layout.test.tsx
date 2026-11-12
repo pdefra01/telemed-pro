@@ -59,4 +59,27 @@ describe('Layout navigation by role (commercial CRM)', () => {
     renderAs('advisor');
     expect(hrefs()).not.toContain('/team/performance');
   });
+  it('gives each commercial role its commissions entry', () => {
+    renderAs('advisor');
+    expect(hrefs()).toContain('/commissions');
+    expect(hrefs()).not.toContain('/team/commissions');
+    expect(hrefs()).not.toContain('/admin/commissions');
+  });
+
+  it('gives the supervisor the team commissions', () => {
+    renderAs('supervisor');
+    expect(hrefs()).toContain('/team/commissions');
+    expect(hrefs()).not.toContain('/admin/commissions');
+  });
+
+  it('gives the admin the commission liquidations', () => {
+    renderAs('admin');
+    expect(hrefs()).toContain('/admin/commissions');
+    expect(hrefs()).not.toContain('/commissions');
+  });
+
+  it('does not show commissions to patients', () => {
+    renderAs('patient');
+    expect(hrefs().some((h) => (h ?? '').includes('commissions'))).toBe(false);
+  });
 });
