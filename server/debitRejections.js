@@ -5,8 +5,9 @@
 // subscriptions, to record rejections whose webhook never arrived".
 //
 // For each live debit subscription ('authorized' or 'payment_failed', with a preapproval id)
-// it lists the subscription's invoices with the documented search endpoint
-//   GET /authorized_payments/search?preapproval_id={id}  ->  { paging, results: [...] }
+// it lists the subscription's invoices with the documented search endpoint, paged with
+// offset/limit until paging.total (searchAuthorizedPayments)
+//   GET /authorized_payments/search?preapproval_id={id}&offset=&limit=  ->  { paging, results: [...] }
 //   https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md
 // and every recent terminal invoice not yet in mercadopago_events is replayed through
 // routeWebhookNotification, exactly as if its `subscription_authorized_payment` webhook had
@@ -15,17 +16,28 @@
 // Runs at start and every few hours, never overlapping, and never throws: a failed run is
 // logged and retried on the next tick.
 
-import { deriveSubscriptionEventKey, routeWebhookNotification } from './mercadopago.js';
+import {
+  completeAuthorizedPayment,
+  deriveSubscriptionEventKey,
+  routeWebhookNotification,
+  searchAuthorizedPayments,
+} from './mercadopago.js';
 
 export const DEBIT_REJECTIONS_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const DEBIT_REJECTIONS_BATCH_SIZE = 50;
 /** Invoices older than this are history, not something a missed webhook still owes us. */
 export const DEBIT_REJECTIONS_LOOKBACK_DAYS = 60;
+/** Batches one tick may take before leaving the rest of the roster for the next tick. */
+export const DEBIT_REJECTIONS_MAX_BATCHES_PER_TICK = 20;
 
 const LOG = '[debit-rejections]';
 
-function invoiceDate(item) {
-  return item.last_modified || item.date_created || item.debit_date || null;
+/** Epoch ms of the invoice's latest date, or null. MP writes offsets like -04:00, so the
+ * dates are compared as instants, never as text. */
+function invoiceTime(item) {
+  const value = item.last_modified || item.date_created || item.debit_date;
+  const time = value ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? time : null;
 }
 
 /**
@@ -53,21 +65,25 @@ export async function runDebitRejectionSync({
     const { data: subs, error } = await query.order('id', { ascending: true }).limit(batchSize);
     if (error) throw error;
 
-    const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000;
     const ctx = { supabaseAdmin, mpFetch, sendPaymentReceipt };
     const summary = { checked: 0, replayed: 0, rejected: 0, alreadyRecorded: 0, errors: 0 };
 
     for (const sub of subs || []) {
       summary.checked++;
       try {
-        const list = await mpFetch(`/authorized_payments/search?preapproval_id=${encodeURIComponent(sub.mp_preapproval_id)}`);
-        const items = Array.isArray(list?.results) ? list.results : [];
+        const items = await searchAuthorizedPayments(mpFetch, sub.mp_preapproval_id);
 
         for (const item of items) {
-          const key = deriveSubscriptionEventKey(item, 'authorized_payment');
+          if (item?.id === undefined || item?.id === null || !item?.status) continue;
+          const when = invoiceTime(item);
+          if (when !== null && when < cutoff) continue;
+
+          // Without the nested payment status a failed debit looks collected, and an
+          // existing `_processed` row would hide the rejection: complete it first.
+          const resource = await completeAuthorizedPayment(mpFetch, item);
+          const key = deriveSubscriptionEventKey(resource, 'authorized_payment');
           if (!key) continue; // scheduled / recycling / canceled: nothing terminal to record
-          const when = invoiceDate(item);
-          if (when && when < cutoff) continue;
 
           const { data: existing } = await supabaseAdmin
             .from('mercadopago_events')
@@ -112,9 +128,9 @@ export async function runDebitRejectionSync({
 }
 
 /**
- * Runs the query once now and then every `intervalMs`. Runs never overlap; each run picks up
- * the next batch of subscriptions and wraps around once the roster is covered. Without
- * Mercado Pago or without a service client it does nothing.
+ * Runs the query once now and then every `intervalMs`. Ticks never overlap; each tick takes
+ * batches until the roster is covered (or `maxBatchesPerTick`, leaving the rest for the next
+ * tick). Without Mercado Pago or without a service client it does nothing.
  *
  * @returns {{ stop: () => void, skipped?: boolean }}
  */
@@ -123,6 +139,7 @@ export function startDebitRejectionJob({
   mpFetch,
   intervalMs = DEBIT_REJECTIONS_INTERVAL_MS,
   batchSize = DEBIT_REJECTIONS_BATCH_SIZE,
+  maxBatchesPerTick = DEBIT_REJECTIONS_MAX_BATCHES_PER_TICK,
   logger = console,
   sendPaymentReceipt,
 } = {}) {
@@ -134,8 +151,11 @@ export function startDebitRejectionJob({
     if (running) return;
     running = true;
     try {
-      const result = await runDebitRejectionSync({ supabaseAdmin, mpFetch, logger, batchSize, afterId, sendPaymentReceipt });
-      afterId = result.ok ? result.nextAfterId : null;
+      for (let batch = 0; batch < maxBatchesPerTick; batch++) {
+        const result = await runDebitRejectionSync({ supabaseAdmin, mpFetch, logger, batchSize, afterId, sendPaymentReceipt });
+        afterId = result.ok ? result.nextAfterId : null;
+        if (!afterId) break; // roster covered (or the run failed): start over next tick
+      }
     } finally {
       running = false;
     }

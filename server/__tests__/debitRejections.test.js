@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runDebitRejectionSync, startDebitRejectionJob } from '../debitRejections.js';
 
-const SEARCH = (id) => `/authorized_payments/search?preapproval_id=${id}`;
+const SEARCH = (id) => `/authorized_payments/search?preapproval_id=${id}&offset=0&limit=50`;
 const RECENT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 const OLD = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -147,6 +147,48 @@ describe('runDebitRejectionSync', () => {
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('[debit-rejections]'), expect.stringContaining('MP 500'));
   });
 
+  it('re-fetches a processed invoice without payment status before deciding it is already recorded', async () => {
+    const supabaseAdmin = createSupabaseStub({
+      subscriptions: [{ id: 's1', mp_preapproval_id: 'pre-1', status: 'authorized' }],
+      events: [{ id: 'e1', event_type: 'subscription_authorized_payment_processed', mp_resource_id: 'ap-1' }],
+    });
+    const full = { id: 'ap-1', status: 'processed', preapproval_id: 'pre-1', last_modified: RECENT, payment: { id: 'pay-1', status: 'rejected' } };
+    const mpFetch = vi.fn(async (path) => {
+      if (path === SEARCH('pre-1')) return { paging: { total: 1 }, results: [{ id: 'ap-1', status: 'processed', last_modified: RECENT }] };
+      if (path === '/authorized_payments/ap-1') return full;
+      if (path === '/v1/payments/pay-1') return { id: 'pay-1', status: 'rejected' };
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const result = await runDebitRejectionSync({ supabaseAdmin, mpFetch, logger: quietLogger() });
+
+    expect(result).toMatchObject({ ok: true, replayed: 1, rejected: 1, alreadyRecorded: 0 });
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_subscription_event', expect.objectContaining({
+      p_event_type: 'subscription_authorized_payment_rejected',
+    }));
+  });
+
+  it('compares the lookback window as instants, whatever offset MP uses', async () => {
+    // Two hours inside the window, written with MP's -04:00 offset: as text it sorts before
+    // the UTC cutoff, as an instant it is newer.
+    const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+    const local = new Date(cutoff + 2 * 60 * 60 * 1000 - 4 * 60 * 60 * 1000).toISOString().replace('Z', '-04:00');
+    const supabaseAdmin = createSupabaseStub({
+      subscriptions: [{ id: 's1', mp_preapproval_id: 'pre-1', status: 'authorized' }],
+    });
+    const invoice = { id: 'ap-9', status: 'processed', preapproval_id: 'pre-1', last_modified: local, payment: { id: 'pay-9', status: 'rejected' } };
+    const mpFetch = vi.fn(async (path) => {
+      if (path === SEARCH('pre-1')) return { paging: { total: 1 }, results: [invoice] };
+      if (path === '/authorized_payments/ap-9') return invoice;
+      if (path === '/v1/payments/pay-9') return { id: 'pay-9', status: 'rejected' };
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const result = await runDebitRejectionSync({ supabaseAdmin, mpFetch, logger: quietLogger() });
+
+    expect(result).toMatchObject({ ok: true, replayed: 1 });
+  });
+
   it('returns ok:false and logs when the subscriptions cannot be read', async () => {
     const supabaseAdmin = createSupabaseStub({ subscriptionsError: { message: 'db down' } });
     const logger = quietLogger();
@@ -162,6 +204,23 @@ describe('startDebitRejectionJob', () => {
   it('is skipped without Mercado Pago or without a service client', () => {
     expect(startDebitRejectionJob({ supabaseAdmin: createSupabaseStub(), mpFetch: null }).skipped).toBe(true);
     expect(startDebitRejectionJob({ supabaseAdmin: null, mpFetch: vi.fn() }).skipped).toBe(true);
+  });
+
+  it('keeps taking batches within one tick until the roster is covered', async () => {
+    const mpFetch = vi.fn(async () => ({ results: [] }));
+    const supabaseAdmin = createSupabaseStub({
+      subscriptions: [
+        { id: 's1', mp_preapproval_id: 'pre-1', status: 'authorized' },
+        { id: 's2', mp_preapproval_id: 'pre-2', status: 'authorized' },
+        { id: 's3', mp_preapproval_id: 'pre-3', status: 'authorized' },
+      ],
+    });
+
+    const job = startDebitRejectionJob({ supabaseAdmin, mpFetch, batchSize: 2, intervalMs: 60_000, logger: quietLogger() });
+    await vi.waitFor(() => expect(mpFetch).toHaveBeenCalledTimes(3));
+    job.stop();
+
+    expect(mpFetch.mock.calls.map((c) => c[0])).toEqual([SEARCH('pre-1'), SEARCH('pre-2'), SEARCH('pre-3')]);
   });
 
   it('runs at start and on every interval, never overlapping a run still in flight', async () => {
