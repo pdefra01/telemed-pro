@@ -58,6 +58,18 @@ describe('Prospects (advisor CRM)', () => {
     expect(screen.getByTestId('monthly-progress')).toBeInTheDocument();
   });
 
+  it('marks the prospects that came from a survey and not the manual ones', async () => {
+    vi.mocked(prospectRepository.list).mockResolvedValue([
+      build({ id: 'p-1', fullName: 'Laura Pérez' }),
+      build({ id: 'p-9', fullName: 'Lead Encuesta', source: 'lead_survey', notes: 'Encuesta de opinión. Principal problema: filas' }),
+    ]);
+    render(<Prospects user={user} />);
+    await screen.findByText('Lead Encuesta');
+
+    expect(within(screen.getByTestId('prospect-p-9')).getByText('Desde encuesta')).toBeInTheDocument();
+    expect(within(screen.getByTestId('prospect-p-1')).queryByText('Desde encuesta')).not.toBeInTheDocument();
+  });
+
   it('shows an empty state when there are no prospects', async () => {
     vi.mocked(prospectRepository.list).mockResolvedValue([]);
     render(<Prospects user={user} />);

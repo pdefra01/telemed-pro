@@ -206,6 +206,9 @@ export const Prospects: React.FC<ProspectsProps> = ({ user }) => {
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PROSPECT_STATUS_BADGE[p.status]}`}>
                     {PROSPECT_STATUS_LABELS[p.status]}
                   </span>
+                  {p.source === 'lead_survey' && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Desde encuesta</span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
                   {p.phone && <span className="inline-flex items-center gap-1"><Phone size={14} />{p.phone}</span>}

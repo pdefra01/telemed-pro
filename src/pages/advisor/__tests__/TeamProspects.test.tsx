@@ -41,6 +41,18 @@ describe('TeamProspects (supervisor / admin, read-only)', () => {
     expect(within(screen.getByTestId('team-prospect-p-1')).getByText('Pedro Gómez')).toBeInTheDocument();
   });
 
+  it('marks the prospects that came from a survey', async () => {
+    vi.mocked(prospectRepository.list).mockResolvedValue([
+      build({ id: 'p-1', fullName: 'Laura Pérez' }),
+      build({ id: 'p-9', fullName: 'Lead Encuesta', source: 'lead_survey' }),
+    ]);
+    render(<TeamProspects />);
+    await screen.findByText('Lead Encuesta');
+
+    expect(within(screen.getByTestId('team-prospect-p-9')).getByText('Desde encuesta')).toBeInTheDocument();
+    expect(within(screen.getByTestId('team-prospect-p-1')).queryByText('Desde encuesta')).not.toBeInTheDocument();
+  });
+
   it('uses the given title', async () => {
     render(<TeamProspects title="Prospectos del equipo" />);
     expect(await screen.findByRole('heading', { name: 'Prospectos del equipo' })).toBeInTheDocument();

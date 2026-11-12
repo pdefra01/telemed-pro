@@ -122,6 +122,9 @@ export const TeamProspects: React.FC<TeamProspectsProps> = ({ title = 'Prospecto
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PROSPECT_STATUS_BADGE[p.status]}`}>
                   {PROSPECT_STATUS_LABELS[p.status]}
                 </span>
+                {p.source === 'lead_survey' && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Desde encuesta</span>
+                )}
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
                 <span className="font-semibold text-gray-700">{p.advisorName ?? 'Asesor sin nombre'}</span>

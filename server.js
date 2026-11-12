@@ -17,6 +17,7 @@ import { autoActivateAdhesion } from './server/adhesionAutoActivation.js';
 import { releaseStuckActivation } from './server/adhesionActivationRecovery.js';
 import { createActivateAdhesionLimiter, createDniUploadUrlsLimiter } from './server/rateLimits.js';
 import { createDniUploadUrls, cleanupOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS } from './server/adhesionDniPhotos.js';
+import { startProspectIntakeJob } from './server/prospectIntake.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/whatsappSessionMonitor.js';
@@ -1577,3 +1578,6 @@ if (supabaseAdmin) {
   sweepOrphanDniPhotos();
   setInterval(sweepOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS).unref();
 }
+
+// Automatic prospect intake: lead surveys with consent become prospects and adhesions advance them.
+startProspectIntakeJob({ supabaseAdmin });
