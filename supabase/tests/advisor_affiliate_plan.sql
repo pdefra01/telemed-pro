@@ -90,5 +90,18 @@ SELECT is((SELECT is_active FROM public.profiles WHERE id = 'd5d5d5d5-0000-0000-
 SELECT throws_ok($$SELECT * FROM public.set_advisor_status('d5d5d5d5-0000-0000-0000-000000000006', true)$$, 'P0002', 'advisor_not_found',
   'a patient without a producers row is not an advisor');
 
+-- ── S4: an identity already taken by an affiliate is one clear error, nothing changes ──
+UPDATE public.profiles SET dni = '40111222' WHERE id = 'd5d5d5d5-0000-0000-0000-000000000006';
+UPDATE public.profiles SET dni = '40111222', plan_id = 'd5d5d5d5-0000-0000-0000-0000000000a1' WHERE id = 'd5d5d5d5-0000-0000-0000-000000000004';
+SELECT throws_ok($$SELECT * FROM public.set_advisor_status('d5d5d5d5-0000-0000-0000-000000000004', false)$$, '23505', 'advisor_identity_conflict',
+  'a duplicate DNI blocks the deactivation with advisor_identity_conflict');
+SELECT is((SELECT role FROM public.profiles WHERE id = 'd5d5d5d5-0000-0000-0000-000000000004'), 'advisor', 'the advisor keeps the advisor role');
+SELECT is((SELECT status FROM public.producers WHERE id = 'd5d5d5d5-0000-0000-0000-000000000004'), 'active', 'and the referral link is untouched');
+
+UPDATE public.profiles SET dni = NULL, phone = '3875000111' WHERE id = 'd5d5d5d5-0000-0000-0000-000000000004';
+UPDATE public.profiles SET phone = '387 5000111' WHERE id = 'd5d5d5d5-0000-0000-0000-000000000006';
+SELECT throws_ok($$SELECT * FROM public.set_advisor_status('d5d5d5d5-0000-0000-0000-000000000004', false)$$, '23505', 'advisor_identity_conflict',
+  'a duplicate phone blocks the deactivation with advisor_identity_conflict');
+
 SELECT * FROM finish();
 ROLLBACK;

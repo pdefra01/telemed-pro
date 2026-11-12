@@ -219,7 +219,7 @@ export const ProducersAdmin: React.FC = () => {
     const willActivate = p.status !== 'active';
     const confirmMsg = willActivate
       ? `¿Reactivar a ${p.name}? Podrá volver a iniciar sesión y su link de referido volverá a aceptar altas.`
-      : `¿Desactivar a ${p.name}? No podrá iniciar sesión y su link de referido dejará de aceptar altas nuevas.`;
+      : `¿Desactivar a ${p.name}? Su link de referido dejará de aceptar altas nuevas. Si no tiene plan Medinex, no podrá iniciar sesión; si tiene plan, pasa a ser afiliado y se le empieza a cobrar.`;
 
     if (!window.confirm(confirmMsg)) return;
 

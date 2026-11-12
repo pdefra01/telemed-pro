@@ -162,9 +162,19 @@ BEGIN
     UPDATE public.profiles SET role = 'advisor', is_active = true WHERE id = p_advisor_id;
   ELSIF v_profile.role = 'advisor' AND v_profile.plan_id IS NOT NULL THEN
     -- Deactivation with a plan: the account becomes a paying affiliate.
-    UPDATE public.profiles
-       SET role = 'patient', is_active = true, supervisor_id = NULL
-     WHERE id = p_advisor_id;
+    -- The identity guards (DNI/CUIL/phone unique among affiliates) apply once
+    -- the role is patient. A duplicate becomes one clear error for the admin;
+    -- the whole call rolls back, producers.status included.
+    BEGIN
+      UPDATE public.profiles
+         SET role = 'patient', is_active = true, supervisor_id = NULL
+       WHERE id = p_advisor_id;
+    EXCEPTION WHEN unique_violation THEN
+      RAISE EXCEPTION 'advisor_identity_conflict' USING ERRCODE = '23505',
+        DETAIL = CASE WHEN SQLERRM LIKE '%uq_profiles_patient_phone%'
+                      THEN 'El teléfono ya pertenece a otro afiliado.'
+                      ELSE SQLERRM END;
+    END;
 
     -- Billing starts now: reopen the current coverage window (or open one) at
     -- the deactivation with the plan's paid + bonus months.

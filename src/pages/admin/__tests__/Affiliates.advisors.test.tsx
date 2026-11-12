@@ -81,6 +81,20 @@ describe('Padrón de Afiliados: advisors with a plan (S2)', () => {
     expect(affiliateRow.getByTitle('Reenviar mail de activación')).toBeInTheDocument();
   });
 
+  it('counts an advisor with a plan in the KPIs but never an advisor without one', async () => {
+    vi.mocked(affiliateRepository.getAllAffiliates).mockResolvedValue([
+      patient({}),
+      patient({ id: 'a1', name: 'Ana Asesora', email: 'ana@test.com', isAdvisor: true, planId: 'plan-1' }),
+      patient({ id: 'a2', name: 'Beto Asesor', email: 'beto@test.com', isAdvisor: true }),
+    ]);
+    render(<Affiliates />);
+    await screen.findByText('Beto Asesor');
+    const tile = (label: string) => screen.getByText(label).parentElement as HTMLElement;
+    expect(within(tile('Total Pacientes')).getByRole('heading')).toHaveTextContent('2');
+    expect(within(tile('Afiliados Activos')).getByRole('heading')).toHaveTextContent('2');
+    expect(screen.getByText('Afiliados Activos (2)')).toBeInTheDocument();
+  });
+
   it('does not mark a regular affiliate', async () => {
     render(<Affiliates />);
     await screen.findByText('Hebe Trillo');

@@ -438,6 +438,8 @@ const Affiliates: React.FC = () => {
       ? affiliates.filter(p => debitRejections[p.id])
       : affiliates.filter(p => affiliateStatus(p) === statusFilter);
   const debitRejectedTotal = affiliates.filter(p => debitRejections[p.id]).length;
+  // Advisors without a plan are listed so the admin can assign one, but they are not affiliates yet.
+  const countedAffiliates = affiliates.filter(p => !p.isAdvisor || p.planId);
 
   const filteredRequests = promoterFilter === 'all'
     ? requests
@@ -495,7 +497,7 @@ const Affiliates: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total Pacientes</p>
-            <h4 className="text-xl font-bold text-white">{affiliates.length}</h4>
+            <h4 className="text-xl font-bold text-white">{countedAffiliates.length}</h4>
           </div>
         </div>
         <div className="bg-white/5 border border-white/10 p-5 rounded-3xl flex items-center space-x-4">
@@ -505,7 +507,7 @@ const Affiliates: React.FC = () => {
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Afiliados Activos</p>
             <h4 className="text-xl font-bold text-white">
-              {affiliates.filter(p => p.isActive).length}
+              {countedAffiliates.filter(p => p.isActive).length}
             </h4>
           </div>
         </div>
@@ -516,7 +518,7 @@ const Affiliates: React.FC = () => {
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Pendientes de Aprobación</p>
             <h4 className="text-xl font-bold text-amber-400">
-              {affiliates.filter(p => !p.isActive && p.planStatus !== 'suspended').length}
+              {countedAffiliates.filter(p => !p.isActive && p.planStatus !== 'suspended').length}
             </h4>
           </div>
         </div>
@@ -532,7 +534,7 @@ const Affiliates: React.FC = () => {
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          Afiliados Activos ({affiliates.length})
+          Afiliados Activos ({countedAffiliates.length})
         </button>
         <button
           onClick={() => setActiveTab('requests')}
