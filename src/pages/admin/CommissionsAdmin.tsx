@@ -20,6 +20,9 @@ const generationLine = (r: CommissionGenerationResult) =>
     `Total ${formatCurrency(r.totalAmount)}`,
   ].join(' · ');
 
+/** Detail key of the commissions in no liquidation (every advisor). */
+const PENDING = 'pending';
+
 const smallButton = 'px-2.5 py-1 rounded-lg text-xs font-semibold';
 const inputClass = 'w-full px-3 py-2 border border-slate-300 rounded-xl bg-white';
 
@@ -69,36 +72,44 @@ export const CommissionsAdmin: React.FC = () => {
     return () => { cancelled = true; };
   }, [month]);
 
-  const nameOf = (advisorId: string) => names[advisorId] ?? 'Asesor';
+  // Same fallback as the database functions: an advisor without a profile is named by their id.
+  const nameOf = (advisorId: string) => names[advisorId] ?? advisorId;
 
-  /** The liquidation's lines, plus the advisor's retained ones (out of every liquidation while the debit is rejected). */
-  const loadLines = async (l: CommissionLiquidation) => {
-    const attached = await commissionRepository.listCommissions(l.id);
-    const retained = l.status === 'draft' && l.retainedCount > 0
-      ? (await commissionRepository.listCommissions()).filter(
-          (c) => c.advisorId === l.advisorId && c.liquidationId === null && c.status === 'retained'
-        )
-      : [];
-    if (openDetailRef.current === l.id) setLines([...attached, ...retained]);
+  /**
+   * The lines of a detail. A draft also shows the advisor's retained and excluded lines that are in no
+   * liquidation (a retained line, or one excluded while retained), so they can be excluded or included back.
+   * Always fetched from the database, never decided from the liquidation's (possibly stale) counters.
+   */
+  const fetchLines = async (key: string, l?: CommissionLiquidation): Promise<CommissionLine[]> => {
+    if (key === PENDING || !l) return commissionRepository.listCommissions({ unattachedOnly: true });
+    const attached = await commissionRepository.listCommissions({ liquidationId: l.id });
+    if (l.status !== 'draft') return attached;
+    const loose = await commissionRepository.listCommissions({ advisorId: l.advisorId, unattachedOnly: true });
+    return [...attached, ...loose.filter((c) => c.status === 'retained' || c.status === 'excluded')];
   };
 
-  const toggleDetail = async (l: CommissionLiquidation) => {
+  const loadLines = async (key: string, l?: CommissionLiquidation) => {
+    const rows = await fetchLines(key, l);
+    if (openDetailRef.current === key) setLines(rows);
+  };
+
+  const toggleDetail = async (key: string, l?: CommissionLiquidation) => {
     setExcludingId(null);
-    if (detailId === l.id) {
+    if (detailId === key) {
       openDetailRef.current = null;
       setDetailId(null);
       return;
     }
-    openDetailRef.current = l.id;
-    setDetailId(l.id);
+    openDetailRef.current = key;
+    setDetailId(key);
     setLines([]);
     setLinesLoading(true);
     try {
-      await loadLines(l);
+      await loadLines(key, l);
     } catch (err) {
-      if (openDetailRef.current === l.id) setError(errorMessage(err, 'No se pudo cargar el detalle.'));
+      if (openDetailRef.current === key) setError(errorMessage(err, 'No se pudo cargar el detalle.'));
     } finally {
-      if (openDetailRef.current === l.id) setLinesLoading(false);
+      if (openDetailRef.current === key) setLinesLoading(false);
     }
   };
 
@@ -146,21 +157,22 @@ export const CommissionsAdmin: React.FC = () => {
     });
   };
 
-  const handleExclude = (l: CommissionLiquidation, c: CommissionLine) =>
+  const handleExclude = (c: CommissionLine, reload: () => Promise<void>) =>
     run(async () => {
       await commissionRepository.exclude(c.id, reason);
       setExcludingId(null);
       setReason('');
-    }, () => loadLines(l));
+    }, reload);
 
-  const handleInclude = (l: CommissionLiquidation, c: CommissionLine) =>
-    run(() => commissionRepository.include(c.id), () => loadLines(l));
+  const handleInclude = (c: CommissionLine, reload: () => Promise<void>) =>
+    run(() => commissionRepository.include(c.id), reload);
 
-  const lineActions = (l: CommissionLiquidation) => (c: CommissionLine) => {
-    if (l.status !== 'draft') return null;
+  /** Exclude / include, on a draft's lines and on the lines in no liquidation (the database allows both). */
+  const lineActions = (editable: boolean, reload: () => Promise<void>) => (c: CommissionLine) => {
+    if (!editable) return null;
     if (c.status === 'excluded') {
       return c.planName ? (
-        <button type="button" disabled={busy} onClick={() => handleInclude(l, c)} className={`${smallButton} text-teal-700 hover:bg-teal-50`}>
+        <button type="button" disabled={busy} onClick={() => handleInclude(c, reload)} className={`${smallButton} text-teal-700 hover:bg-teal-50`}>
           Incluir
         </button>
       ) : null;
@@ -185,7 +197,7 @@ export const CommissionsAdmin: React.FC = () => {
         <button
           type="button"
           disabled={busy || !reason.trim()}
-          onClick={() => handleExclude(l, c)}
+          onClick={() => handleExclude(c, reload)}
           className={`${smallButton} bg-red-600 text-white hover:bg-red-700 disabled:opacity-50`}
         >
           Confirmar exclusión
@@ -229,10 +241,9 @@ export const CommissionsAdmin: React.FC = () => {
 
       {loading ? (
         <p className="text-gray-500">Cargando liquidaciones…</p>
-      ) : liquidations.length === 0 ? (
-        <p className="text-gray-500">No hay liquidaciones de este mes.</p>
       ) : (
         <ul className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100">
+          {liquidations.length === 0 && <li className="px-3 py-2.5 text-gray-500">No hay liquidaciones de este mes.</li>}
           {liquidations.map((l) => {
             const paid = paymentLabel(l);
             return (
@@ -257,7 +268,7 @@ export const CommissionsAdmin: React.FC = () => {
                       Registrar pago
                     </button>
                   )}
-                  <DetailToggle open={detailId === l.id} onClick={() => toggleDetail(l)} />
+                  <DetailToggle open={detailId === l.id} onClick={() => toggleDetail(l.id, l)} />
                 </div>
 
                 {payingId === l.id && l.status === 'approved' && (
@@ -288,12 +299,28 @@ export const CommissionsAdmin: React.FC = () => {
 
                 {detailId === l.id && (
                   <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                    {linesLoading ? <p className="text-gray-500">Cargando…</p> : <CommissionLineList lines={lines} actions={lineActions(l)} />}
+                    {linesLoading ? <p className="text-gray-500">Cargando…</p> : (
+                      <CommissionLineList lines={lines} actions={lineActions(l.status === 'draft', () => loadLines(l.id, l))} />
+                    )}
                   </div>
                 )}
               </li>
             );
           })}
+          <li data-testid="liquidation-pending" className="px-3 py-2.5 space-y-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-semibold text-slate-900">Sin liquidar (todos los asesores)</span>
+              <span className="ml-auto" />
+              <DetailToggle open={detailId === PENDING} onClick={() => toggleDetail(PENDING)} />
+            </div>
+            {detailId === PENDING && (
+              <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                {linesLoading ? <p className="text-gray-500">Cargando…</p> : (
+                  <CommissionLineList lines={lines} showAdvisor actions={lineActions(true, () => loadLines(PENDING))} />
+                )}
+              </div>
+            )}
+          </li>
         </ul>
       )}
     </div>

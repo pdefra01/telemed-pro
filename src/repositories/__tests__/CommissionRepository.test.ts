@@ -12,12 +12,24 @@ vi.mock('../../services/supabase', () => ({
 /** Chainable, awaitable stand-in for a PostgREST query builder. */
 function chain(result: { data?: unknown; error?: unknown }) {
   const c: any = {};
-  for (const m of ['select', 'order', 'eq']) c[m] = vi.fn(() => c);
+  for (const m of ['select', 'order', 'eq', 'range']) c[m] = vi.fn(() => c);
   c.then = (resolve: any, reject: any) => Promise.resolve({ data: null, error: null, ...result }).then(resolve, reject);
   return c;
 }
 
-const rpcResult = (data: unknown, error: unknown = null): any => Promise.resolve({ data, error });
+/** An RPC call: awaitable directly (single row results) and pageable with .range() (set results). */
+const rpcResult = (data: unknown, error: unknown = null): any => {
+  const result = { data, error };
+  const call: any = Promise.resolve(result);
+  call.range = vi.fn(() => Promise.resolve(result));
+  return call;
+};
+
+const commissionRow = (id: string) => ({
+  id, advisor_id: 'a-1', advisor_name: 'Pedro Gómez', affiliate_profile_id: 'p-1', affiliate_name: 'Ana Paz',
+  plan_id: 'pl-1', plan_name: 'Plan A', amount: 500, confirmed_at: '2026-08-10T12:00:00Z', status: 'generated',
+  exclusion_reason: null, retained_reason: null, liquidation_id: null, liquidation_month: null, liquidation_status: null,
+});
 
 describe('CommissionRepository', () => {
   let repository: CommissionRepository;
@@ -56,16 +68,44 @@ describe('CommissionRepository', () => {
     };
     vi.mocked(supabase.rpc).mockReturnValueOnce(rpcResult([row])).mockReturnValueOnce(rpcResult([]));
 
-    const lines = await repository.listCommissions('l-1');
-    await repository.listCommissions();
+    const lines = await repository.listCommissions({ liquidationId: 'l-1' });
+    await repository.listCommissions({ advisorId: 'a-1', unattachedOnly: true });
 
-    expect(supabase.rpc).toHaveBeenNthCalledWith(1, 'advisor_commission_list', { p_liquidation_id: 'l-1' });
-    expect(supabase.rpc).toHaveBeenNthCalledWith(2, 'advisor_commission_list', { p_liquidation_id: null });
+    expect(supabase.rpc).toHaveBeenNthCalledWith(1, 'advisor_commission_list', { p_liquidation_id: 'l-1', p_advisor_id: null, p_unattached_only: false });
+    expect(supabase.rpc).toHaveBeenNthCalledWith(2, 'advisor_commission_list', { p_liquidation_id: null, p_advisor_id: 'a-1', p_unattached_only: true });
     expect(lines).toEqual([{
       id: 'c-1', advisorId: 'a-1', advisorName: 'Pedro Gómez', affiliateName: 'Ana Paz', planName: 'Plan A',
       amount: 500, confirmedAt: '2026-08-10T12:00:00Z', status: 'excluded', exclusionReason: 'Duplicada',
       retainedReason: null, liquidationId: 'l-1',
     }]);
+  });
+
+  it('reads every page of commissions, past the 1000-row cap', async () => {
+    const full = Array.from({ length: 1000 }, (_, i) => commissionRow(`c-${i}`));
+    const first = rpcResult(full);
+    const second = rpcResult([commissionRow('c-last')]);
+    vi.mocked(supabase.rpc).mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+    const lines = await repository.listCommissions({ advisorId: 'a-1', unattachedOnly: true });
+
+    expect(lines).toHaveLength(1001);
+    expect(first.range).toHaveBeenCalledWith(0, 999);
+    expect(second.range).toHaveBeenCalledWith(1000, 1999);
+  });
+
+  it('reads every page of the liquidations and of the summary', async () => {
+    const liq = (id: string) => ({ id, advisor_id: 'a-1', month: '2026-08-01', status: 'draft', total_amount: 0, retained_amount: 0, retained_count: 0 });
+    const q1 = chain({ data: Array.from({ length: 1000 }, (_, i) => liq(`l-${i}`)) });
+    const q2 = chain({ data: [liq('l-last')] });
+    vi.mocked(supabase.from).mockReturnValueOnce(q1).mockReturnValueOnce(q2);
+    const s1 = rpcResult(Array.from({ length: 1000 }, (_, i) => ({ advisor_id: `a-${i}`, advisor_name: 'X' })));
+    const s2 = rpcResult([{ advisor_id: 'a-last', advisor_name: 'Y' }]);
+    vi.mocked(supabase.rpc).mockReturnValueOnce(s1).mockReturnValueOnce(s2);
+
+    expect(await repository.listLiquidations({ month: '2026-08-01' })).toHaveLength(1001);
+    expect(q2.range).toHaveBeenCalledWith(1000, 1999);
+    expect(await repository.getSummary()).toHaveLength(1001);
+    expect(s2.range).toHaveBeenCalledWith(1000, 1999);
   });
 
   it('lists the liquidations of a month and of an advisor, newest first', async () => {

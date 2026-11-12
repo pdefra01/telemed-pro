@@ -33,7 +33,9 @@ export const paymentLabel = (l: CommissionLiquidation): string | null =>
 export const CommissionLineList: React.FC<{
   lines: CommissionLine[];
   actions?: (line: CommissionLine) => React.ReactNode;
-}> = ({ lines, actions }) =>
+  /** Show the advisor on each line (lists that mix advisors). */
+  showAdvisor?: boolean;
+}> = ({ lines, actions, showAdvisor = false }) =>
   lines.length === 0 ? (
     <p className="text-gray-500">No hay comisiones.</p>
   ) : (
@@ -44,6 +46,7 @@ export const CommissionLineList: React.FC<{
           <li key={c.id} data-testid={`line-${c.id}`} className="py-1.5 space-y-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="font-semibold text-slate-900">{c.affiliateName ?? 'Afiliado'}</span>
+              {showAdvisor && <span className="text-gray-500">{c.advisorName}</span>}
               {c.planName && <span className="text-gray-500">{c.planName}</span>}
               <span className="text-gray-700">
                 {COMMISSION_STATUS_LABELS[c.status]}
@@ -133,11 +136,10 @@ export const Commissions: React.FC<CommissionsProps> = ({ title = 'Comisiones', 
     setLinesLoading(true);
     try {
       const isPending = key.startsWith('pending:');
-      const rows = await commissionRepository.listCommissions(isPending ? undefined : key);
-      const visible = isPending
-        ? rows.filter((c) => c.liquidationId === null && (advisorId === null || c.advisorId === advisorId))
-        : rows;
-      if (openDetailRef.current === key) setLines(visible);
+      const rows = await commissionRepository.listCommissions(
+        isPending ? { ...(advisorId ? { advisorId } : {}), unattachedOnly: true } : { liquidationId: key }
+      );
+      if (openDetailRef.current === key) setLines(rows);
     } catch (err) {
       if (openDetailRef.current === key) setLinesError(errorMessage(err, 'No se pudo cargar el detalle.'));
     } finally {

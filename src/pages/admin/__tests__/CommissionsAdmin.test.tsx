@@ -168,11 +168,12 @@ describe('CommissionsAdmin', () => {
   });
 
   it('shows the lines of a draft, with the advisor\'s retained ones, and excludes with a required reason', async () => {
-    vi.mocked(commissionRepository.listCommissions).mockImplementation(async (id?: string) =>
-      id === 'liq-1'
+    vi.mocked(commissionRepository.listCommissions).mockImplementation(async (filter = {}) =>
+      filter.liquidationId === 'liq-1'
         ? [line()]
-        : [line({ id: 'c-r', liquidationId: null, status: 'retained', retainedReason: 'Débito rechazado', affiliateName: 'Eva Sosa', amount: 800 }),
-           line({ id: 'c-other', advisorId: 'adv-2', liquidationId: null, status: 'retained', retainedReason: 'Débito rechazado' })]
+        : filter.advisorId === 'adv-1' && filter.unattachedOnly
+          ? [line({ id: 'c-r', liquidationId: null, status: 'retained', retainedReason: 'Débito rechazado', affiliateName: 'Eva Sosa', amount: 800 })]
+          : []
     );
     vi.mocked(commissionRepository.exclude).mockResolvedValue();
     render(<CommissionsAdmin />);
@@ -181,7 +182,7 @@ describe('CommissionsAdmin', () => {
     fireEvent.click(within(draft).getByRole('button', { name: /detalle/i }));
     const generated = await within(draft).findByTestId('line-c-1');
     expect(within(draft).getByTestId('line-c-r')).toHaveTextContent('Débito rechazado');
-    expect(within(draft).queryByTestId('line-c-other')).not.toBeInTheDocument();
+    expect(commissionRepository.listCommissions).toHaveBeenCalledWith({ advisorId: 'adv-1', unattachedOnly: true });
 
     fireEvent.click(within(generated).getByRole('button', { name: 'Excluir' }));
     const confirmButton = within(draft).getByRole('button', { name: 'Confirmar exclusión' });
@@ -193,7 +194,9 @@ describe('CommissionsAdmin', () => {
   });
 
   it('includes an excluded line back', async () => {
-    vi.mocked(commissionRepository.listCommissions).mockResolvedValue([line({ status: 'excluded', exclusionReason: 'Duplicada' })]);
+    vi.mocked(commissionRepository.listCommissions).mockImplementation(async (filter = {}) =>
+      filter.liquidationId ? [line({ status: 'excluded', exclusionReason: 'Duplicada' })] : []
+    );
     vi.mocked(commissionRepository.include).mockResolvedValue();
     render(<CommissionsAdmin />);
     const draft = await screen.findByTestId('liquidation-liq-1');
@@ -204,6 +207,70 @@ describe('CommissionsAdmin', () => {
     fireEvent.click(within(excluded).getByRole('button', { name: 'Incluir' }));
 
     await waitFor(() => expect(commissionRepository.include).toHaveBeenCalledWith('c-1'));
+  });
+
+  it('shows an excluded line that is in no liquidation (a retained one excluded) with Incluir, in the draft detail', async () => {
+    vi.mocked(commissionRepository.listCommissions).mockImplementation(async (filter = {}) =>
+      filter.liquidationId ? [] : [line({ id: 'c-x', liquidationId: null, status: 'excluded', exclusionReason: 'Revisión' })]
+    );
+    vi.mocked(commissionRepository.include).mockResolvedValue();
+    render(<CommissionsAdmin />);
+    const draft = await screen.findByTestId('liquidation-liq-1');
+
+    fireEvent.click(within(draft).getByRole('button', { name: /detalle/i }));
+    const excluded = await within(draft).findByTestId('line-c-x');
+    fireEvent.click(within(excluded).getByRole('button', { name: 'Incluir' }));
+
+    await waitFor(() => expect(commissionRepository.include).toHaveBeenCalledWith('c-x'));
+  });
+
+  it('keeps showing a line that goes back to retained after an action, although the liquidation had none retained', async () => {
+    vi.mocked(commissionRepository.listLiquidations).mockResolvedValue([liquidation({ retainedAmount: 0, retainedCount: 0 })]);
+    let included = false;
+    vi.mocked(commissionRepository.listCommissions).mockImplementation(async (filter = {}) => {
+      if (filter.liquidationId) return included ? [] : [line({ status: 'excluded', exclusionReason: 'Duplicada' })];
+      return included ? [line({ liquidationId: null, status: 'retained', retainedReason: 'Débito rechazado' })] : [];
+    });
+    vi.mocked(commissionRepository.include).mockImplementation(async () => { included = true; });
+    render(<CommissionsAdmin />);
+    const draft = await screen.findByTestId('liquidation-liq-1');
+
+    fireEvent.click(within(draft).getByRole('button', { name: /detalle/i }));
+    fireEvent.click(within(await within(draft).findByTestId('line-c-1')).getByRole('button', { name: 'Incluir' }));
+
+    await waitFor(() => expect(within(draft).getByTestId('line-c-1')).toHaveTextContent('Débito rechazado'));
+  });
+
+  it('lists every commission in no liquidation, for advisors without a liquidation this month, with its actions', async () => {
+    vi.mocked(commissionRepository.listCommissions).mockImplementation(async (filter = {}) =>
+      filter.unattachedOnly && !filter.advisorId
+        ? [line({ id: 'c-x', advisorId: 'adv-9', advisorName: 'Rita Gil', liquidationId: null, status: 'excluded', exclusionReason: 'Revisión' }),
+           line({ id: 'c-r', advisorId: 'adv-9', advisorName: 'Rita Gil', liquidationId: null, status: 'retained', retainedReason: 'Débito rechazado' })]
+        : []
+    );
+    vi.mocked(commissionRepository.include).mockResolvedValue();
+    render(<CommissionsAdmin />);
+    const pending = await screen.findByTestId('liquidation-pending');
+
+    fireEvent.click(within(pending).getByRole('button', { name: /detalle/i }));
+    const excluded = await within(pending).findByTestId('line-c-x');
+    expect(excluded).toHaveTextContent('Rita Gil');
+    expect(within(within(pending).getByTestId('line-c-r')).getByRole('button', { name: 'Excluir' })).toBeInTheDocument();
+    fireEvent.click(within(excluded).getByRole('button', { name: 'Incluir' }));
+
+    await waitFor(() => expect(commissionRepository.include).toHaveBeenCalledWith('c-x'));
+    expect(commissionRepository.listCommissions).toHaveBeenCalledWith({ unattachedOnly: true });
+  });
+
+  it('names an advisor missing from the summary by their id, as the database does', async () => {
+    vi.mocked(commissionRepository.listLiquidations).mockResolvedValue([liquidation({ advisorId: 'e8e8-gone' })]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<CommissionsAdmin />);
+    const draft = await screen.findByTestId('liquidation-liq-1');
+
+    expect(draft).toHaveTextContent('e8e8-gone');
+    fireEvent.click(within(draft).getByRole('button', { name: 'Aprobar' }));
+    expect(confirm.mock.calls[0][0]).toMatch(/e8e8-gone/);
   });
 
   it('offers no exclusion once the liquidation is approved', async () => {

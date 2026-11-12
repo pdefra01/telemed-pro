@@ -85,7 +85,7 @@ describe('Commissions — advisor', () => {
     fireEvent.click(within(row).getByRole('button', { name: /detalle/i }));
 
     expect(await within(row).findByText('Ana Paz')).toBeInTheDocument();
-    expect(commissionRepository.listCommissions).toHaveBeenCalledWith('liq-1');
+    expect(commissionRepository.listCommissions).toHaveBeenCalledWith({ liquidationId: 'liq-1' });
     expect(within(row).getByTestId('line-c-2')).toHaveTextContent('Excluida');
     expect(within(row).getByTestId('line-c-2')).toHaveTextContent('Venta duplicada');
   });
@@ -93,7 +93,6 @@ describe('Commissions — advisor', () => {
   it('shows the commissions not liquidated yet, with the retained reason', async () => {
     vi.mocked(commissionRepository.listCommissions).mockResolvedValue([
       line({ id: 'c-3', status: 'retained', liquidationId: null, retainedReason: 'Débito rechazado', affiliateName: 'Eva Sosa' }),
-      line(),
     ]);
     render(<Commissions />);
 
@@ -101,8 +100,7 @@ describe('Commissions — advisor', () => {
     fireEvent.click(within(row).getByRole('button', { name: /detalle/i }));
 
     expect(await within(row).findByTestId('line-c-3')).toHaveTextContent('Débito rechazado');
-    expect(commissionRepository.listCommissions).toHaveBeenCalledWith(undefined);
-    expect(within(row).queryByTestId('line-c-1')).not.toBeInTheDocument();
+    expect(commissionRepository.listCommissions).toHaveBeenCalledWith({ unattachedOnly: true });
   });
 
   it('offers no admin action', async () => {
@@ -169,6 +167,17 @@ describe('Commissions — supervisor (team, read-only)', () => {
     fireEvent.click(within(liq).getByRole('button', { name: /detalle/i }));
     expect(await within(liq).findByText('Rita Gil')).toBeInTheDocument();
     expect(within(liq).getByTestId('line-c-9')).toHaveTextContent('A cobrar');
+  });
+
+  it('asks only for the advisor commissions not liquidated yet', async () => {
+    vi.mocked(commissionRepository.listCommissions).mockResolvedValue([]);
+    render(<Commissions team title="Comisiones del equipo" />);
+
+    const pedro = await screen.findByTestId('advisor-adv-1');
+    fireEvent.click(within(pedro).getByRole('button', { name: /liquidaciones/i }));
+    fireEvent.click(within(within(pedro).getByTestId('liquidation-pending')).getByRole('button', { name: /detalle/i }));
+
+    await waitFor(() => expect(commissionRepository.listCommissions).toHaveBeenCalledWith({ advisorId: 'adv-1', unattachedOnly: true }));
   });
 
   it('is read-only: no admin action anywhere', async () => {

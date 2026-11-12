@@ -137,7 +137,7 @@ SELECT is(has_function_privilege('anon', 'public.include_commission(uuid)', 'exe
 SELECT is(has_function_privilege('anon', 'public.approve_commission_liquidation(uuid)', 'execute'), false, 'anon cannot approve liquidations');
 SELECT is(has_function_privilege('anon', 'public.pay_commission_liquidation(uuid,date,text,text)', 'execute'), false, 'anon cannot pay liquidations');
 SELECT is(has_function_privilege('anon', 'public.advisor_commission_summary()', 'execute'), false, 'anon cannot read the summary');
-SELECT is(has_function_privilege('anon', 'public.advisor_commission_list(uuid)', 'execute'), false, 'anon cannot read the commission list');
+SELECT is(has_function_privilege('anon', 'public.advisor_commission_list(uuid,uuid,boolean)', 'execute'), false, 'anon cannot read the commission list');
 SELECT is(has_function_privilege('authenticated', 'public.generate_commission_liquidations(date)', 'execute'), true, 'authenticated may call generation (the function checks is_admin)');
 SELECT is(has_function_privilege('authenticated', 'public.advisor_commission_summary()', 'execute'), true, 'authenticated may read the summary');
 SELECT ok(NOT has_table_privilege('anon', 'public.advisor_commissions', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE'), 'anon has no privilege on advisor_commissions');
@@ -487,6 +487,22 @@ SELECT lives_ok($$SELECT public.approve_commission_liquidation((SELECT id FROM p
 SELECT is((SELECT status FROM public.advisor_commissions WHERE affiliate_profile_id = 'e8e8e8e8-0000-0000-0000-00000000001a'), 'approved',
   'a line with no rejection is approved');
 SELECT is_empty('EXECUTE commission_invariant', 'invariant at the end');
+
+-- List filters (D2 review): one advisor, and only the commissions in no liquidation.
+SELECT set_eq($$SELECT id FROM public.advisor_commission_list(NULL, 'e8e8e8e8-0000-0000-0000-000000000003', true)$$,
+  $$SELECT id FROM public.advisor_commissions WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000003' AND liquidation_id IS NULL$$,
+  'the list filters by advisor and by unattached');
+SELECT ok((SELECT count(*) FROM public.advisor_commission_list(NULL, 'e8e8e8e8-0000-0000-0000-000000000003', true)) > 0,
+  'advisor 1 has an unattached commission (1b, retained)');
+SELECT set_eq($$SELECT id FROM public.advisor_commission_list(NULL, 'e8e8e8e8-0000-0000-0000-000000000004')$$,
+  $$SELECT id FROM public.advisor_commissions WHERE advisor_id = 'e8e8e8e8-0000-0000-0000-000000000004'$$,
+  'the list filters by advisor alone');
+SELECT is((SELECT count(*)::int FROM public.advisor_commission_list(NULL, NULL, true) WHERE liquidation_id IS NOT NULL), 0,
+  'unattached only returns no attached line');
+-- The filters never widen the scope: advisor 2 asking for advisor 1 gets nothing.
+SELECT set_config('request.jwt.claims', '{"sub":"e8e8e8e8-0000-0000-0000-000000000004","role":"authenticated"}', true);
+SELECT is((SELECT count(*)::int FROM public.advisor_commission_list(NULL, 'e8e8e8e8-0000-0000-0000-000000000003', true)), 0,
+  'an advisor cannot list another advisor''s commissions through the filter');
 RESET ROLE;
 
 SELECT * FROM finish();

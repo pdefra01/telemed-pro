@@ -12,6 +12,28 @@ const toError = (error: any): Error =>
 
 const num = (value: unknown): number => Number(value ?? 0);
 
+/** PostgREST returns at most 1000 rows per request: read page after page until a short one. */
+const PAGE_SIZE = 1000;
+async function readAll(page: (from: number, to: number) => PromiseLike<{ data: any; error: any }>): Promise<any[]> {
+  const rows: any[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) throw toError(error);
+    const batch = data || [];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) return rows;
+  }
+}
+
+export interface CommissionListFilter {
+  /** The lines of one liquidation. */
+  liquidationId?: string;
+  /** One advisor's commissions (always within the caller's scope). */
+  advisorId?: string;
+  /** Only the commissions in no liquidation (retained, excluded or not liquidated yet). */
+  unattachedOnly?: boolean;
+}
+
 /**
  * Advisor commissions and their monthly liquidations (S2/S3). Reads are scoped by
  * the database (advisor: own, supervisor: team, admin: all); every write is an
@@ -19,9 +41,8 @@ const num = (value: unknown): number => Number(value ?? 0);
  */
 export class CommissionRepository {
   async getSummary(): Promise<CommissionSummary[]> {
-    const { data, error } = await supabase.rpc('advisor_commission_summary');
-    if (error) throw toError(error);
-    return (data || []).map((r: any) => ({
+    const data = await readAll((from, to) => supabase.rpc('advisor_commission_summary').range(from, to));
+    return data.map((r: any) => ({
       advisorId: r.advisor_id,
       advisorName: r.advisor_name,
       generatedAmount: num(r.generated_amount),
@@ -35,11 +56,15 @@ export class CommissionRepository {
     }));
   }
 
-  /** The lines of one liquidation, or every visible commission when no id is given. */
-  async listCommissions(liquidationId?: string): Promise<CommissionLine[]> {
-    const { data, error } = await supabase.rpc('advisor_commission_list', { p_liquidation_id: liquidationId ?? null });
-    if (error) throw toError(error);
-    return (data || []).map((r: any) => ({
+  /** Commissions in scope, narrowed by liquidation, advisor and/or unattached only; every page is read. */
+  async listCommissions(filter: CommissionListFilter = {}): Promise<CommissionLine[]> {
+    const params = {
+      p_liquidation_id: filter.liquidationId ?? null,
+      p_advisor_id: filter.advisorId ?? null,
+      p_unattached_only: filter.unattachedOnly ?? false,
+    };
+    const data = await readAll((from, to) => supabase.rpc('advisor_commission_list', params).range(from, to));
+    return data.map((r: any) => ({
       id: r.id,
       advisorId: r.advisor_id,
       advisorName: r.advisor_name,
@@ -55,15 +80,15 @@ export class CommissionRepository {
   }
 
   async listLiquidations(filter: { month?: string; advisorId?: string } = {}): Promise<CommissionLiquidation[]> {
-    let query = supabase
-      .from('commission_liquidations')
-      .select('id, advisor_id, month, status, total_amount, retained_amount, retained_count, approved_at, paid_at, payment_method, payment_reference');
-    if (filter.month) query = query.eq('month', filter.month);
-    if (filter.advisorId) query = query.eq('advisor_id', filter.advisorId);
-
-    const { data, error } = await query.order('month', { ascending: false });
-    if (error) throw toError(error);
-    return (data || []).map((r: any) => ({
+    const data = await readAll((from, to) => {
+      let query = supabase
+        .from('commission_liquidations')
+        .select('id, advisor_id, month, status, total_amount, retained_amount, retained_count, approved_at, paid_at, payment_method, payment_reference');
+      if (filter.month) query = query.eq('month', filter.month);
+      if (filter.advisorId) query = query.eq('advisor_id', filter.advisorId);
+      return query.order('month', { ascending: false }).order('id', { ascending: true }).range(from, to);
+    });
+    return data.map((r: any) => ({
       id: r.id,
       advisorId: r.advisor_id,
       month: r.month,

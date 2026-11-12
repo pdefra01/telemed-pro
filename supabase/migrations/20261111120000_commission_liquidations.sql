@@ -550,13 +550,19 @@ AS $$
     LEFT JOIN public.advisor_commissions c ON c.advisor_id = o.id
    WHERE o.id = auth.uid() OR public.is_supervisor_of(o.id) OR public.is_admin()
    GROUP BY o.id, v.full_name
-   ORDER BY 2;
+   ORDER BY 2, 1;
 $$;
 
 COMMENT ON FUNCTION public.advisor_commission_summary() IS 'Commission summary per advisor (S3): generated, retained, approved to collect, collected. Scope: own (advisor), team (supervisor), all (admin).';
 
--- Commission detail, optionally of one liquidation, with affiliate and plan names (same scope).
-CREATE OR REPLACE FUNCTION public.advisor_commission_list(p_liquidation_id UUID DEFAULT NULL)
+-- Commission detail with affiliate and plan names (same scope), optionally narrowed to one liquidation, one advisor
+-- and/or the commissions in no liquidation (retained, excluded or not liquidated yet). The filters only narrow the
+-- scope, never widen it. Ordered by a unique key so the client can page through it.
+CREATE OR REPLACE FUNCTION public.advisor_commission_list(
+  p_liquidation_id  UUID    DEFAULT NULL,
+  p_advisor_id      UUID    DEFAULT NULL,
+  p_unattached_only BOOLEAN DEFAULT false
+)
 RETURNS TABLE (
   id                   UUID,
   advisor_id           UUID,
@@ -590,10 +596,12 @@ AS $$
     LEFT JOIN public.commission_liquidations l ON l.id = c.liquidation_id
    WHERE (c.advisor_id = auth.uid() OR public.is_supervisor_of(c.advisor_id) OR public.is_admin())
      AND (p_liquidation_id IS NULL OR c.liquidation_id = p_liquidation_id)
+     AND (p_advisor_id IS NULL OR c.advisor_id = p_advisor_id)
+     AND (NOT COALESCE(p_unattached_only, false) OR c.liquidation_id IS NULL)
    ORDER BY 3, c.confirmed_at, c.id;
 $$;
 
-COMMENT ON FUNCTION public.advisor_commission_list(UUID) IS 'Commissions with affiliate and plan names, optionally of one liquidation. Scope: own (advisor), team (supervisor), all (admin).';
+COMMENT ON FUNCTION public.advisor_commission_list(UUID, UUID, BOOLEAN) IS 'Commissions with affiliate and plan names, optionally of one liquidation, one advisor and/or only unattached. Scope: own (advisor), team (supervisor), all (admin).';
 
 -- ── Function privileges ─────────────────────────────────────────────────────
 REVOKE ALL ON FUNCTION public.generate_commission_liquidations(DATE) FROM PUBLIC, anon;
@@ -602,7 +610,7 @@ REVOKE ALL ON FUNCTION public.include_commission(UUID) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.approve_commission_liquidation(UUID) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.pay_commission_liquidation(UUID, DATE, TEXT, TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.advisor_commission_summary() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.advisor_commission_list(UUID) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.advisor_commission_list(UUID, UUID, BOOLEAN) FROM PUBLIC, anon;
 
 GRANT EXECUTE ON FUNCTION public.generate_commission_liquidations(DATE) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.exclude_commission(UUID, TEXT) TO authenticated, service_role;
@@ -610,4 +618,4 @@ GRANT EXECUTE ON FUNCTION public.include_commission(UUID) TO authenticated, serv
 GRANT EXECUTE ON FUNCTION public.approve_commission_liquidation(UUID) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.pay_commission_liquidation(UUID, DATE, TEXT, TEXT) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.advisor_commission_summary() TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.advisor_commission_list(UUID) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.advisor_commission_list(UUID, UUID, BOOLEAN) TO authenticated, service_role;
