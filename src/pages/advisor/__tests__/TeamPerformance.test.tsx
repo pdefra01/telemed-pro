@@ -28,6 +28,7 @@ const build = (over: Partial<AdvisorMonthMetrics>): AdvisorMonthMetrics => ({
   linksShared: 7,
   goalAffiliates: 6,
   goalRevenue: 4000,
+  affiliatesUnconfirmed: 3,
   ...over,
 });
 
@@ -35,7 +36,7 @@ const rows = [
   build({}),
   build({
     advisorId: 'adv-2', advisorName: 'Luis Paz', affiliatesSold: 1, revenue: 1000, prospectsLoaded: 0,
-    prospectsContacted: 0, prospectsAffiliated: 0, prospectsStale: 0, linksShared: 0, goalAffiliates: undefined, goalRevenue: undefined,
+    prospectsContacted: 0, prospectsAffiliated: 0, prospectsStale: 0, linksShared: 0, goalAffiliates: undefined, goalRevenue: undefined, affiliatesUnconfirmed: 0,
   }),
 ];
 
@@ -69,6 +70,15 @@ describe('TeamPerformance (supervisor / admin)', () => {
     expect(within(pedro).getByTestId('stale-adv-1')).toHaveTextContent('2');
     expect(within(pedro).getByTestId('links-adv-1')).toHaveTextContent('7');
     expect(within(screen.getByTestId('perf-adv-2')).getByTestId('conversion-adv-2')).toHaveTextContent('—');
+  });
+
+  it('shows the approved sales still waiting for their first payment, per advisor and in total', async () => {
+    render(<TeamPerformance />);
+    const pedro = await screen.findByTestId('perf-adv-1');
+
+    expect(within(pedro).getByTestId('unconfirmed-adv-1')).toHaveTextContent('3');
+    expect(within(screen.getByTestId('perf-adv-2')).getByTestId('unconfirmed-adv-2')).toHaveTextContent('0');
+    expect(screen.getByTestId('perf-total')).toHaveTextContent('3');
   });
 
   it('adds up a team total', async () => {

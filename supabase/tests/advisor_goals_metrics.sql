@@ -22,7 +22,12 @@ VALUES
   ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'goal-patient@test.local', '', now(), now(), now(), '{"full_name":"Goal Patient"}', '{}'),
   ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000011', 'authenticated', 'authenticated', 'goal-aff-1@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 1"}', '{}'),
   ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000012', 'authenticated', 'authenticated', 'goal-aff-2@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 2"}', '{}'),
-  ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000013', 'authenticated', 'authenticated', 'goal-aff-3@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 3"}', '{}');
+  ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000013', 'authenticated', 'authenticated', 'goal-aff-3@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 3"}', '{}'),
+  ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000014', 'authenticated', 'authenticated', 'goal-aff-4@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 4"}', '{}'),
+  ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000015', 'authenticated', 'authenticated', 'goal-aff-5@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 5"}', '{}'),
+  ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000016', 'authenticated', 'authenticated', 'goal-aff-6@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 6"}', '{}'),
+  ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000017', 'authenticated', 'authenticated', 'goal-aff-7@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 7"}', '{}'),
+  ('00000000-0000-0000-0000-000000000000', 'c3c3c3c3-0000-0000-0000-000000000018', 'authenticated', 'authenticated', 'goal-aff-8@test.local', '', now(), now(), now(), '{"full_name":"Goal Affiliate 8"}', '{}');
 
 INSERT INTO public.plans (id, name, monthly_cost, bonified_consultations, max_family_members, paid_months, bonus_months, is_unlimited)
 VALUES
@@ -33,25 +38,46 @@ UPDATE public.profiles SET promoter_code = 'ADV-ONE', supervisor_id = 'c3c3c3c3-
 UPDATE public.profiles SET promoter_code = 'ADV-TWO' WHERE id = 'c3c3c3c3-0000-0000-0000-000000000004';
 UPDATE public.profiles SET plan_id = 'c3c3c3c3-0000-0000-0000-0000000000a1' WHERE id IN ('c3c3c3c3-0000-0000-0000-000000000011', 'c3c3c3c3-0000-0000-0000-000000000013');
 UPDATE public.profiles SET plan_id = 'c3c3c3c3-0000-0000-0000-0000000000a2' WHERE id = 'c3c3c3c3-0000-0000-0000-000000000012';
+UPDATE public.profiles SET plan_id = 'c3c3c3c3-0000-0000-0000-0000000000a1' WHERE id IN ('c3c3c3c3-0000-0000-0000-000000000014', 'c3c3c3c3-0000-0000-0000-000000000015', 'c3c3c3c3-0000-0000-0000-000000000017', 'c3c3c3c3-0000-0000-0000-000000000018');
+UPDATE public.profiles SET plan_id = 'c3c3c3c3-0000-0000-0000-0000000000a2' WHERE id = 'c3c3c3c3-0000-0000-0000-000000000016';
 
 INSERT INTO public.producers (id, name, producer_code, email, commission_rate, status, links_shared_count)
 VALUES ('c3c3c3c3-0000-0000-0000-000000000003', 'Goal Advisor One', 'ADV-ONE', 'goal-adv-1@test.local', 10, 'active', 7);
 
--- Sales. October 2026 for ADV-ONE: r1 (plan A), r2 (plan B), r6 (no profile), r7 (activated_at null,
--- falls back to created_at), r8 (plan A, Argentina-midnight boundary). r3 is November, r4 is pending.
--- ADV-TWO has r5 in October.
+-- Sales (S14: a sale counts from the month of its first positive payment in the ledger).
+-- ADV-ONE: r1 (plan A, paid Oct), r2 (plan B, paid Oct), r8 (plan A, paid at the Argentina-midnight boundary = Oct),
+-- r3 (plan A, paid Nov), r11 (activated Oct, paid Nov). Unconfirmed: r6 and r7 (no profile), r9 (never paid),
+-- r10 (only a charge). r4 is pending. ADV-TWO has r5 (plan A, paid Oct).
 INSERT INTO public.adhesion_requests (id, titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood,
   titular_email, titular_phone, titular_civil_status, payment_method, signature_base64, status, promoter_id, approved_profile_id, activated_at, created_at)
 VALUES
   ('c3c3c3c3-0000-0000-0000-0000000000b1', 'Sale 1', '90000001', '1990-01-01', 'x', 'x', 'x', 's1@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000011', '2026-10-15 12:00+00', '2026-10-14 12:00+00'),
   ('c3c3c3c3-0000-0000-0000-0000000000b2', 'Sale 2', '90000002', '1990-01-01', 'x', 'x', 'x', 's2@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000012', '2026-10-20 12:00+00', '2026-10-19 12:00+00'),
-  ('c3c3c3c3-0000-0000-0000-0000000000b3', 'Sale 3', '90000003', '1990-01-01', 'x', 'x', 'x', 's3@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000011', '2026-11-02 12:00+00', '2026-11-01 12:00+00'),
+  ('c3c3c3c3-0000-0000-0000-0000000000b3', 'Sale 3', '90000003', '1990-01-01', 'x', 'x', 'x', 's3@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000014', '2026-11-02 12:00+00', '2026-11-01 12:00+00'),
   ('c3c3c3c3-0000-0000-0000-0000000000b4', 'Sale 4', '90000004', '1990-01-01', 'x', 'x', 'x', 's4@test.local', '1', 'soltero', 'cash', 'sig', 'pending', 'ADV-ONE', NULL, NULL, '2026-10-16 12:00+00'),
   ('c3c3c3c3-0000-0000-0000-0000000000b5', 'Sale 5', '90000005', '1990-01-01', 'x', 'x', 'x', 's5@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-TWO', 'c3c3c3c3-0000-0000-0000-000000000013', '2026-10-21 12:00+00', '2026-10-20 12:00+00'),
   ('c3c3c3c3-0000-0000-0000-0000000000b6', 'Sale 6', '90000006', '1990-01-01', 'x', 'x', 'x', 's6@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', NULL, '2026-10-22 12:00+00', '2026-10-21 12:00+00'),
   ('c3c3c3c3-0000-0000-0000-0000000000b7', 'Sale 7', '90000007', '1990-01-01', 'x', 'x', 'x', 's7@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', NULL, NULL, '2026-10-25 12:00+00'),
   -- r8: 2026-11-01 01:00 UTC is 2026-10-31 22:00 in Argentina, so it belongs to October.
-  ('c3c3c3c3-0000-0000-0000-0000000000b8', 'Sale 8', '90000008', '1990-01-01', 'x', 'x', 'x', 's8@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000011', '2026-11-01 01:00+00', '2026-10-31 12:00+00');
+  ('c3c3c3c3-0000-0000-0000-0000000000b8', 'Sale 8', '90000008', '1990-01-01', 'x', 'x', 'x', 's8@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000015', '2026-10-30 12:00+00', '2026-10-30 12:00+00'),
+  -- r9: approved, has a profile, never paid. r10: approved, only a charge in the ledger. Both unconfirmed.
+  ('c3c3c3c3-0000-0000-0000-0000000000b9', 'Sale 9', '90000009', '1990-01-01', 'x', 'x', 'x', 's9@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000016', '2026-10-23 12:00+00', '2026-10-23 12:00+00'),
+  ('c3c3c3c3-0000-0000-0000-0000000000ba', 'Sale 10', '90000010', '1990-01-01', 'x', 'x', 'x', 's10@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000017', '2026-10-24 12:00+00', '2026-10-24 12:00+00'),
+  -- r11: activated in October but only paid in November: it counts in November.
+  ('c3c3c3c3-0000-0000-0000-0000000000bb', 'Sale 11', '90000011', '1990-01-01', 'x', 'x', 'x', 's11@test.local', '1', 'soltero', 'cash', 'sig', 'approved', 'ADV-ONE', 'c3c3c3c3-0000-0000-0000-000000000018', '2026-10-25 12:00+00', '2026-10-25 12:00+00');
+
+-- Ledger (S14: a sale counts from its first positive payment). r8's payment is 2026-11-01 01:00 UTC,
+-- which is 2026-10-31 22:00 in Argentina, so it belongs to October.
+INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, amount, created_at) VALUES
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000011', 'charge',  1000, '2026-10-15 12:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000011', 'payment', 1000, '2026-10-16 12:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000012', 'payment', 2500, '2026-10-21 12:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000013', 'payment', 1000, '2026-10-22 12:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000014', 'payment', 1000, '2026-11-02 12:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000015', 'payment', 1000, '2026-11-01 01:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000017', 'charge',  1000, '2026-10-24 12:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000018', 'charge',  1000, '2026-10-25 12:00+00'),
+  ('affiliate', 'c3c3c3c3-0000-0000-0000-000000000018', 'payment', 1000, '2026-11-10 12:00+00');
 
 -- Prospects of advisor 1. October cohort: p1 affiliated, p2 contacted, p3 new, p5 lost-after-contact.
 INSERT INTO public.prospects (id, advisor_id, full_name, status, last_contact_at, created_at)
@@ -121,11 +147,12 @@ SELECT set_config('request.jwt.claims', '{"sub":"c3c3c3c3-0000-0000-0000-0000000
 
 SELECT results_eq($$
   SELECT advisor_id::text, affiliates_sold::int, revenue::numeric, prospects_loaded::int, prospects_contacted::int,
-         prospects_affiliated::int, prospects_stale::int, links_shared::int, goal_affiliates::int, goal_revenue::numeric
+         prospects_affiliated::int, prospects_stale::int, links_shared::int, goal_affiliates::int, goal_revenue::numeric,
+         affiliates_unconfirmed::int
     FROM public.advisor_monthly_metrics('2026-10-01', '2026-11-12')
    WHERE advisor_id = 'c3c3c3c3-0000-0000-0000-000000000003'$$,
-  $$VALUES ('c3c3c3c3-0000-0000-0000-000000000003', 5, 4500::numeric, 4, 3, 1, 2, 7, 6, 4000::numeric)$$,
-  'October metrics of advisor 1: sold (incl. null activated_at fallback and the Argentina-midnight sale), plan-price revenue, prospect cohort, stale, links, goals');
+  $$VALUES ('c3c3c3c3-0000-0000-0000-000000000003', 3, 4500::numeric, 4, 3, 1, 2, 7, 6, 4000::numeric, 4)$$,
+  'October metrics of advisor 1: only paid sales count (r1, r2 and the Argentina-midnight payment of r8), plan-price revenue, prospect cohort, stale, links, goals, and 4 approved sales still unconfirmed');
 
 SELECT results_eq($$
   SELECT affiliates_sold::int, revenue::numeric, prospects_loaded::int, links_shared::int, goal_affiliates::int, goal_revenue::numeric
@@ -138,8 +165,19 @@ SELECT results_eq($$
   SELECT affiliates_sold::int, revenue::numeric, prospects_loaded::int, goal_affiliates::int, goal_revenue::numeric
     FROM public.advisor_monthly_metrics('2026-11-17', '2026-11-12')
    WHERE advisor_id = 'c3c3c3c3-0000-0000-0000-000000000003'$$,
-  $$VALUES (1, 1000::numeric, 1, NULL::int, NULL::numeric)$$,
-  'any date inside a month selects that month (November: one sale, one prospect, the goal was removed)');
+  $$VALUES (2, 2000::numeric, 1, NULL::int, NULL::numeric)$$,
+  'any date inside a month selects that month (November: two sales counted by payment month, one prospect, the goal was removed)');
+
+-- S14: a sale is counted in the month of its first payment, not of its activation (r11: activated in October, paid in November),
+-- and approved sales without a positive payment (r6, r7 no profile; r9 never paid; r10 only a charge) are unconfirmed.
+SELECT results_eq($$
+  SELECT affiliates_unconfirmed::int FROM public.advisor_monthly_metrics('2026-11-17', '2026-11-12')
+   WHERE advisor_id = 'c3c3c3c3-0000-0000-0000-000000000003'$$,
+  $$VALUES (4)$$, 'the unconfirmed count is a snapshot, the same whatever month is asked');
+SELECT results_eq($$
+  SELECT affiliates_unconfirmed::int FROM public.advisor_monthly_metrics('2026-10-01', '2026-11-12')
+   WHERE advisor_id = 'c3c3c3c3-0000-0000-0000-000000000004'$$,
+  $$VALUES (0)$$, 'an advisor whose approved sales are all paid has none unconfirmed');
 
 SELECT is((SELECT count(*)::int FROM public.advisor_monthly_metrics('2026-10-01', '2026-11-12')
             WHERE advisor_id IN ('c3c3c3c3-0000-0000-0000-000000000003', 'c3c3c3c3-0000-0000-0000-000000000004')), 2,

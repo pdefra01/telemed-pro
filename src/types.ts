@@ -17,6 +17,8 @@ export interface AdvisorMonthMetrics {
   linksShared: number;
   goalAffiliates?: number;
   goalRevenue?: number;
+  /** Approved sales whose affiliate has no confirmed payment yet (they count from the first payment). */
+  affiliatesUnconfirmed: number;
 }
 
 export type CollectionStatus = 'current' | 'pending' | 'overdue';

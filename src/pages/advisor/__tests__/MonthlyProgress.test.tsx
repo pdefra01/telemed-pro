@@ -24,6 +24,7 @@ const metrics = (over: Partial<AdvisorMonthMetrics> = {}): AdvisorMonthMetrics =
   linksShared: 7,
   goalAffiliates: 6,
   goalRevenue: 4000,
+  affiliatesUnconfirmed: 2,
   ...over,
 });
 
@@ -73,6 +74,23 @@ describe('MonthlyProgress (advisor)', () => {
     expect(screen.getByTestId('funnel-conversion')).toHaveTextContent('25%');
     expect(screen.getByTestId('stale-prospects')).toHaveTextContent('2');
     expect(screen.getByTestId('links-shared')).toHaveTextContent('7');
+  });
+
+  it('warns about approved sales that still wait for their first payment', async () => {
+    render(<MonthlyProgress />);
+    await screen.findByTestId('goal-affiliates');
+
+    const notice = screen.getByTestId('unconfirmed-sales');
+    expect(notice).toHaveTextContent('2');
+    expect(notice).toHaveTextContent(/pendientes de pago/i);
+  });
+
+  it('does not warn when every approved sale is paid', async () => {
+    vi.mocked(advisorPerformanceRepository.getMonthlyMetrics).mockResolvedValue([metrics({ affiliatesUnconfirmed: 0 })]);
+    render(<MonthlyProgress />);
+    await screen.findByTestId('goal-affiliates');
+
+    expect(screen.queryByTestId('unconfirmed-sales')).not.toBeInTheDocument();
   });
 
   it('shows a dash for the conversion rate when no prospects were loaded', async () => {

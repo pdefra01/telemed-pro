@@ -60,7 +60,7 @@ Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para n
 
 **Administradores (`Planes`)**: la lista muestra tipo, opción de pago, si está ofrecido, precio, meses, tamaño y comisión del asesor. Un plan en uso es de solo lectura; para cambiar precio o condiciones use **Crear nueva version** (al ofrecer la nueva, la anterior se retira sola).
 
-**Asesores**: la comisión es un monto fijo por plan (Individual $7.500, Familiar $25.000, semestral $30.000, anual $35.000).
+**Asesores**: la comisión es un monto fijo por plan (Individual $7.500, Familiar $25.000, semestral $30.000, anual $35.000). Se computa recién cuando el afiliado tiene un primer pago acreditado en su cuenta corriente; la activación del afiliado no depende del pago, pero la comisión sí. En su panel, las altas aprobadas sin pago figuran como "Aprobada · pago pendiente".
 
 **Estructura comercial y prospectos (CRM)**: cada asesor tiene como máximo un supervisor (un solo nivel).
 - *Administradores*: en **Supervisores** se crea un supervisor (nombre, apellido, email y contraseña) y se elige, asesor por asesor, a qué supervisor pertenece o "Sin supervisor". **Prospectos** muestra los prospectos de todos los asesores.
@@ -75,7 +75,7 @@ Ambos planes incluyen consultas ilimitadas. Un cambio de precio rige solo para n
 **Metas mensuales y métricas**: cada asesor puede tener una meta por mes de afiliados, de ingresos o de ambas (se deja vacía la que no aplica).
 - *Supervisores*: en **Metas y métricas** eligen el mes, ven la tabla de su equipo y con **Editar meta** cargan, cambian o quitan la meta de cada asesor. *Administradores*: lo mismo para todos los asesores.
 - *Asesores*: en **Prospectos**, la tarjeta **Mi mes** muestra el avance contra sus metas y su embudo de prospectos. Cada asesor ve solo lo suyo.
-- Qué se mide: **afiliados** son las solicitudes aprobadas con el código del asesor, ubicadas en el mes en que se activaron; **ingresos** es la suma de la cuota mensual del plan de cada una de esas ventas (una venta sin plan identificable suma afiliado pero no ingresos); **prospectos cargados, contactados y afiliados** corresponden a los prospectos creados ese mes, y **conversión** es afiliados sobre cargados; **sin seguimiento** son los prospectos abiertos sin contacto hace 7 días o más (foto de hoy, no del mes); **links compartidos** es el acumulado histórico.
+- Qué se mide: **afiliados** son las solicitudes aprobadas con el código del asesor cuyo afiliado ya tiene un **pago acreditado** en su cuenta corriente, ubicadas en el mes de ese primer pago (una venta activada en octubre y pagada en noviembre cuenta en noviembre); **ingresos** es la suma de la cuota mensual del plan de cada una de esas ventas; las ventas aprobadas que todavía no tienen pago aparecen como **pendientes de pago** y no suman a metas ni ingresos hasta que se acredite el primer pago; **prospectos cargados, contactados y afiliados** corresponden a los prospectos creados ese mes, y **conversión** es afiliados sobre cargados; **sin seguimiento** son los prospectos abiertos sin contacto hace 7 días o más (foto de hoy, no del mes); **links compartidos** es el acumulado histórico.
 
 ### 1.2. Consulta de Historia Clínica y Recetas (`/history`)
 En la pestaña **Historia Clínica**, el paciente dispone de la bóveda médica con:

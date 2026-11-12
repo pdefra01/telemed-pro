@@ -28,6 +28,7 @@ const row = {
   links_shared: 7,
   goal_affiliates: 6,
   goal_revenue: '4000.00',
+  affiliates_unconfirmed: 4,
 };
 
 describe('AdvisorPerformanceRepository', () => {
@@ -59,6 +60,7 @@ describe('AdvisorPerformanceRepository', () => {
         linksShared: 7,
         goalAffiliates: 6,
         goalRevenue: 4000,
+        affiliatesUnconfirmed: 4,
       }]);
     });
 

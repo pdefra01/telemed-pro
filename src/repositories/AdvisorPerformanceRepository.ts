@@ -29,6 +29,7 @@ export class AdvisorPerformanceRepository {
       linksShared: Number(row.links_shared),
       goalAffiliates: optionalNumber(row.goal_affiliates),
       goalRevenue: optionalNumber(row.goal_revenue),
+      affiliatesUnconfirmed: Number(row.affiliates_unconfirmed ?? 0),
     }));
   }
 

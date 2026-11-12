@@ -50,6 +50,8 @@ interface SaleRequest {
   plan_type: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
+  /** Approved requests only: whether the affiliate already has a confirmed payment. */
+  paymentConfirmed?: boolean;
 }
 
 interface Announcement {
@@ -66,6 +68,9 @@ interface StatsData {
   pendingSales: number;
   commissions: number;
   linksSharedCount: number;
+  /** Approved sales with a confirmed payment / still waiting for it (absent on an older server). */
+  confirmedSales?: number;
+  unconfirmedSales?: number;
   sales: SaleRequest[];
 }
 
@@ -300,8 +305,11 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
   }
 
   // Calculated KPIs (outside JSX to avoid IIFE pattern and ease testing)
+  // Only sales with a confirmed payment are accredited; an older server without the field keeps the approved count.
+  const accreditedSales = stats.confirmedSales ?? stats.approvedSales;
+  const unconfirmedSales = stats.unconfirmedSales ?? 0;
   const conversionRate = stats.linksSharedCount > 0
-    ? ((stats.approvedSales / stats.linksSharedCount) * 100).toFixed(1)
+    ? ((accreditedSales / stats.linksSharedCount) * 100).toFixed(1)
     : '0.0';
 
   const hasPromoterCode = !!user.promoter_code;
@@ -351,7 +359,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
           <div className="text-2xl font-black text-amber-400 tracking-tight">
             ${stats.commissions.toLocaleString('es-AR')}
           </div>
-          <p className="text-[10px] text-slate-400 mt-2">Por altas aprobadas</p>
+          <p className="text-[10px] text-slate-400 mt-2">Solo ventas con pago confirmado</p>
         </div>
 
         {/* KPI: Enlaces Compartidos */}
@@ -391,7 +399,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
             </div>
           </div>
           <div className="text-2xl font-black text-teal-400 tracking-tight">
-            {stats.approvedSales}
+            {accreditedSales}
           </div>
           <p className="text-[10px] text-slate-400 mt-2">Afiliados con pago verificado</p>
         </div>
@@ -410,6 +418,12 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
           <p className="text-[10px] text-slate-400 mt-2">Altas Acreditadas vs Links Compartidos</p>
         </div>
       </div>
+
+      {unconfirmedSales > 0 && (
+        <div className="mb-8 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+          Tenés {unconfirmedSales} {unconfirmedSales === 1 ? 'venta aprobada' : 'ventas aprobadas'} con el pago pendiente: se suman a tus comisiones y metas cuando se acredite el primer pago.
+        </div>
+      )}
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -460,7 +474,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
                             sale.status === 'rejected' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
                             'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
                           }`}>
-                            {sale.status === 'approved' ? 'Aprobada' :
+                            {sale.status === 'approved' ? (sale.paymentConfirmed === false ? 'Aprobada · pago pendiente' : 'Aprobada') :
                              sale.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
                           </span>
                         </td>
