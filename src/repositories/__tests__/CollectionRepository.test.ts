@@ -28,6 +28,9 @@ const affiliateRow = {
   last_action_type: 'promise',
   promised_date: '2026-12-01',
   actions_count: 2,
+  debit_rejected: true,
+  debit_rejected_at: '2026-10-10T12:00:00Z',
+  debit_failures: 2,
 };
 
 const actionRow = {
@@ -70,7 +73,23 @@ describe('CollectionRepository', () => {
         lastActionType: 'promise',
         promisedDate: '2026-12-01',
         actionsCount: 2,
+        debitRejected: true,
+        debitRejectedAt: '2026-10-10T12:00:00Z',
+        debitFailures: 2,
       }]);
+    });
+
+    it('treats a missing debit status as not rejected', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValueOnce({
+        data: [{ ...affiliateRow, debit_rejected: null, debit_rejected_at: null, debit_failures: null }],
+        error: null,
+      } as any);
+
+      const [a] = await repository.listAffiliates();
+
+      expect(a.debitRejected).toBe(false);
+      expect(a.debitRejectedAt).toBeUndefined();
+      expect(a.debitFailures).toBe(0);
     });
 
     it('keeps missing optional values as undefined', async () => {

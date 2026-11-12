@@ -152,6 +152,14 @@ export function verifyWebhookSignature(headers, dataId, secret) {
  * @param {'preapproval' | 'authorized_payment'} kind
  * @returns {{ eventType: string, mpResourceId: string | number, newStatus: string } | null}
  */
+/**
+ * Nested payment statuses that make a `processed` invoice a FAILED debit. Only a charge that
+ * never went through: an approved debit later refunded or charged back also stays `processed`
+ * (with a newer `last_modified`), and it must not flip a paying affiliate to payment_failed —
+ * the payment topic already escalates refunds/chargebacks as needs_admin.
+ */
+const PROCESSED_DEBIT_FAILED_PAYMENT_STATUSES = ['rejected', 'cancelled'];
+
 export function deriveSubscriptionEventKey(resource, kind) {
   if (!resource || resource.id === undefined || resource.id === null || !resource.status) {
     return null;
@@ -177,8 +185,17 @@ export function deriveSubscriptionEventKey(resource, kind) {
   if (kind === 'authorized_payment') {
     switch (resource.status) {
       case 'processed':
+        // MP documents the invoice status as scheduled | processed | recycling | canceled:
+        // a debit whose last retry failed ends 'processed' with a rejected nested payment
+        // ("collected or exceeded retries"), never with a top-level 'rejected'.
+        // https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md
+        // https://www.mercadopago.com.ar/developers/en/docs/subscriptions/integration-configuration/subscription-no-associated-plan/authorized-payments
+        if (PROCESSED_DEBIT_FAILED_PAYMENT_STATUSES.includes(resource.payment?.status)) {
+          return { eventType: 'subscription_authorized_payment_rejected', mpResourceId: resource.id, newStatus: 'payment_failed' };
+        }
         return { eventType: 'subscription_authorized_payment_processed', mpResourceId: resource.id, newStatus: 'authorized' };
       case 'rejected':
+        // Kept for compatibility with the earlier sandbox observation; MP's reference does not list it.
         return { eventType: 'subscription_authorized_payment_rejected', mpResourceId: resource.id, newStatus: 'payment_failed' };
       default:
         return null; // 'scheduled', 'recycling': non-terminal, ack/audit only
@@ -1197,15 +1214,63 @@ async function runPassA(ctx, options, summary) {
  * is stale or absent, so MP API cost is proportional to the problem, not the
  * roster.
  *
- * The exact shape of `GET /authorized_payments?preapproval_id={id}` is handled
- * defensively — accepts either a bare array or a `{ results: [...] }`
- * envelope, and a single bad fetch only skips that one subscription rather
- * than aborting the pass.
+ * Lists the invoices through the documented search endpoint
+ * `GET /authorized_payments/search?preapproval_id={id}`, whose response is
+ * `{ paging: { offset, limit, total }, results: [...] }`
+ * (https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md).
+ * A single bad fetch only skips that one subscription rather than aborting
+ * the pass.
  *
  * @param {{ supabaseAdmin: any, mpFetch: (path: string, init?: any) => Promise<any> }} ctx
  * @param {{ preapprovalId?: string }} options
  * @param {Record<string, number>} summary
  */
+/** Page size and page bound for `searchAuthorizedPayments`: one invoice per month, so 10 pages
+ * of 50 cover decades; the bound only protects against a misbehaving `paging.total`. */
+const AUTHORIZED_PAYMENTS_PAGE_SIZE = 50;
+const AUTHORIZED_PAYMENTS_MAX_PAGES = 10;
+
+/**
+ * Lists every invoice of a preapproval through the documented search endpoint, paging with
+ * `offset`/`limit` until `paging.total` (or a short/empty page), bounded by `maxPages`.
+ * https://www.mercadopago.com.ar/developers/en/reference/online-payments/subscriptions/authorized-payment-search/get.md
+ * Throws when a page cannot be fetched, so the caller skips that subscription.
+ *
+ * @param {(path: string) => Promise<any>} mpFetch
+ * @param {string} preapprovalId
+ * @param {{ pageSize?: number, maxPages?: number }} [options]
+ * @returns {Promise<any[]>}
+ */
+export async function searchAuthorizedPayments(mpFetch, preapprovalId, { pageSize = AUTHORIZED_PAYMENTS_PAGE_SIZE, maxPages = AUTHORIZED_PAYMENTS_MAX_PAGES } = {}) {
+  const items = [];
+  for (let page = 0; page < maxPages; page++) {
+    const offset = page * pageSize;
+    const response = await mpFetch(
+      `/authorized_payments/search?preapproval_id=${encodeURIComponent(preapprovalId)}&offset=${offset}&limit=${pageSize}`
+    );
+    const results = Array.isArray(response?.results) ? response.results : [];
+    items.push(...results);
+    const total = Number(response?.paging?.total);
+    if (results.length < pageSize) break;
+    if (Number.isFinite(total) && offset + results.length >= total) break;
+  }
+  return items;
+}
+
+/**
+ * The search result may omit the nested payment detail the single-invoice endpoint includes.
+ * A `processed` invoice needs it to tell a collected debit from a failed one, so it is
+ * re-fetched before deriving its event key; anything else is returned as is.
+ *
+ * @param {(path: string) => Promise<any>} mpFetch
+ * @param {any} item
+ */
+export async function completeAuthorizedPayment(mpFetch, item) {
+  const missingPayment = item.payment?.id === undefined || item.payment?.id === null || !item.payment?.status;
+  if (item.status !== 'processed' || !missingPayment) return item;
+  return mpFetch(`/authorized_payments/${item.id}`);
+}
+
 async function runPassC(ctx, options, summary) {
   const { supabaseAdmin, mpFetch } = ctx;
   const staleCutoff = new Date(Date.now() - PASS_C_STALE_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -1239,19 +1304,29 @@ async function runPassC(ctx, options, summary) {
     }
     if (!isStale) continue;
 
-    let listResponse;
+    let items;
     try {
-      listResponse = await mpFetch(`/authorized_payments?preapproval_id=${sub.mp_preapproval_id}`);
+      items = await searchAuthorizedPayments(mpFetch, sub.mp_preapproval_id);
     } catch (err) {
       summary.fetchFailures++;
       continue;
     }
-    const items = Array.isArray(listResponse) ? listResponse : (listResponse?.results || []);
 
     for (const item of items) {
       if (item?.id === undefined || item?.id === null || !item?.status) continue;
 
-      const key = deriveSubscriptionEventKey(item, 'authorized_payment');
+      // Complete a processed invoice BEFORE deriving its key: without the nested payment
+      // status a failed debit would look collected, and an existing `_processed` row would
+      // then hide the rejection.
+      let resource;
+      try {
+        resource = await completeAuthorizedPayment(mpFetch, item);
+      } catch (err) {
+        summary.fetchFailures++;
+        continue;
+      }
+
+      const key = deriveSubscriptionEventKey(resource, 'authorized_payment');
       if (!key) continue; // non-terminal (scheduled/recycling): nothing to recover yet
 
       const { data: existing } = await supabaseAdmin
@@ -1261,18 +1336,6 @@ async function runPassC(ctx, options, summary) {
         .eq('mp_resource_id', String(key.mpResourceId))
         .maybeSingle();
       if (existing) continue; // already known — Pass A owns its retry, not Pass C
-
-      let resource = item;
-      if (item.status === 'processed' && (item.payment?.id === undefined || item.payment?.id === null)) {
-        // The list endpoint may omit the nested payment detail the
-        // single-resource endpoint includes — re-fetch before settling.
-        try {
-          resource = await mpFetch(`/authorized_payments/${item.id}`);
-        } catch (err) {
-          summary.fetchFailures++;
-          continue;
-        }
-      }
 
       if (resource.status === 'processed' && resource.payment?.id !== undefined && resource.payment?.id !== null) {
         // Same ordering as routeWebhookNotification's 'processed' branch:

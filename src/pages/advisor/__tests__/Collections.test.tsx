@@ -23,6 +23,8 @@ const build = (over: Partial<CollectionAffiliate>): CollectionAffiliate => ({
   balance: 1500,
   paidThrough: '2026-10-01T12:00:00Z',
   actionsCount: 0,
+  debitRejected: false,
+  debitFailures: 0,
   ...over,
 });
 
@@ -236,6 +238,46 @@ describe('Collections (advisor)', () => {
     vi.mocked(collectionRepository.listAffiliates).mockRejectedValue(new Error('boom'));
     render(<Collections />);
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudieron cargar/i);
+  });
+
+  describe('debit rejections (S5)', () => {
+    const withRejection = [
+      build({ debitRejected: true, debitRejectedAt: '2026-10-10T12:00:00Z', debitFailures: 2 }),
+      build({ affiliateId: 'aff-2', affiliateName: 'Marcos Díaz', paymentStatus: 'pending', balance: 800 }),
+      build({ affiliateId: 'aff-3', affiliateName: 'Sofía Ruiz', paymentStatus: 'current', balance: 0, debitRejected: true, debitRejectedAt: '2026-11-10T12:00:00Z', debitFailures: 1 }),
+    ];
+
+    it('marks the row of an affiliate whose debit was rejected, with the date on demand', async () => {
+      vi.mocked(collectionRepository.listAffiliates).mockResolvedValue(withRejection);
+      render(<Collections />);
+
+      const laura = await screen.findByTestId('collection-aff-1');
+      expect(within(laura).getByText('Débito rechazado')).toBeInTheDocument();
+      expect(within(screen.getByTestId('collection-aff-2')).queryByText('Débito rechazado')).not.toBeInTheDocument();
+      openDetail(laura);
+      expect(laura).toHaveTextContent(/rechazado el 10\/10\/2026 · 2 rechazos/i);
+    });
+
+    it('counts the rejected debits in the header and filters them', async () => {
+      vi.mocked(collectionRepository.listAffiliates).mockResolvedValue(withRejection);
+      render(<Collections />);
+      await screen.findByTestId('collection-aff-1');
+
+      expect(screen.getByTestId('summary-debit')).toHaveTextContent('2 débitos rechazados');
+
+      fireEvent.change(screen.getByLabelText('Filtrar por estado'), { target: { value: 'debit' } });
+      expect(screen.getByTestId('collection-aff-1')).toBeInTheDocument();
+      expect(screen.getByTestId('collection-aff-3')).toBeInTheDocument();
+      expect(screen.queryByTestId('collection-aff-2')).not.toBeInTheDocument();
+    });
+
+    it('shows no debit counter when nothing was rejected', async () => {
+      render(<Collections />);
+      await screen.findByTestId('collection-aff-1');
+
+      expect(screen.queryByTestId('summary-debit')).not.toBeInTheDocument();
+      expect(within(screen.getByTestId('collection-aff-1')).queryByText('Débito rechazado')).not.toBeInTheDocument();
+    });
   });
 
   it('has no advisor filter or per-advisor summary: an advisor only sees their own affiliates', async () => {

@@ -47,6 +47,12 @@ export class ProfileFieldsUpdateFailedError extends Error {
   }
 }
 
+/** A rejected Mercado Pago debit of one affiliate (S5). */
+export interface DebitRejection {
+  rejectedAt?: string;
+  failures: number;
+}
+
 export class AffiliateRepository {
   /**
    * Obtiene todos los afiliados activos
@@ -64,6 +70,22 @@ export class AffiliateRepository {
     }
 
     return this.mapRowsWithDerivedPaymentStatus(data || []);
+  }
+
+  /**
+   * Afiliados cuyo débito automático actual de Mercado Pago está rechazado
+   * (`payment_failed`), por id de perfil. Lo lee el admin: la función respeta
+   * la RLS de admin sobre las suscripciones.
+   */
+  async getDebitRejections(): Promise<Record<string, DebitRejection>> {
+    const { data, error } = await supabase.rpc('admin_debit_rejections');
+    if (error) throw error;
+    return Object.fromEntries(
+      ((data as any[]) || []).map((row) => [
+        row.profile_id,
+        { rejectedAt: row.debit_rejected_at ?? undefined, failures: Number(row.debit_failures ?? 0) },
+      ])
+    );
   }
 
   /**

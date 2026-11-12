@@ -44,6 +44,7 @@ Configurar estas variables en la sección **Environment Variables** de Coolify p
 | `LIVEKIT_API_SECRET` | Clave secreta API de LiveKit | `secretxxxxxx` |
 | `MERCADOPAGO_ACCESS_TOKEN` | Token de acceso de producción para Mercado Pago | `APP_USR-...` |
 | `MERCADOPAGO_WEBHOOK_SECRET` | Secreto para verificar firmas de webhooks | `...` |
+| `MP_DEBIT_SYNC_INTERVAL_HOURS` | Cada cuántas horas el servidor consulta a Mercado Pago los débitos de cada suscripción para registrar rechazos (y cobros) cuyo webhook no llegó (opcional; por defecto `6`). Corre solo si Mercado Pago está configurado | `6` |
 | `WHATSAPP_GATEWAY_URL` | URL **interna** del gateway de WhatsApp (ver sección 4) | `http://waha:3000` |
 | `WHATSAPP_GATEWAY_API_KEY` | Clave con la que `server.js` llama al gateway | `(cadena larga aleatoria)` |
 | `WHATSAPP_GATEWAY_SESSION` | Nombre de la sesión del gateway (opcional) | `default` |

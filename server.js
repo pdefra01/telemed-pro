@@ -18,6 +18,7 @@ import { releaseStuckActivation } from './server/adhesionActivationRecovery.js';
 import { createActivateAdhesionLimiter, createDniUploadUrlsLimiter } from './server/rateLimits.js';
 import { createDniUploadUrls, cleanupOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS } from './server/adhesionDniPhotos.js';
 import { startProspectIntakeJob } from './server/prospectIntake.js';
+import { startDebitRejectionJob, DEBIT_REJECTIONS_INTERVAL_MS } from './server/debitRejections.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/whatsappSessionMonitor.js';
@@ -1581,3 +1582,12 @@ if (supabaseAdmin) {
 
 // Automatic prospect intake: lead surveys with consent become prospects and adhesions advance them.
 startProspectIntakeJob({ supabaseAdmin });
+
+// Periodic Mercado Pago query: records debit rejections (and charges) whose webhook never arrived.
+const debitRejectionsHours = Number(process.env.MP_DEBIT_SYNC_INTERVAL_HOURS);
+startDebitRejectionJob({
+  supabaseAdmin,
+  mpFetch: mercadoPagoEnabled ? mpFetch : null,
+  sendPaymentReceipt,
+  intervalMs: debitRejectionsHours > 0 ? debitRejectionsHours * 60 * 60 * 1000 : DEBIT_REJECTIONS_INTERVAL_MS,
+});

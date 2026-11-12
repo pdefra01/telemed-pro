@@ -914,3 +914,26 @@ describe('AffiliateRepository', () => {
     });
   });
 });
+
+describe('AffiliateRepository.getDebitRejections (S5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reads the affiliates whose current debit is rejected from the admin data source', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: [{ profile_id: 'p1', debit_rejected_at: '2026-10-10T12:00:00Z', debit_failures: 2 }],
+      error: null,
+    } as any);
+
+    const result = await affiliateRepository.getDebitRejections();
+
+    expect(supabase.rpc).toHaveBeenCalledWith('admin_debit_rejections');
+    expect(result).toEqual({ p1: { rejectedAt: '2026-10-10T12:00:00Z', failures: 2 } });
+  });
+
+  it('throws the database error', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: null, error: { message: 'denied' } } as any);
+    await expect(affiliateRepository.getDebitRejections()).rejects.toEqual({ message: 'denied' });
+  });
+});
