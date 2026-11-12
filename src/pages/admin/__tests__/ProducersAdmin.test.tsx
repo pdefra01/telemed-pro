@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ProducersAdmin } from '../ProducersAdmin';
 import { producerRepository } from '../../../repositories/ProducerRepository';
 import { supabase } from '../../../services/supabase';
+import { supervisorRepository } from '../../../repositories/SupervisorRepository';
 
 vi.mock('../../../repositories/ProducerRepository', () => ({
   producerRepository: {
@@ -11,6 +12,14 @@ vi.mock('../../../repositories/ProducerRepository', () => ({
     searchAdvisors: vi.fn(),
     setAdvisorStatus: vi.fn(),
     updateProducer: vi.fn(),
+  },
+}));
+
+vi.mock('../../../repositories/SupervisorRepository', () => ({
+  supervisorRepository: {
+    listSupervisors: vi.fn(),
+    listAdvisors: vi.fn(),
+    assignAdvisor: vi.fn(),
   },
 }));
 
@@ -51,6 +60,8 @@ describe('ProducersAdmin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(producerRepository.getProducers).mockResolvedValue([ACTIVE_PRODUCER]);
+    vi.mocked(supervisorRepository.listSupervisors).mockResolvedValue([]);
+    vi.mocked(supervisorRepository.listAdvisors).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -236,6 +247,74 @@ describe('ProducersAdmin', () => {
       vi.useRealTimers();
 
       await waitFor(() => expect(screen.getByText('Ana Ruiz')).toBeInTheDocument());
+    });
+  });
+
+  describe('supervisor assignment', () => {
+    const SUPERVISOR = { id: 'sup-laura', name: 'Laura Díaz', email: 'laura@medinex.com' };
+
+    it('shows the current supervisor of each advisor and saves a new one', async () => {
+      vi.mocked(supervisorRepository.listSupervisors).mockResolvedValue([SUPERVISOR]);
+      vi.mocked(supervisorRepository.listAdvisors).mockResolvedValue([
+        { id: 'adv-pedro', name: 'Pedro Gómez', email: 'pedro@medinex.com', supervisorId: null },
+      ]);
+      vi.mocked(supervisorRepository.assignAdvisor).mockResolvedValue(undefined);
+      render(<ProducersAdmin />);
+
+      const select = await screen.findByRole('combobox', { name: 'Supervisor de Pedro Gómez' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Laura Díaz' })).toBeInTheDocument());
+      expect(select).toHaveValue('');
+
+      fireEvent.change(select, { target: { value: 'sup-laura' } });
+
+      await waitFor(() => expect(supervisorRepository.assignAdvisor).toHaveBeenCalledWith('adv-pedro', 'sup-laura'));
+      await waitFor(() => expect(select).toHaveValue('sup-laura'));
+    });
+
+    it('releases an advisor with "Sin supervisor"', async () => {
+      vi.mocked(supervisorRepository.listSupervisors).mockResolvedValue([SUPERVISOR]);
+      vi.mocked(supervisorRepository.listAdvisors).mockResolvedValue([
+        { id: 'adv-pedro', name: 'Pedro Gómez', email: 'pedro@medinex.com', supervisorId: 'sup-laura' },
+      ]);
+      vi.mocked(supervisorRepository.assignAdvisor).mockResolvedValue(undefined);
+      render(<ProducersAdmin />);
+
+      const select = await screen.findByRole('combobox', { name: 'Supervisor de Pedro Gómez' });
+      await waitFor(() => expect(select).toHaveValue('sup-laura'));
+      fireEvent.change(select, { target: { value: '' } });
+
+      await waitFor(() => expect(supervisorRepository.assignAdvisor).toHaveBeenCalledWith('adv-pedro', null));
+    });
+
+    it('keeps the previous supervisor and shows an error when saving fails', async () => {
+      vi.mocked(supervisorRepository.listSupervisors).mockResolvedValue([SUPERVISOR]);
+      vi.mocked(supervisorRepository.listAdvisors).mockResolvedValue([
+        { id: 'adv-pedro', name: 'Pedro Gómez', email: 'pedro@medinex.com', supervisorId: null },
+      ]);
+      vi.mocked(supervisorRepository.assignAdvisor).mockRejectedValue(new Error('denied'));
+      render(<ProducersAdmin />);
+
+      const select = await screen.findByRole('combobox', { name: 'Supervisor de Pedro Gómez' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Laura Díaz' })).toBeInTheDocument());
+      fireEvent.change(select, { target: { value: 'sup-laura' } });
+
+      expect(await screen.findByText('No se pudo asignar el supervisor de Pedro Gómez.')).toBeInTheDocument();
+      expect(select).toHaveValue('');
+    });
+
+    it('explains that a supervisor must be created first when there is none', async () => {
+      render(<ProducersAdmin />);
+
+      expect(await screen.findByText(/todavía no hay supervisores/i)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /crear supervisor/i })).toHaveAttribute('href', '#/admin/supervisors');
+    });
+
+    it('still lists the advisors when the supervisors cannot be loaded', async () => {
+      vi.mocked(supervisorRepository.listSupervisors).mockRejectedValue(new Error('down'));
+      render(<ProducersAdmin />);
+
+      await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
+      expect(screen.queryByRole('combobox', { name: 'Supervisor de Pedro Gómez' })).not.toBeInTheDocument();
     });
   });
 });
