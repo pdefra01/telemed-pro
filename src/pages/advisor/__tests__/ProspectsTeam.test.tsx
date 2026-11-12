@@ -277,4 +277,14 @@ describe('Prospects (team view: supervisor and admin)', () => {
       expect(screen.getByText('Prospecto 99')).toBeInTheDocument();
     });
   });
+
+  it('still lists the prospects when the advisor list cannot be read, and says so', async () => {
+    vi.mocked(supervisorRepository.listAdvisors).mockRejectedValue(new Error('denied'));
+    render(<Prospects user={supervisor} />);
+
+    const sofia = await screen.findByTestId('prospect-p-3');
+    expect(within(sofia).getByText('Ana Torres')).toBeInTheDocument();
+    expect(screen.getByText('No se pudo cargar la lista de asesores.')).toBeInTheDocument();
+    expect(screen.queryByText('No se pudieron cargar los prospectos.')).not.toBeInTheDocument();
+  });
 });

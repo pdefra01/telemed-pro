@@ -26,6 +26,7 @@ import { User } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../services/supabase';
 import { commissionRepository } from '../../repositories/CommissionRepository';
+import { useCommissionsVisible } from '../../hooks/useCommissionsVisible';
 import { formatCurrency } from '../../utils/performance';
 
 interface AdvisorDashboardProps {
@@ -68,7 +69,6 @@ interface StatsData {
   totalSales: number;
   approvedSales: number;
   pendingSales: number;
-  commissions: number;
   linksSharedCount: number;
   /** Approved sales with a confirmed payment / still waiting for it (absent on an older server). */
   confirmedSales?: number;
@@ -81,7 +81,6 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
     totalSales: 0,
     approvedSales: 0,
     pendingSales: 0,
-    commissions: 0,
     linksSharedCount: 0,
     sales: []
   });
@@ -92,6 +91,8 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
   const [leadSurveyCount, setLeadSurveyCount] = useState(0);
   // Same figures as the Comisiones screen (liquidations), never an on-the-fly estimate.
   const [commissionTotals, setCommissionTotals] = useState({ toCollect: 0, collected: 0 });
+  // The switch in Configuración: while off the advisor sees only their productivity.
+  const commissionsVisible = useCommissionsVisible();
 
   const affiliateLink = `${window.location.origin}/#/adhesion?promoter=${user.promoter_code || ''}`;
   const surveyLink = `${window.location.origin}/#/encuesta?promoter=${user.promoter_code || ''}`;
@@ -221,6 +222,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
   }, [user.id]);
 
   useEffect(() => {
+    if (commissionsVisible !== true) return;
     let cancelled = false;
     commissionRepository
       .getSummary()
@@ -233,7 +235,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
       })
       .catch((err) => console.error('Error cargando las comisiones del asesor:', err));
     return () => { cancelled = true; };
-  }, [user.id]);
+  }, [user.id, commissionsVisible]);
 
   const handleMarkAsRead = async (ann: Announcement) => {
     if (ann.read) {
@@ -366,8 +368,9 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
       )}
 
       {/* KPIs Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-        {/* KPI: Comisiones */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${commissionsVisible ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4 mb-8`}>
+        {/* KPI: Comisiones (only while the switch in Configuración is on) */}
+        {commissionsVisible && (
         <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-amber-500/20 shadow-xl hover:shadow-amber-500/5 transition-all hover:scale-[1.01] duration-300">
           <div className="flex justify-between items-start mb-3">
             <span className="text-slate-400 font-semibold text-xs">Comisión a cobrar</span>
@@ -380,6 +383,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
           </div>
           <p className="text-[10px] text-slate-400 mt-2">Cobrado {formatCurrency(commissionTotals.collected)}</p>
         </div>
+        )}
 
         {/* KPI: Enlaces Compartidos */}
         <div className="bg-slate-900/50 backdrop-blur-md rounded-3xl p-5 border border-indigo-500/20 shadow-xl hover:shadow-indigo-500/5 transition-all hover:scale-[1.01] duration-300">
@@ -440,7 +444,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
 
       {unconfirmedSales > 0 && (
         <div className="mb-8 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-          Tenés {unconfirmedSales} {unconfirmedSales === 1 ? 'venta aprobada' : 'ventas aprobadas'} con el pago pendiente: se suman a tus comisiones y metas cuando se acredite el primer pago.
+          Tenés {unconfirmedSales} {unconfirmedSales === 1 ? 'venta aprobada' : 'ventas aprobadas'} con el pago pendiente: se suman a {commissionsVisible ? 'tus comisiones y metas' : 'tus metas'} cuando se acredite el primer pago.
         </div>
       )}
 
@@ -578,7 +582,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
               Enlace de Afiliación QR
             </h2>
             <p className="text-xs text-slate-400 mb-4 leading-relaxed font-sans">
-              Compartí tu enlace personalizado. Al registrarse desde este link, las comisiones se asignarán automáticamente a tu cuenta.
+              Compartí tu enlace personalizado. Al registrarse desde este link, {commissionsVisible ? 'las comisiones' : 'las ventas'} se asignarán automáticamente a tu cuenta.
             </p>
 
             {!hasPromoterCode ? (

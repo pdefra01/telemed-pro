@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { computeAdvisorStats } from '../advisorStats.js';
 
 /**
@@ -56,7 +56,7 @@ describe('computeAdvisorStats', () => {
 
     expect(result).toEqual({
       totalSales: 0, approvedSales: 0, pendingSales: 0, confirmedSales: 0, unconfirmedSales: 0,
-      commissions: 0, linksSharedCount: 0, sales: [],
+      linksSharedCount: 0, sales: [],
     });
   });
 
@@ -69,7 +69,7 @@ describe('computeAdvisorStats', () => {
   it('keeps the request counts and the links shared', async () => {
     const stub = createStub({ counts: { total: 12, approved: 5, pending: 4 }, producer: { links_shared_count: 30 } });
 
-    const result = await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions: async () => 0 }, 'adv-1');
+    const result = await computeAdvisorStats({ supabaseAdmin: stub}, 'adv-1');
 
     expect(result.totalSales).toBe(12);
     expect(result.approvedSales).toBe(5);
@@ -77,31 +77,22 @@ describe('computeAdvisorStats', () => {
     expect(result.linksSharedCount).toBe(30);
   });
 
-  it('computes the commission only over the sales with a confirmed payment', async () => {
-    const approved = [
-      { approved_profile_id: 'paid', plan_type: 'Plan Familiar', payment_method: 'cash' },
-      { approved_profile_id: 'unpaid', plan_type: 'Plan Familiar', payment_method: 'cash' },
-      { approved_profile_id: null, plan_type: 'Plan Familiar', payment_method: 'cash' },
-    ];
-    const computeCommissions = vi.fn().mockResolvedValue(25000);
+  it('splits the approved sales by confirmed payment and sends no commission figure (liquidations own it)', async () => {
+    const approved = [{ approved_profile_id: 'paid' }, { approved_profile_id: 'unpaid' }, { approved_profile_id: null }];
     const stub = createStub({ approved, paidIds: ['paid'], counts: { approved: 3 } });
 
-    const result = await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions }, 'adv-1');
+    const result = await computeAdvisorStats({ supabaseAdmin: stub }, 'adv-1');
 
-    expect(computeCommissions).toHaveBeenCalledTimes(1);
-    expect(computeCommissions.mock.calls[0][1]).toEqual([approved[0]]);
-    expect(result.commissions).toBe(25000);
     expect(result.confirmedSales).toBe(1);
     expect(result.unconfirmedSales).toBe(2);
+    expect(result).not.toHaveProperty('commissions');
   });
 
-  it('pays no commission and reports every approved sale as unconfirmed when nothing was paid', async () => {
+  it('reports every approved sale as unconfirmed when nothing was paid', async () => {
     const approved = [{ approved_profile_id: 'a' }, { approved_profile_id: 'b' }];
-    const computeCommissions = vi.fn().mockResolvedValue(0);
 
-    const result = await computeAdvisorStats({ supabaseAdmin: createStub({ approved, paidIds: [] }), computeCommissions }, 'adv-1');
+    const result = await computeAdvisorStats({ supabaseAdmin: createStub({ approved, paidIds: [] }) }, 'adv-1');
 
-    expect(computeCommissions.mock.calls[0][1]).toEqual([]);
     expect(result.confirmedSales).toBe(0);
     expect(result.unconfirmedSales).toBe(2);
   });
@@ -111,7 +102,7 @@ describe('computeAdvisorStats', () => {
     const approved = [{ approved_profile_id: 'paid' }, { approved_profile_id: 'unpaid' }];
 
     const result = await computeAdvisorStats(
-      { supabaseAdmin: createStub({ sales, approved, paidIds: ['paid'] }), computeCommissions: async () => 0 },
+      { supabaseAdmin: createStub({ sales, approved, paidIds: ['paid'] })},
       'adv-1'
     );
 
@@ -129,7 +120,7 @@ describe('computeAdvisorStats', () => {
     const sales = [sale('s1', 'approved', 'paid-elsewhere')];
 
     const result = await computeAdvisorStats(
-      { supabaseAdmin: createStub({ sales, approved: [], paidIds: ['paid-elsewhere'] }), computeCommissions: async () => 0 },
+      { supabaseAdmin: createStub({ sales, approved: [], paidIds: ['paid-elsewhere'] })},
       'adv-1'
     );
 
@@ -139,28 +130,26 @@ describe('computeAdvisorStats', () => {
   it('reads the approved sales in pages, so an advisor with more than 1000 approved sales is counted fully', async () => {
     const approved = Array.from({ length: 2500 }, (_, i) => ({ approved_profile_id: `p-${i}`, plan_type: 'Plan Familiar', payment_method: 'cash' }));
     const paidIds = approved.slice(0, 1200).map((r) => r.approved_profile_id);
-    const computeCommissions = vi.fn().mockResolvedValue(0);
     const stub = createStub({ approved, paidIds, counts: { approved: 2500 } });
 
-    const result = await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions }, 'adv-1');
+    const result = await computeAdvisorStats({ supabaseAdmin: stub }, 'adv-1');
 
     expect(result.confirmedSales).toBe(1200);
     expect(result.unconfirmedSales).toBe(1300);
-    expect(computeCommissions.mock.calls[0][1]).toHaveLength(1200);
     expect(stub.rangeCalls).toEqual([[0, 999], [1000, 1999], [2000, 2999]]);
   });
 
   it('stops after the first short page', async () => {
     const stub = createStub({ approved: [{ approved_profile_id: 'a' }] });
 
-    await computeAdvisorStats({ supabaseAdmin: stub, computeCommissions: async () => 0 }, 'adv-1');
+    await computeAdvisorStats({ supabaseAdmin: stub}, 'adv-1');
 
     expect(stub.rangeCalls).toEqual([[0, 999]]);
   });
 
   it('throws when a query fails, so the route can answer 500', async () => {
     await expect(computeAdvisorStats({ supabaseAdmin: createStub({ errors: { adhesion: new Error('db') } }) }, 'adv-1')).rejects.toThrow('db');
-    await expect(computeAdvisorStats({ supabaseAdmin: createStub({ approved: [{ approved_profile_id: 'a' }], errors: { ledger: new Error('ledger') } }), computeCommissions: async () => 0 }, 'adv-1')).rejects.toThrow('ledger');
+    await expect(computeAdvisorStats({ supabaseAdmin: createStub({ approved: [{ approved_profile_id: 'a' }], errors: { ledger: new Error('ledger') } })}, 'adv-1')).rejects.toThrow('ledger');
   });
 });
 

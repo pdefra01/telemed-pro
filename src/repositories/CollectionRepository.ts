@@ -1,9 +1,9 @@
 import { supabase } from '../services/supabase';
 import { CollectionAction, CollectionActionInput, CollectionAffiliate } from '../types';
 
-// The author embed needs the explicit constraint name; a reader who cannot see
-// the author's profile simply gets null.
-const ACTION_SELECT = '*, author:profiles!collection_actions_created_by_fkey(full_name)';
+// The database stores the author's name with each action, so a reader who
+// cannot see the author's profile still sees who logged it.
+const ACTION_SELECT = '*';
 
 const toAffiliate = (row: any): CollectionAffiliate => ({
   affiliateId: row.affiliate_id,
@@ -31,7 +31,7 @@ const toAction = (row: any): CollectionAction => ({
   note: row.note ?? undefined,
   promisedDate: row.promised_date ?? undefined,
   createdBy: row.created_by,
-  createdByName: row.author?.full_name ?? undefined,
+  createdByName: row.created_by_name ?? undefined,
   createdAt: row.created_at,
 });
 

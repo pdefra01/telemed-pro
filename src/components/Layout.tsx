@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useCommissionsVisible } from '../hooks/useCommissionsVisible';
 import {
   LayoutDashboard,
   Calendar,
@@ -36,6 +37,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  // Advisors and supervisors see their commissions only while the switch in Configuración is on.
+  const commercialRole = user?.role === 'advisor' || user?.role === 'supervisor';
+  const commissionsVisible = useCommissionsVisible(commercialRole);
 
   if (!user) {
     return <>{children}</>;
@@ -108,7 +112,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
     return common;
   };
 
-  const navItems = getNavItems(user.role);
+  const hiddenPaths = commercialRole && commissionsVisible !== true ? ['/commissions', '/team/commissions'] : [];
+  const navItems = getNavItems(user.role).filter((item) => !hiddenPaths.includes(item.path));
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50 flex flex-col md:flex-row">

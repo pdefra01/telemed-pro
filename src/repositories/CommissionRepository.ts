@@ -40,6 +40,13 @@ export interface CommissionListFilter {
  * admin-only function that checks the role itself.
  */
 export class CommissionRepository {
+  /** The switch in Configuración: whether advisors and supervisors may see commissions. */
+  async isVisible(): Promise<boolean> {
+    const { data, error } = await supabase.rpc('commissions_visible');
+    if (error) throw toError(error);
+    return data === true;
+  }
+
   async getSummary(): Promise<CommissionSummary[]> {
     const data = await readAll((from, to) => supabase.rpc('advisor_commission_summary').range(from, to));
     return data.map((r: any) => ({

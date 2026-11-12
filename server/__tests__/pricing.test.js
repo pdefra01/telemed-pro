@@ -5,8 +5,6 @@ import {
   subscriptionAmount,
   preapprovalTerms,
   requiresCheckoutPayment,
-  sumAdvisorCommissions,
-  computeAdvisorCommissions,
 } from '../pricing.js';
 
 /**
@@ -152,33 +150,5 @@ describe('requiresCheckoutPayment', () => {
     for (const m of ['monthly', 'cash', 'transfer', 'card_debit']) {
       expect(requiresCheckoutPayment(m, 'individual')).toBe(false);
     }
-  });
-});
-
-describe('sumAdvisorCommissions', () => {
-  it('sums fixed amounts null-safely', () => {
-    expect(sumAdvisorCommissions([{ advisor_commission_amount: 7500 }, { advisor_commission_amount: '25000' }, {}, null])).toBe(32500);
-    expect(sumAdvisorCommissions([])).toBe(0);
-    expect(sumAdvisorCommissions(undefined)).toBe(0);
-  });
-});
-
-describe('computeAdvisorCommissions', () => {
-  it('sums the plan of each approved profile and falls back by plan_type/payment_method', async () => {
-    const stub = createStub({
-      profiles: () => [{ id: 'u1', plan_id: 'p-ind' }, { id: 'u2', plan_id: 'p-s6' }],
-      plans: plansTable,
-    });
-    const total = await computeAdvisorCommissions({ supabaseAdmin: stub }, [
-      { approved_profile_id: 'u1', plan_type: 'x', payment_method: 'x' },
-      { approved_profile_id: 'u2', plan_type: 'x', payment_method: 'x' },
-      { approved_profile_id: null, plan_type: 'familiar', payment_method: 'card_debit' },
-    ]);
-    expect(total).toBe(7500 + 30000 + 25000);
-  });
-  it('returns 0 for no approved sales without querying', async () => {
-    const stub = createStub({});
-    expect(await computeAdvisorCommissions({ supabaseAdmin: stub }, [])).toBe(0);
-    expect(stub.calls).toHaveLength(0);
   });
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { CommissionLine, CommissionLiquidation, CommissionSummary } from '../../types';
 import { commissionRepository } from '../../repositories/CommissionRepository';
+import { useCommissionsVisible } from '../../hooks/useCommissionsVisible';
 import { formatCurrency } from '../../utils/performance';
 import { formatMonthLabel } from '../../utils/month';
 import { formatDateOnly } from '../../utils/collections';
@@ -90,11 +91,29 @@ interface CommissionsProps {
 }
 
 /**
+ * The advisor's and the supervisor's commission screen. While the switch in Configuración
+ * is off they see a notice instead, and nothing is read (the database returns nothing either).
+ */
+export const Commissions: React.FC<CommissionsProps> = (props) => {
+  const visible = useCommissionsVisible();
+  if (visible === null) return <p className="max-w-5xl mx-auto text-gray-500">Cargando comisiones…</p>;
+  if (!visible) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-4">
+        <h1 className="text-2xl font-black text-[#003366]">{props.title ?? 'Comisiones'}</h1>
+        <p className="text-gray-600">Las comisiones no están disponibles.</p>
+      </div>
+    );
+  }
+  return <CommissionsContent {...props} />;
+};
+
+/**
  * Commissions of an advisor (own) or of a supervisor's team: generated, retained (debit rejected),
  * approved to collect and collected, the monthly liquidations and their lines on demand. Read-only:
  * only the admin acts on liquidations (CommissionsAdmin).
  */
-export const Commissions: React.FC<CommissionsProps> = ({ title = 'Comisiones', team = false }) => {
+const CommissionsContent: React.FC<CommissionsProps> = ({ title = 'Comisiones', team = false }) => {
   const [summary, setSummary] = useState<CommissionSummary[]>([]);
   const [liquidations, setLiquidations] = useState<CommissionLiquidation[]>([]);
   const [loading, setLoading] = useState(true);

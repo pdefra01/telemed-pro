@@ -69,6 +69,7 @@ export const Prospects: React.FC<ProspectsProps> = ({ user, title }) => {
   const [advisors, setAdvisors] = useState<TeamAdvisor[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [advisorsError, setAdvisorsError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -95,12 +96,18 @@ export const Prospects: React.FC<ProspectsProps> = ({ user, title }) => {
   useEffect(() => {
     let cancelled = false;
     // The header counts every prospect in scope, not just the loaded page. A supervisor
-    // picks among their own team only; the admin among every advisor.
+    // picks among their own team only; the admin among every advisor. Without that list
+    // the prospects still show (each row carries its advisor's name).
     Promise.all([
       prospectRepository.list({ limit: PROSPECT_PAGE_SIZE, offset: 0 }),
       prospectRepository.countByStatus(),
       team
-        ? supervisorRepository.listAdvisors(user.role === 'supervisor' ? { supervisorId: user.id } : {})
+        ? supervisorRepository
+            .listAdvisors(user.role === 'supervisor' ? { supervisorId: user.id } : {})
+            .catch(() => {
+              if (!cancelled) setAdvisorsError(true);
+              return [] as TeamAdvisor[];
+            })
         : Promise.resolve([] as TeamAdvisor[]),
     ])
       .then(([rows, totals, teamAdvisors]) => {
@@ -323,6 +330,7 @@ export const Prospects: React.FC<ProspectsProps> = ({ user, title }) => {
       </div>
 
       {actionError && <p role="alert" className="text-sm text-red-600">{actionError}</p>}
+      {advisorsError && <p className="text-sm text-amber-700">No se pudo cargar la lista de asesores.</p>}
 
       {loading ? (
         <p className="text-gray-500">Cargando prospectos…</p>

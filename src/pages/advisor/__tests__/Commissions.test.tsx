@@ -6,6 +6,7 @@ import { CommissionLine, CommissionLiquidation, CommissionSummary } from '../../
 
 vi.mock('../../../repositories/CommissionRepository', () => ({
   commissionRepository: {
+    isVisible: vi.fn(),
     getSummary: vi.fn(),
     listLiquidations: vi.fn(),
     listCommissions: vi.fn(),
@@ -46,6 +47,7 @@ const money = (n: number) => n.toLocaleString('es-AR', { style: 'currency', curr
 describe('Commissions — advisor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(true);
     vi.mocked(commissionRepository.getSummary).mockResolvedValue([summary()]);
     vi.mocked(commissionRepository.listLiquidations).mockResolvedValue([
       liquidation({ id: 'liq-2', month: '2026-10-01', status: 'approved', totalAmount: 500, paidAt: null, paymentMethod: null, paymentReference: null }),
@@ -56,7 +58,7 @@ describe('Commissions — advisor', () => {
   it('shows the four numbers first', async () => {
     render(<Commissions />);
 
-    expect(await screen.findByTestId('total-generated')).toHaveTextContent(`Generada ${money(1500)}`);
+    await waitFor(() => expect(screen.getByTestId('total-generated')).toHaveTextContent(`Generada ${money(1500)}`));
     expect(screen.getByTestId('total-retained')).toHaveTextContent(`Retenida ${money(800)}`);
     expect(screen.getByTestId('total-to-collect')).toHaveTextContent(`A cobrar ${money(500)}`);
     expect(screen.getByTestId('total-collected')).toHaveTextContent(`Cobrada ${money(2000)}`);
@@ -131,6 +133,7 @@ describe('Commissions — advisor', () => {
 describe('Commissions — supervisor (team, read-only)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(true);
     vi.mocked(commissionRepository.getSummary).mockResolvedValue([
       summary(),
       summary({ advisorId: 'adv-2', advisorName: 'Luis Paz', generatedAmount: 0, retainedAmount: 0, toCollectAmount: 800, collectedAmount: 0 }),
@@ -190,5 +193,39 @@ describe('Commissions — supervisor (team, read-only)', () => {
     await waitFor(() => expect(commissionRepository.listCommissions).toHaveBeenCalled());
 
     expect(screen.queryByRole('button', { name: /aprobar|registrar pago|generar|excluir|incluir/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('Commissions — switch off in Configuración', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(commissionRepository.isVisible).mockResolvedValue(false);
+    vi.mocked(commissionRepository.getSummary).mockResolvedValue([summary()]);
+    vi.mocked(commissionRepository.listLiquidations).mockResolvedValue([liquidation()]);
+  });
+
+  it('tells the advisor commissions are not available and reads none', async () => {
+    render(<Commissions />);
+
+    expect(await screen.findByText('Las comisiones no están disponibles.')).toBeInTheDocument();
+    expect(commissionRepository.getSummary).not.toHaveBeenCalled();
+    expect(commissionRepository.listLiquidations).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('total-generated')).not.toBeInTheDocument();
+  });
+
+  it('tells the supervisor the team commissions are not available and reads none', async () => {
+    render(<Commissions team title="Comisiones del equipo" />);
+
+    expect(await screen.findByText('Las comisiones no están disponibles.')).toBeInTheDocument();
+    expect(commissionRepository.getSummary).not.toHaveBeenCalled();
+    expect(commissionRepository.listLiquidations).not.toHaveBeenCalled();
+  });
+
+  it('treats a switch that cannot be read as off', async () => {
+    vi.mocked(commissionRepository.isVisible).mockRejectedValue(new Error('network'));
+    render(<Commissions />);
+
+    expect(await screen.findByText('Las comisiones no están disponibles.')).toBeInTheDocument();
+    expect(commissionRepository.getSummary).not.toHaveBeenCalled();
   });
 });
