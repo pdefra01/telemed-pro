@@ -20,8 +20,8 @@ VALUES
 UPDATE public.profiles SET dni = '30111222', phone = '3875111222', birth_date = '1980-05-10', blood_type = 'A+', address = 'Calle 1', plan_name = 'Plan X'
 WHERE id = 'e1e1e1e1-0000-0000-0000-000000000001';
 
-INSERT INTO public.adhesion_requests (titular_name, titular_dni, titular_email, titular_phone, plan_type, payment_method, medical_history, medical_history_other, titular_health_insurance, family_members, approved_profile_id)
-VALUES ('Chart Patient', '30111222', 'chart-p1@test.local', '3875111222', 'individual', 'mercadopago',
+INSERT INTO public.adhesion_requests (titular_name, titular_dni, titular_birth_date, titular_address, titular_locality, titular_neighborhood, titular_civil_status, signature_base64, titular_email, titular_phone, plan_type, payment_method, medical_history, medical_history_other, titular_health_insurance, family_members, approved_profile_id)
+VALUES ('Chart Patient', '30111222', '1980-05-10', 'Calle 1', 'Salta', 'Centro', 'Casado', 'sig', 'chart-p1@test.local', '3875111222', 'individual', 'mercadopago',
   ARRAY['Hipertensión Arterial','Asma'], 'Enalapril 10mg', 'OSDE', '[{"name":"Hijo","age":8}]'::jsonb, 'e1e1e1e1-0000-0000-0000-000000000001');
 
 INSERT INTO public.family_groups (id, primary_affiliate_id, name)
