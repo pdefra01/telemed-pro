@@ -1,8 +1,18 @@
 -- Migration: debit rejections per affiliate (odd/tasks/commercial-crm-commissions.md, C1, S4/S5)
 --
--- "Débito rechazado" = the affiliate's CURRENT débito subscription is 'payment_failed'.
+-- "Débito rechazado" = the affiliate's CURRENT débito subscription is 'payment_failed', or it
+-- is 'cancelled' after a rejection that was never followed by a payment (MP cancels a
+-- subscription after repeated rejections, which is exactly when the mark matters).
 -- The current subscription is the most recent non-reservation row of the affiliate
 -- (status <> 'pending'): a reactivation always creates a new row, so the newest one wins.
+--
+-- Why "no payment movement created after last_failure_at" for a cancelled row: the row keeps
+-- last_failure_at but status_changed_at is overwritten by the cancellation, so the subscription
+-- alone cannot tell whether a recovery came in between. Every recovery (a processed debit, a
+-- manual or checkout payment) writes a 'payment' movement to the ledger, whose created_at is
+-- never earlier than the payment itself. So a payment movement after the last rejection proves
+-- the affiliate paid since; its absence means the rejection was never made good. A cancellation
+-- with no rejection (last_failure_at NULL) is never marked.
 -- The rejection date is its last_failure_at and the count its failure_count, both written by
 -- record_mercadopago_subscription_event (webhook and periodic MP query alike).
 --
@@ -12,6 +22,36 @@
 --   2. admin_debit_rejections(): the Padrón de Afiliados mark and counter. SECURITY INVOKER on
 --      purpose: affiliate_payment_subscriptions already has the admin RLS policy, so an admin
 --      gets every row and nobody else gets anything that is not their own.
+
+-- 0. The rule, in one place for both lists. SECURITY INVOKER: it reads the ledger with the
+--    caller's rights (the owner inside advisor_collections, the admin RLS for the Padrón).
+CREATE OR REPLACE FUNCTION public.debit_rejection_pending(
+  p_profile_id      UUID,
+  p_status          TEXT,
+  p_last_failure_at TIMESTAMPTZ
+)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  SELECT CASE
+    WHEN p_status = 'payment_failed' THEN true
+    WHEN p_status = 'cancelled' AND p_last_failure_at IS NOT NULL THEN NOT EXISTS (
+      SELECT 1 FROM public.affiliate_account_movements m
+       WHERE m.entity_type = 'affiliate'
+         AND m.entity_id = p_profile_id
+         AND m.type = 'payment'
+         AND m.created_at > p_last_failure_at)
+    ELSE false
+  END;
+$$;
+
+COMMENT ON FUNCTION public.debit_rejection_pending IS 'Débito rechazado rule (S5): the current subscription is payment_failed, or cancelled after a rejection with no payment movement created since.';
+
+REVOKE ALL ON FUNCTION public.debit_rejection_pending(UUID, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.debit_rejection_pending(UUID, TEXT, TIMESTAMPTZ) TO authenticated, service_role;
 
 -- 1. The collections list, with the debit status.
 DROP FUNCTION IF EXISTS public.advisor_collections();
@@ -78,7 +118,7 @@ BEGIN
          la.action_type::text,
          lp.promised_date,
          COALESCE(ac.cnt, 0)::bigint,
-         COALESCE(ds.status = 'payment_failed', false),
+         COALESCE(public.debit_rejection_pending(p.id, ds.status, ds.last_failure_at), false),
          ds.last_failure_at,
          COALESCE(ds.failure_count, 0)::integer
     FROM resolved r
@@ -114,7 +154,7 @@ $$;
 REVOKE ALL ON FUNCTION public.advisor_collections() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.advisor_collections() TO authenticated, service_role;
 
--- 2. The Padrón de Afiliados: affiliates whose current debit is rejected.
+-- 2. The Padrón de Afiliados: affiliates whose debit rejection is pending (same rule).
 CREATE OR REPLACE FUNCTION public.admin_debit_rejections()
 RETURNS TABLE (
   profile_id        UUID,
@@ -133,10 +173,10 @@ AS $$
        WHERE s.profile_id IS NOT NULL AND s.status <> 'pending'
        ORDER BY s.profile_id, s.created_at DESC, s.id DESC
     ) c
-   WHERE c.status = 'payment_failed';
+   WHERE public.debit_rejection_pending(c.profile_id, c.status, c.last_failure_at);
 $$;
 
-COMMENT ON FUNCTION public.admin_debit_rejections IS 'Affiliates whose current débito subscription is payment_failed, with the last rejection date and the failure count. SECURITY INVOKER: the admin RLS policy of affiliate_payment_subscriptions decides who sees what.';
+COMMENT ON FUNCTION public.admin_debit_rejections IS 'Affiliates whose current débito subscription is payment_failed (or cancelled after an unpaid rejection), with the last rejection date and the failure count. SECURITY INVOKER: the admin RLS policy of affiliate_payment_subscriptions decides who sees what.';
 
 REVOKE ALL ON FUNCTION public.admin_debit_rejections() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_debit_rejections() TO authenticated, service_role;
