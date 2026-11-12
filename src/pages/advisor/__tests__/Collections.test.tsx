@@ -32,6 +32,9 @@ const affiliates = [
   build({ affiliateId: 'aff-3', affiliateName: 'Sofía Ruiz', paymentStatus: 'current', balance: 0, paidThrough: undefined }),
 ];
 
+/** Secondary details and the history are shown on demand. */
+const openDetail = (row: HTMLElement) => fireEvent.click(within(row).getByRole('button', { name: /detalle/i }));
+
 const action = (over: Partial<CollectionAction> = {}): CollectionAction => ({
   id: 'act-1',
   affiliateId: 'aff-1',
@@ -50,13 +53,17 @@ describe('Collections (advisor)', () => {
     vi.mocked(collectionRepository.listActions).mockResolvedValue([action()]);
   });
 
-  it('lists the affiliates with debt by default, with status, balance and coverage end', async () => {
+  it('lists the affiliates with debt by default, with status, phone and balance; plan and coverage end on demand', async () => {
     render(<Collections />);
 
     const laura = await screen.findByTestId('collection-aff-1');
     expect(laura).toHaveTextContent('Laura Pérez');
     expect(laura).toHaveTextContent(/en mora/i);
+    expect(laura).toHaveTextContent('3875111222');
     expect(laura).toHaveTextContent(/1\.500/);
+    expect(laura).not.toHaveTextContent(/1\/10\/2026/);
+    openDetail(laura);
+    expect(laura).toHaveTextContent(/plan familiar/i);
     expect(laura).toHaveTextContent(/1\/10\/2026/);
     expect(screen.getByTestId('collection-aff-2')).toHaveTextContent(/pendiente/i);
     expect(screen.queryByTestId('collection-aff-3')).not.toBeInTheDocument();
@@ -72,14 +79,17 @@ describe('Collections (advisor)', () => {
     expect(screen.getByTestId('summary-debt')).toHaveTextContent(/2\.300/);
   });
 
-  it('shows the last action and the promised payment date', async () => {
+  it('shows the promised payment date in the row, and the last action on demand', async () => {
     render(<Collections />);
     const marcos = await screen.findByTestId('collection-aff-2');
 
-    expect(marcos).toHaveTextContent(/promesa de pago/i);
     expect(marcos).toHaveTextContent(/1\/12\/2026/);
+    openDetail(marcos);
+    expect(marcos).toHaveTextContent(/promesa de pago/i);
     expect(marcos).toHaveTextContent(/2 gestiones/i);
-    expect(screen.getByTestId('collection-aff-1')).toHaveTextContent(/sin gestiones/i);
+    const laura = screen.getByTestId('collection-aff-1');
+    openDetail(laura);
+    expect(laura).toHaveTextContent(/sin gestiones/i);
   });
 
   it('filters by status and searches by name', async () => {
@@ -114,7 +124,9 @@ describe('Collections (advisor)', () => {
       note: 'le escribí',
       promisedDate: undefined,
     }));
-    await waitFor(() => expect(within(screen.getByTestId('collection-aff-1')).getByText(/1 gestión/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByLabelText('Tipo de gestión')).not.toBeInTheDocument());
+    openDetail(screen.getByTestId('collection-aff-1'));
+    expect(within(screen.getByTestId('collection-aff-1')).getByText(/1 gestión/i)).toBeInTheDocument();
     expect(screen.queryByLabelText('Tipo de gestión')).not.toBeInTheDocument();
   });
 
@@ -165,7 +177,7 @@ describe('Collections (advisor)', () => {
     render(<Collections />);
     const laura = await screen.findByTestId('collection-aff-1');
 
-    fireEvent.click(within(laura).getByRole('button', { name: /ver historial/i }));
+    fireEvent.click(within(laura).getByRole('button', { name: /detalle/i }));
 
     await waitFor(() => expect(collectionRepository.listActions).toHaveBeenCalledWith('aff-1'));
     expect(await screen.findByText(/llamé y no atendió/i)).toBeInTheDocument();
@@ -178,7 +190,7 @@ describe('Collections (advisor)', () => {
     render(<Collections />);
     const laura = await screen.findByTestId('collection-aff-1');
 
-    fireEvent.click(within(laura).getByRole('button', { name: /ver historial/i }));
+    fireEvent.click(within(laura).getByRole('button', { name: /detalle/i }));
 
     const panel = screen.getByTestId('history-aff-1');
     expect(within(panel).getByText(/cargando historial/i)).toBeInTheDocument();
@@ -195,8 +207,8 @@ describe('Collections (advisor)', () => {
     const laura = await screen.findByTestId('collection-aff-1');
     const marcos = screen.getByTestId('collection-aff-2');
 
-    fireEvent.click(within(laura).getByRole('button', { name: /ver historial/i }));
-    fireEvent.click(within(marcos).getByRole('button', { name: /ver historial/i }));
+    fireEvent.click(within(laura).getByRole('button', { name: /detalle/i }));
+    fireEvent.click(within(marcos).getByRole('button', { name: /detalle/i }));
 
     pending['aff-2']([action({ id: 'act-2', affiliateId: 'aff-2', note: 'prometió pagar' })]);
     const panel = await screen.findByTestId('history-aff-2');
@@ -235,7 +247,7 @@ describe('Collections (advisor)', () => {
   });
 });
 
-describe('Collections (read-only team view for supervisors and admins)', () => {
+describe('Collections (team view for supervisors and admins)', () => {
   const team = [
     build({}),
     build({ affiliateId: 'aff-2', affiliateName: 'Marcos Díaz', paymentStatus: 'pending', balance: 800 }),
@@ -250,25 +262,47 @@ describe('Collections (read-only team view for supervisors and admins)', () => {
   });
 
   it('shows the advisor that owns each affiliate', async () => {
-    render(<Collections readOnly title="Cobranzas del equipo" />);
+    render(<Collections team title="Cobranzas del equipo" />);
 
     expect(await screen.findByRole('heading', { name: 'Cobranzas del equipo' })).toBeInTheDocument();
     expect(within(await screen.findByTestId('collection-aff-1')).getByText('Pedro Gómez')).toBeInTheDocument();
     expect(within(screen.getByTestId('collection-aff-4')).getByText('Luis Paz')).toBeInTheDocument();
   });
 
-  it('is read-only: no way to log actions, but the history is available', async () => {
-    render(<Collections readOnly />);
+  it('logs a collection action on an affiliate of the team, keeping the advisor filter', async () => {
+    vi.mocked(collectionRepository.createAction).mockResolvedValue(
+      action({ id: 'act-7', affiliateId: 'aff-4', actionType: 'visit', note: 'pasé por el domicilio', createdBy: 'sup-1' })
+    );
+    render(<Collections team />);
+    await screen.findByTestId('collection-aff-1');
+
+    fireEvent.change(screen.getByLabelText('Filtrar por asesor'), { target: { value: 'adv-2' } });
+    const ana = screen.getByTestId('collection-aff-4');
+    fireEvent.click(within(ana).getByRole('button', { name: /registrar gestión/i }));
+    fireEvent.change(screen.getByLabelText('Tipo de gestión'), { target: { value: 'visit' } });
+    fireEvent.change(screen.getByLabelText('Nota'), { target: { value: 'pasé por el domicilio' } });
+    fireEvent.click(screen.getByRole('button', { name: /guardar gestión/i }));
+
+    await waitFor(() => expect(collectionRepository.createAction).toHaveBeenCalledWith('aff-4', {
+      actionType: 'visit',
+      note: 'pasé por el domicilio',
+      promisedDate: undefined,
+    }));
+    await waitFor(() => expect(screen.queryByLabelText('Tipo de gestión')).not.toBeInTheDocument());
+    openDetail(screen.getByTestId('collection-aff-4'));
+    expect(screen.getByTestId('collection-aff-4')).toHaveTextContent(/1 gestión/i);
+  });
+
+  it('shows the history in the team view', async () => {
+    render(<Collections team />);
     const laura = await screen.findByTestId('collection-aff-1');
 
-    expect(screen.queryByRole('button', { name: /registrar gestión/i })).not.toBeInTheDocument();
-
-    fireEvent.click(within(laura).getByRole('button', { name: /ver historial/i }));
+    openDetail(laura);
     expect(await screen.findByText(/llamé y no atendió/i)).toBeInTheDocument();
   });
 
   it('summarizes the situation of each advisor, whatever the status', async () => {
-    render(<Collections readOnly />);
+    render(<Collections team />);
     await screen.findByTestId('collection-aff-1');
 
     const pedro = screen.getByTestId('advisor-summary-adv-1');
@@ -285,7 +319,7 @@ describe('Collections (read-only team view for supervisors and admins)', () => {
   });
 
   it('filters by advisor', async () => {
-    render(<Collections readOnly />);
+    render(<Collections team />);
     await screen.findByTestId('collection-aff-1');
 
     fireEvent.change(screen.getByLabelText('Filtrar por asesor'), { target: { value: 'adv-2' } });

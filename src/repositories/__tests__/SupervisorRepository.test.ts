@@ -56,6 +56,26 @@ describe('SupervisorRepository', () => {
     ]);
   });
 
+  it('lists only the advisors of one team when a supervisor is given', async () => {
+    const q = chain({ data: [{ id: 'a-1', full_name: 'Pedro Gómez', email: 'pedro@test.local', supervisor_id: 's-1' }] });
+    vi.mocked(supabase.from).mockReturnValueOnce(q);
+
+    const result = await repository.listAdvisors({ supervisorId: 's-1' });
+
+    expect(q.eq).toHaveBeenCalledWith('role', 'advisor');
+    expect(q.eq).toHaveBeenCalledWith('supervisor_id', 's-1');
+    expect(result.map((a) => a.id)).toEqual(['a-1']);
+  });
+
+  it('does not narrow to a team when no supervisor is given', async () => {
+    const q = chain({ data: [] });
+    vi.mocked(supabase.from).mockReturnValueOnce(q);
+
+    await repository.listAdvisors();
+
+    expect(q.eq).toHaveBeenCalledTimes(1);
+  });
+
   it('throws the database error when listing fails', async () => {
     vi.mocked(supabase.from).mockReturnValueOnce(chain({ error: new Error('denied') }));
     await expect(repository.listSupervisors()).rejects.toThrow('denied');

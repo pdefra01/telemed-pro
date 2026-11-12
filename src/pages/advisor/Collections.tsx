@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Phone } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { CollectionAction, CollectionActionType, CollectionAffiliate, CollectionStatus } from '../../types';
 import { collectionRepository } from '../../repositories/CollectionRepository';
 import { Button } from '../../components/ui/Button';
@@ -19,19 +19,22 @@ type StatusFilter = 'debt' | 'all' | CollectionStatus;
 interface CollectionsProps {
   title?: string;
   /**
-   * Supervisor / admin view: every advisor in scope, with an advisor filter and a
-   * per-advisor summary, and no way to log actions (only the advisor does that).
+   * Supervisor / admin view: every advisor in scope, with the owning advisor on
+   * each row, an advisor filter and a per-advisor summary.
    */
-  readOnly?: boolean;
+  team?: boolean;
 }
 
 const EMPTY_FORM = { actionType: 'call' as CollectionActionType, note: '', promisedDate: '' };
 
+const STATUSES: CollectionStatus[] = ['overdue', 'pending', 'current'];
+
 /**
  * Collections of the affiliates an advisor brought: who owes what, and the
- * advisor's follow-up (calls, messages, visits, notes, promises to pay).
+ * follow-up (calls, messages, visits, notes, promises to pay). The advisor, the
+ * supervisor of their team and the admin can log actions; the database decides.
  */
-export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', readOnly = false }) => {
+export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', team = false }) => {
   const [affiliates, setAffiliates] = useState<CollectionAffiliate[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -45,7 +48,8 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [historyId, setHistoryId] = useState<string | null>(null);
+  // The open row shows the secondary details and the history.
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [history, setHistory] = useState<CollectionAction[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -90,10 +94,10 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'debt' ? a.paymentStatus !== 'current' : a.paymentStatus === statusFilter);
-      const matchesAdvisor = !readOnly || advisorFilter === 'all' || a.advisorId === advisorFilter;
+      const matchesAdvisor = !team || advisorFilter === 'all' || a.advisorId === advisorFilter;
       return matchesStatus && matchesAdvisor && (!term || a.affiliateName.toLowerCase().includes(term));
     });
-  }, [affiliates, statusFilter, advisorFilter, search, readOnly]);
+  }, [affiliates, statusFilter, advisorFilter, search, team]);
 
   const startAction = (affiliateId: string) => {
     setEditingId(affiliateId);
@@ -124,7 +128,7 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
             : a
         )
       );
-      if (historyId === affiliate.affiliateId) setHistory((current) => [created, ...current]);
+      if (detailId === affiliate.affiliateId) setHistory((current) => [created, ...current]);
       setEditingId(null);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'No se pudo guardar la gestión.');
@@ -133,14 +137,14 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
     }
   };
 
-  const toggleHistory = async (affiliateId: string) => {
-    if (historyId === affiliateId) {
+  const toggleDetail = async (affiliateId: string) => {
+    if (detailId === affiliateId) {
       openHistoryRef.current = null;
-      setHistoryId(null);
+      setDetailId(null);
       return;
     }
     openHistoryRef.current = affiliateId;
-    setHistoryId(affiliateId);
+    setDetailId(affiliateId);
     setHistory([]);
     setHistoryError(null);
     setHistoryLoading(true);
@@ -155,51 +159,49 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <h1 className="text-2xl font-black text-[#003366]">{title}</h1>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {(['overdue', 'pending', 'current'] as CollectionStatus[]).map((s) => (
-          <div key={s} data-testid={`summary-${s}`} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
-            <p className="text-2xl font-black text-slate-900">{counts[s]}</p>
-            <p className="text-xs font-semibold text-gray-500">{COLLECTION_STATUS_LABELS[s]}</p>
-          </div>
-        ))}
-        <div data-testid="summary-debt" className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
-          <p className="text-2xl font-black text-slate-900">{formatCurrency(totalOwed)}</p>
-          <p className="text-xs font-semibold text-gray-500">Deuda total</p>
-        </div>
-      </div>
-
-      {readOnly && advisors.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {advisors.map(([id, s]) => (
-            <div key={id} data-testid={`advisor-summary-${id}`} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <p className="font-bold text-slate-900">{s.name}</p>
-              <p className="text-sm text-gray-600">
-                En mora: {s.overdue} · Pendientes: {s.pending} · Al día: {s.current}
-              </p>
-              <p className="text-sm font-semibold text-slate-900">Deuda: {formatCurrency(s.owed)}</p>
-            </div>
+    <div className="max-w-5xl mx-auto space-y-4">
+      <header className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
+        <h1 className="text-2xl font-black text-[#003366]">{title}</h1>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+          {STATUSES.map((s) => (
+            <span key={s} data-testid={`summary-${s}`}>
+              <strong className="text-slate-900">{counts[s]}</strong> {COLLECTION_STATUS_LABELS[s]}
+            </span>
           ))}
+          <span data-testid="summary-debt">
+            Deuda <strong className="text-slate-900">{formatCurrency(totalOwed)}</strong>
+          </span>
         </div>
+      </header>
+
+      {team && advisors.length > 0 && (
+        <ul className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100 text-sm">
+          {advisors.map(([id, s]) => (
+            <li key={id} data-testid={`advisor-summary-${id}`} className="px-3 py-2 flex flex-wrap items-center justify-between gap-x-4">
+              <span className="font-semibold text-slate-900">{s.name}</span>
+              <span className="text-gray-600">
+                En mora: {s.overdue} · Pendientes: {s.pending} · Al día: {s.current} · Deuda: <strong className="text-slate-900">{formatCurrency(s.owed)}</strong>
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-2">
         <input
           type="search"
           aria-label="Buscar afiliado"
           placeholder="Buscar por nombre"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20"
+          className="flex-1 px-3 py-2 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20"
         />
-        {readOnly && (
+        {team && (
           <select
             aria-label="Filtrar por asesor"
             value={advisorFilter}
             onChange={(e) => setAdvisorFilter(e.target.value)}
-            className="px-4 py-2.5 border border-slate-300 rounded-xl bg-white"
+            className="px-3 py-2 border border-slate-300 rounded-xl bg-white"
           >
             <option value="all">Todos los asesores</option>
             {advisors.map(([id, s]) => (
@@ -211,7 +213,7 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
           aria-label="Filtrar por estado"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="px-4 py-2.5 border border-slate-300 rounded-xl bg-white"
+          className="px-3 py-2 border border-slate-300 rounded-xl bg-white"
         >
           <option value="debt">Con deuda</option>
           <option value="all">Todos</option>
@@ -230,130 +232,119 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', r
       ) : visible.length === 0 ? (
         <p className="text-gray-500">No hay afiliados para ese filtro.</p>
       ) : (
-        <ul className="space-y-3">
-          {visible.map((a) => (
-            <li
-              key={a.affiliateId}
-              data-testid={`collection-${a.affiliateId}`}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3"
-            >
-              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-slate-900">{a.affiliateName}</span>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${COLLECTION_STATUS_BADGE[a.paymentStatus]}`}>
-                      {COLLECTION_STATUS_LABELS[a.paymentStatus]}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
-                    {readOnly && <span className="font-semibold text-gray-700">{a.advisorName}</span>}
-                    {a.affiliatePhone && <span className="inline-flex items-center gap-1"><Phone size={14} />{a.affiliatePhone}</span>}
-                    {a.planName && <span>{a.planName}</span>}
-                    {a.paidThrough && <span>Cobertura hasta {formatTimestamp(a.paidThrough)}</span>}
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
-                    <span>{gestionesLabel(a.actionsCount)}</span>
-                    {a.lastActionType && a.lastActionAt && (
-                      <span>Última: {COLLECTION_ACTION_LABELS[a.lastActionType]} ({formatTimestamp(a.lastActionAt)})</span>
-                    )}
-                    {a.promisedDate && <span className="font-semibold">Promete pagar el {formatDateOnly(a.promisedDate)}</span>}
-                  </div>
+        <ul className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100">
+          {visible.map((a) => {
+            const open = detailId === a.affiliateId;
+            return (
+              <li key={a.affiliateId} data-testid={`collection-${a.affiliateId}`} className="px-3 py-2.5 space-y-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="font-semibold text-slate-900">{a.affiliateName}</span>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${COLLECTION_STATUS_BADGE[a.paymentStatus]}`}>
+                    {COLLECTION_STATUS_LABELS[a.paymentStatus]}
+                  </span>
+                  {team && <span className="text-sm text-gray-500">{a.advisorName}</span>}
+                  {a.affiliatePhone && <span className="text-sm text-gray-500">{a.affiliatePhone}</span>}
+                  {a.promisedDate && <span className="text-sm font-semibold text-gray-700">Promete pagar el {formatDateOnly(a.promisedDate)}</span>}
+                  <span className="ml-auto font-black text-slate-900">{formatCurrency(a.balance)}</span>
+                  <button
+                    type="button"
+                    onClick={() => startAction(a.affiliateId)}
+                    className="px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700"
+                  >
+                    Registrar gestión
+                  </button>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => toggleDetail(a.affiliateId)}
+                    className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100"
+                  >
+                    Detalle {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
                 </div>
 
-                <div className="flex flex-col items-start md:items-end gap-2">
-                  <p className="text-xl font-black text-slate-900">{formatCurrency(a.balance)}</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        onClick={() => startAction(a.affiliateId)}
-                        className="px-3 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700"
-                      >
-                        Registrar gestión
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => toggleHistory(a.affiliateId)}
-                      className="px-3 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                    >
-                      Ver historial
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {!readOnly && editingId === a.affiliateId && (
-                <form onSubmit={(e) => handleSave(e, a)} className="rounded-xl bg-gray-50 p-4 space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label htmlFor={`action-type-${a.affiliateId}`} className="block text-xs font-semibold text-slate-700 mb-1.5">Tipo de gestión</label>
-                      <select
-                        id={`action-type-${a.affiliateId}`}
-                        value={form.actionType}
-                        onChange={(e) => setForm({ ...form, actionType: e.target.value as CollectionActionType })}
-                        className="w-full px-3 py-2.5 border border-slate-300 rounded-xl bg-white"
-                      >
-                        {COLLECTION_ACTION_TYPES.map((t) => (
-                          <option key={t} value={t}>{COLLECTION_ACTION_LABELS[t]}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {form.actionType === 'promise' && (
+                {editingId === a.affiliateId && (
+                  <form onSubmit={(e) => handleSave(e, a)} className="rounded-lg bg-gray-50 p-3 space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div>
-                        <label htmlFor={`promised-${a.affiliateId}`} className="block text-xs font-semibold text-slate-700 mb-1.5">Fecha prometida</label>
-                        <input
-                          id={`promised-${a.affiliateId}`}
-                          type="date"
-                          value={form.promisedDate}
-                          onChange={(e) => setForm({ ...form, promisedDate: e.target.value })}
-                          className="w-full px-3 py-2.5 border border-slate-300 rounded-xl bg-white"
-                        />
+                        <label htmlFor={`action-type-${a.affiliateId}`} className="block text-xs font-semibold text-slate-700 mb-1">Tipo de gestión</label>
+                        <select
+                          id={`action-type-${a.affiliateId}`}
+                          value={form.actionType}
+                          onChange={(e) => setForm({ ...form, actionType: e.target.value as CollectionActionType })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                        >
+                          {COLLECTION_ACTION_TYPES.map((t) => (
+                            <option key={t} value={t}>{COLLECTION_ACTION_LABELS[t]}</option>
+                          ))}
+                        </select>
                       </div>
-                    )}
-                  </div>
-                  <div>
-                    <label htmlFor={`note-${a.affiliateId}`} className="block text-xs font-semibold text-slate-700 mb-1.5">Nota</label>
-                    <textarea
-                      id={`note-${a.affiliateId}`}
-                      rows={2}
-                      value={form.note}
-                      onChange={(e) => setForm({ ...form, note: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl bg-white"
-                    />
-                  </div>
-                  {formError && <p role="alert" className="text-sm text-red-600">{formError}</p>}
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Button type="submit" isLoading={saving}>Guardar gestión</Button>
-                    <Button type="button" variant="outline" disabled={saving} onClick={() => setEditingId(null)}>Cancelar</Button>
-                  </div>
-                </form>
-              )}
+                      {form.actionType === 'promise' && (
+                        <div>
+                          <label htmlFor={`promised-${a.affiliateId}`} className="block text-xs font-semibold text-slate-700 mb-1">Fecha prometida</label>
+                          <input
+                            id={`promised-${a.affiliateId}`}
+                            type="date"
+                            value={form.promisedDate}
+                            onChange={(e) => setForm({ ...form, promisedDate: e.target.value })}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label htmlFor={`note-${a.affiliateId}`} className="block text-xs font-semibold text-slate-700 mb-1">Nota</label>
+                      <textarea
+                        id={`note-${a.affiliateId}`}
+                        rows={2}
+                        value={form.note}
+                        onChange={(e) => setForm({ ...form, note: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                      />
+                    </div>
+                    {formError && <p role="alert" className="text-sm text-red-600">{formError}</p>}
+                    <div className="flex gap-2">
+                      <Button type="submit" isLoading={saving}>Guardar gestión</Button>
+                      <Button type="button" variant="outline" disabled={saving} onClick={() => setEditingId(null)}>Cancelar</Button>
+                    </div>
+                  </form>
+                )}
 
-              {historyId === a.affiliateId && (
-                <div data-testid={`history-${a.affiliateId}`} className="rounded-xl bg-gray-50 p-4 space-y-2">
-                  {historyError ? (
-                    <p role="alert" className="text-sm text-red-600">{historyError}</p>
-                  ) : historyLoading ? (
-                    <p className="text-sm text-gray-500">Cargando historial…</p>
-                  ) : history.length === 0 ? (
-                    <p className="text-sm text-gray-500">Todavía no hay gestiones registradas.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {history.map((h) => (
-                        <li key={h.id} className="text-sm">
-                          <span className="font-semibold text-slate-900">{COLLECTION_ACTION_LABELS[h.actionType]}</span>
-                          <span className="text-gray-500"> — {formatTimestamp(h.createdAt)}{h.createdByName ? ` · ${h.createdByName}` : ''}</span>
-                          {h.promisedDate && <span className="text-gray-700"> · Promete pagar el {formatDateOnly(h.promisedDate)}</span>}
-                          {h.note && <p className="text-gray-600">{h.note}</p>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
+                {open && (
+                  <div className="rounded-lg bg-gray-50 p-3 space-y-2 text-sm">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-gray-600">
+                      {a.planName && <span>{a.planName}</span>}
+                      {a.paidThrough && <span>Cobertura hasta {formatTimestamp(a.paidThrough)}</span>}
+                      <span>{gestionesLabel(a.actionsCount)}</span>
+                      {a.lastActionType && a.lastActionAt && (
+                        <span>Última: {COLLECTION_ACTION_LABELS[a.lastActionType]} ({formatTimestamp(a.lastActionAt)})</span>
+                      )}
+                    </div>
+                    <div data-testid={`history-${a.affiliateId}`} className="space-y-1">
+                      {historyError ? (
+                        <p role="alert" className="text-red-600">{historyError}</p>
+                      ) : historyLoading ? (
+                        <p className="text-gray-500">Cargando historial…</p>
+                      ) : history.length === 0 ? (
+                        <p className="text-gray-500">Todavía no hay gestiones registradas.</p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {history.map((h) => (
+                            <li key={h.id}>
+                              <span className="font-semibold text-slate-900">{COLLECTION_ACTION_LABELS[h.actionType]}</span>
+                              <span className="text-gray-500"> — {formatTimestamp(h.createdAt)}{h.createdByName ? ` · ${h.createdByName}` : ''}</span>
+                              {h.promisedDate && <span className="text-gray-700"> · Promete pagar el {formatDateOnly(h.promisedDate)}</span>}
+                              {h.note && <p className="text-gray-600">{h.note}</p>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

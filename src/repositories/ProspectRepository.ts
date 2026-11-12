@@ -19,6 +19,8 @@ export interface ProspectInput {
 export interface ProspectPatch extends Partial<ProspectInput> {
   status?: ProspectStatus;
   lastContactAt?: string;
+  /** Reassign to another advisor (supervisor: only within the team; enforced by RLS). */
+  advisorId?: string;
 }
 
 const clean = (value?: string): string | null => value?.trim() || null;
@@ -40,7 +42,8 @@ const toProspect = (row: any): Prospect => ({
 
 /**
  * CRM prospects. Row-level security scopes what each role gets back: an
- * advisor reads their own, a supervisor their team's, an admin everything.
+ * advisor manages their own, a supervisor creates, edits and reassigns their
+ * team's (never deletes), an admin manages everything.
  */
 export class ProspectRepository {
   /** One page, newest first. A page shorter than `limit` is the last one. */
@@ -102,6 +105,7 @@ export class ProspectRepository {
     if (patch.notes !== undefined) payload.notes = clean(patch.notes);
     if (patch.status !== undefined) payload.status = patch.status;
     if (patch.lastContactAt !== undefined) payload.last_contact_at = patch.lastContactAt;
+    if (patch.advisorId !== undefined) payload.advisor_id = patch.advisorId;
 
     const { data, error } = await supabase
       .from('prospects')
