@@ -68,7 +68,6 @@ interface StatsData {
   totalSales: number;
   approvedSales: number;
   pendingSales: number;
-  commissions: number;
   linksSharedCount: number;
   /** Approved sales with a confirmed payment / still waiting for it (absent on an older server). */
   confirmedSales?: number;
@@ -81,7 +80,6 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
     totalSales: 0,
     approvedSales: 0,
     pendingSales: 0,
-    commissions: 0,
     linksSharedCount: 0,
     sales: []
   });

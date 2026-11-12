@@ -41,7 +41,7 @@ const actionRow = {
   promised_date: '2026-12-01',
   created_by: 'adv-1',
   created_at: '2026-11-05T12:00:00Z',
-  author: { full_name: 'Pedro Gómez' },
+  created_by_name: 'Pedro Gómez',
 };
 
 describe('CollectionRepository', () => {
@@ -145,8 +145,17 @@ describe('CollectionRepository', () => {
       }]);
     });
 
-    it('tolerates an author the reader cannot see', async () => {
-      vi.mocked(supabase.from).mockReturnValueOnce(chain({ data: [{ ...actionRow, author: null, note: null, promised_date: null }] }));
+    it('reads the stored author name, without embedding the author profile the reader may not see', async () => {
+      const q = chain({ data: [actionRow] });
+      vi.mocked(supabase.from).mockReturnValueOnce(q);
+
+      await repository.listActions('aff-1');
+
+      expect(q.select).toHaveBeenCalledWith('*');
+    });
+
+    it('tolerates an action without a stored author name', async () => {
+      vi.mocked(supabase.from).mockReturnValueOnce(chain({ data: [{ ...actionRow, created_by_name: null, note: null, promised_date: null }] }));
 
       const [a] = await repository.listActions('aff-1');
 

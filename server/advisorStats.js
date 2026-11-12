@@ -1,14 +1,14 @@
 // server/advisorStats.js
 //
-// GET /api/advisor/stats: sales and commission figures of the authenticated
-// advisor. Extracted from server.js (which cannot be imported by tests).
+// GET /api/advisor/stats: sales figures of the authenticated advisor.
+// Extracted from server.js (which cannot be imported by tests).
 //
-// Commission counts only CONFIRMED sales (the affiliate has a positive payment
-// in the ledger, see salesConfirmation.js); approved sales without a confirmed
-// payment are reported as `unconfirmedSales` and flagged `paymentConfirmed:
-// false` in the sales list, so the advisor sees them as pending payment.
+// A sale is CONFIRMED once the affiliate has a positive payment in the ledger
+// (see salesConfirmation.js); approved sales without one are reported as
+// `unconfirmedSales` and flagged `paymentConfirmed: false` in the sales list,
+// so the advisor sees them as pending payment. Commissions come from the
+// liquidations (advisor_commission_summary), not from here.
 
-import { computeAdvisorCommissions } from './pricing.js';
 import { findConfirmedProfileIds, partitionConfirmed } from './salesConfirmation.js';
 
 const APPROVED_PAGE_SIZE = 1000;
@@ -19,17 +19,16 @@ const EMPTY_STATS = {
   pendingSales: 0,
   confirmedSales: 0,
   unconfirmedSales: 0,
-  commissions: 0,
   linksSharedCount: 0,
   sales: [],
 };
 
 /**
- * @param {{ supabaseAdmin: object, computeCommissions?: Function }} deps
+ * @param {{ supabaseAdmin: object }} deps
  * @param {string} advisorId profiles.id of the authenticated advisor
  * @returns {Promise<object>} the response body; throws on a database error
  */
-export async function computeAdvisorStats({ supabaseAdmin, computeCommissions = computeAdvisorCommissions }, advisorId) {
+export async function computeAdvisorStats({ supabaseAdmin }, advisorId) {
   // 1. promoter_code of the advisor
   const { data: profile, error: profError } = await supabaseAdmin
     .from('profiles')
@@ -74,13 +73,13 @@ export async function computeAdvisorStats({ supabaseAdmin, computeCommissions = 
     .eq('id', advisorId)
     .maybeSingle();
 
-  // 5. Approved sales, split by confirmed payment; fixed commission per plan on the confirmed ones
+  // 5. Approved sales, split by confirmed payment.
   //    Read in pages: the API returns at most 1000 rows per request.
   const approvedRequests = [];
   for (let from = 0; ; from += APPROVED_PAGE_SIZE) {
     const { data: page, error: approvedError } = await supabaseAdmin
       .from('adhesion_requests')
-      .select('approved_profile_id, plan_type, payment_method')
+      .select('approved_profile_id')
       .eq('promoter_id', promoterCode)
       .eq('status', 'approved')
       .order('id', { ascending: true })
@@ -95,7 +94,6 @@ export async function computeAdvisorStats({ supabaseAdmin, computeCommissions = 
     ...(sales || []).map((s) => s.approved_profile_id),
   ]);
   const { confirmed, unconfirmed } = partitionConfirmed(approvedRequests, confirmedIds);
-  const commissions = await computeCommissions({ supabaseAdmin }, confirmed);
 
   return {
     totalSales: totalCount,
@@ -103,7 +101,6 @@ export async function computeAdvisorStats({ supabaseAdmin, computeCommissions = 
     pendingSales: pendingCount,
     confirmedSales: confirmed.length,
     unconfirmedSales: unconfirmed.length,
-    commissions,
     linksSharedCount: producer?.links_shared_count || 0,
     sales: (sales || []).map(({ approved_profile_id, ...rest }) => ({
       ...rest,
