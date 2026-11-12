@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Producer } from '../../types';
 import { producerRepository } from '../../repositories/ProducerRepository';
+import { supervisorRepository, Supervisor } from '../../repositories/SupervisorRepository';
 import { supabase } from '../../services/supabase';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 import {
@@ -48,9 +49,41 @@ export const ProducersAdmin: React.FC = () => {
   const [editCode, setEditCode] = useState('');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false);
 
+  // Commercial hierarchy: supervisors and each advisor's current supervisor (by profile id).
+  // null means it could not be loaded, so the selector is not offered.
+  const [supervisors, setSupervisors] = useState<Supervisor[] | null>(null);
+  const [supervisorByAdvisor, setSupervisorByAdvisor] = useState<Record<string, string | null>>({});
+  const [assignError, setAssignError] = useState<string>('');
+
   useEffect(() => {
     loadProducers();
+    loadSupervisors();
   }, []);
+
+  const loadSupervisors = async () => {
+    try {
+      const [sups, advisors] = await Promise.all([
+        supervisorRepository.listSupervisors(),
+        supervisorRepository.listAdvisors(),
+      ]);
+      setSupervisors(sups);
+      setSupervisorByAdvisor(Object.fromEntries(advisors.map(a => [a.id, a.supervisorId])));
+    } catch (err) {
+      console.error('Error cargando supervisores:', err);
+      setSupervisors(null);
+    }
+  };
+
+  const handleAssignSupervisor = async (p: Producer, value: string) => {
+    const supervisorId = value || null;
+    setAssignError('');
+    try {
+      await supervisorRepository.assignAdvisor(p.id, supervisorId);
+      setSupervisorByAdvisor(current => ({ ...current, [p.id]: supervisorId }));
+    } catch {
+      setAssignError(`No se pudo asignar el supervisor de ${p.name}.`);
+    }
+  };
 
   // Server-authoritative search (design 3.5/D4): a term of length < 2 shows
   // `producers` as loaded (Esc.15, no client filter); length >= 2 debounces
@@ -293,6 +326,17 @@ export const ProducersAdmin: React.FC = () => {
           <p className="text-red-400 text-xs font-bold">{searchError}</p>
         )}
 
+        {assignError && (
+          <p role="alert" className="text-red-400 text-xs font-bold">{assignError}</p>
+        )}
+
+        {supervisors && supervisors.length === 0 && (
+          <p className="text-slate-400 text-xs">
+            Todavía no hay supervisores, así que no se puede asignar ninguno a los asesores.{' '}
+            <a href="#/admin/supervisors" className="text-teal-400 font-bold hover:underline">Crear supervisor</a>
+          </p>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {displayedProducers.map(p => (
             <div key={p.id} className="bg-slate-900/40 border border-white/5 hover:border-teal-500/30 rounded-3xl p-6 space-y-4 transition-all duration-300 backdrop-blur-xl relative group">
@@ -358,6 +402,23 @@ export const ProducersAdmin: React.FC = () => {
                   <span className="font-mono font-bold text-teal-400 text-lg">{p.totalAffiliatesReferred || 0}</span>
                 </div>
               </div>
+
+              {p.hasAccount && supervisors && supervisors.length > 0 && p.id in supervisorByAdvisor && (
+                <label className="block text-xs">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Supervisor</span>
+                  <select
+                    aria-label={`Supervisor de ${p.name}`}
+                    value={supervisorByAdvisor[p.id] ?? ''}
+                    onChange={e => handleAssignSupervisor(p, e.target.value)}
+                    className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-teal-500/50"
+                  >
+                    <option value="">Sin supervisor</option>
+                    {supervisors.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
           ))}
         </div>
