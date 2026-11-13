@@ -1511,12 +1511,6 @@ app.post('/api/create-supervisor', requireAuth, requireAdmin, (req, res) =>
 );
 
 /**
- * PATCH /api/advisors/:id/status
- * Activa/desactiva un asesor comercial de forma atómica (sdd/advisor-auto-provisioning,
- * design 3.3). Business logic lives in server/advisors.js — this route only
- * wires the admin-only gate.
- */
-/**
  * POST /api/affiliates/:id/cancel
  * "Dar de baja": cancels the MercadoPago automatic debit first (fail closed),
  * then records the cancellation, effective at the end of the paid coverage
@@ -1535,6 +1529,12 @@ app.post('/api/affiliates/:id/cancel', requireAuth, requireAdmin, async (req, re
   }
 });
 
+/**
+ * PATCH /api/advisors/:id/status
+ * Activa/desactiva un asesor comercial de forma atómica (sdd/advisor-auto-provisioning,
+ * design 3.3). Business logic lives in server/advisors.js — this route only
+ * wires the admin-only gate.
+ */
 app.patch('/api/advisors/:id/status', requireAuth, requireAdmin, async (req, res) => {
   try {
     await setAdvisorStatusHandler(req, res, { supabaseAdmin });

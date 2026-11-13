@@ -776,7 +776,7 @@ const Affiliates: React.FC = () => {
                             <RotateCcw size={16} />
                           </button>
                         )}
-                        {patient.isActive && !patient.isAdvisor && !patient.agreementId && !cancellations.has(patient.id) && (
+                        {(patient.isActive || patient.planStatus === 'suspended') && !patient.isAdvisor && !patient.agreementId && !cancellations.has(patient.id) && (
                           <button
                             onClick={() => setCancelTarget(patient)}
                             className="p-2 bg-white/5 hover:bg-slate-500/20 text-slate-300 rounded-xl transition-colors border border-white/5"

@@ -112,8 +112,13 @@ export async function cancelAffiliateHandler(req, res, { supabaseAdmin, mpFetch,
         body: JSON.stringify({ status: 'cancelled' }),
       });
     } catch (err) {
-      console.error(`${LOG} MP cancel failed for ${subscription.mp_preapproval_id}:`, err?.message || err);
-      return res.status(502).json({ error: MESSAGES.mpCancelFailed });
+      // A retry after MP already cancelled it (but our record of it failed)
+      // may be rejected by MP: accept it when MP reports it as cancelled.
+      resource = await mpFetch(`/preapproval/${subscription.mp_preapproval_id}`).catch(() => null);
+      if (resource?.status !== 'cancelled') {
+        console.error(`${LOG} MP cancel failed for ${subscription.mp_preapproval_id}:`, err?.message || err);
+        return res.status(502).json({ error: MESSAGES.mpCancelFailed });
+      }
     }
     try {
       // Same guarded RPC the webhook uses (never a raw UPDATE). If it fails,

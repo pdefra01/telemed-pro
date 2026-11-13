@@ -109,6 +109,37 @@ describe('cancelAffiliateHandler (POST /api/affiliates/:id/cancel)', () => {
     });
   });
 
+  it('accepts a debit MP already reports as cancelled (retry after a lost record)', async () => {
+    const { supabaseAdmin } = stub({ subscriptions: [{ id: 's1', mp_preapproval_id: 'pre-1', status: 'authorized' }] });
+    const mpFetch = vi.fn(async (path, init) => {
+      if (init?.method === 'PUT') throw new Error('MP 400: cannot modify a cancelled preapproval');
+      return { id: 'pre-1', status: 'cancelled' };
+    });
+    const handleSubscriptionEvent = vi.fn(async () => ({ outcome: 'recorded' }));
+    const res = mockRes();
+
+    await cancelAffiliateHandler(req(), res, { supabaseAdmin, mpFetch, handleSubscriptionEvent });
+
+    expect(mpFetch).toHaveBeenLastCalledWith('/preapproval/pre-1');
+    expect(handleSubscriptionEvent).toHaveBeenCalledWith({ supabaseAdmin }, { resource: { id: 'pre-1', status: 'cancelled' }, kind: 'preapproval' });
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('cancel_affiliate', { p_profile_id: TITULAR_ID, p_requested_by: ADMIN_ID });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('still fails closed when MP rejects the cancel and the debit is still live', async () => {
+    const { supabaseAdmin } = stub({ subscriptions: [{ id: 's1', mp_preapproval_id: 'pre-1', status: 'authorized' }] });
+    const mpFetch = vi.fn(async (path, init) => {
+      if (init?.method === 'PUT') throw new Error('MP 500');
+      return { id: 'pre-1', status: 'authorized' };
+    });
+    const res = mockRes();
+
+    await cancelAffiliateHandler(req(), res, { supabaseAdmin, mpFetch, handleSubscriptionEvent: vi.fn() });
+
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(502);
+  });
+
   it('refuses when there is a debit to cancel but MercadoPago is not configured', async () => {
     const { supabaseAdmin } = stub({ subscriptions: [{ id: 's1', mp_preapproval_id: 'pre-1', status: 'authorized' }] });
     const res = mockRes();

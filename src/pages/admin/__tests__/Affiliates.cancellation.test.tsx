@@ -141,6 +141,12 @@ describe('Padrón de Afiliados: dar de baja (affiliate-cancellation S1, S3, S4)'
     expect(screen.queryByText('Beatriz Baja')).not.toBeInTheDocument();
   });
 
+  it('offers "Dar de baja" for a suspended affiliate too (their debit keeps running)', async () => {
+    render(<Affiliates />);
+    fireEvent.change(await screen.findByLabelText('Filtrar por estado'), { target: { value: 'suspended' } });
+    expect(within(row('Sergio Suspendido')).getByTitle('Dar de baja')).toBeInTheDocument();
+  });
+
   it('reactivates a suspended affiliate', async () => {
     vi.mocked(affiliateRepository.activateAffiliate).mockResolvedValue(undefined);
     render(<Affiliates />);

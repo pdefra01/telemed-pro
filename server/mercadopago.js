@@ -50,10 +50,10 @@ import { postAdhesionCheckoutPayment } from './adhesionPayments.js';
 // can classify a re-attempted `not_approved` settlement outcome using the
 // SAME terminal-status list handlePaymentSettlement itself used to decide
 // resolution_state, rather than maintaining a second copy that could drift.
+export const TERMINAL_REJECTED_PAYMENT_STATUSES = ['rejected', 'cancelled', 'refunded', 'charged_back'];
+
 // Settlement outcomes that posted the money but need a human decision.
 const NEEDS_ADMIN_SETTLEMENT_OUTCOMES = ['window_reset', 'affiliate_cancelled'];
-
-export const TERMINAL_REJECTED_PAYMENT_STATUSES = ['rejected', 'cancelled', 'refunded', 'charged_back'];
 
 const SIGNATURE_MAX_SKEW_SECONDS = 300;
 
