@@ -36,3 +36,6 @@ scratch/
 # Demo recorder: downloaded clips, converted media, LiveKit binary, videos
 demo/.cache/
 demo/output/
+
+# E2E run output
+e2e/screenshots/advisor-sales-crm/
