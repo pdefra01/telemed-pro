@@ -258,6 +258,61 @@ describe('AffiliateRepository', () => {
     });
   });
 
+  describe('cancelAffiliate (affiliate-cancellation S1)', () => {
+    it('posts to the server with the session token and maps the result', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, effectiveAt: '2026-12-10T00:00:00Z', immediate: false, profilesCancelled: 2, debitsCancelled: 1 }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await affiliateRepository.cancelAffiliate('aff-1');
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/affiliates/aff-1/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer test-token' },
+      });
+      expect(result).toEqual({ effectiveAt: '2026-12-10T00:00:00Z', immediate: false, profilesCancelled: 2, debitsCancelled: 1 });
+      vi.unstubAllGlobals();
+    });
+
+    it('throws the server message when the cancellation fails', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'No se pudo cancelar el débito automático en MercadoPago. El afiliado no fue dado de baja; volvé a intentar.' }),
+      }));
+
+      await expect(affiliateRepository.cancelAffiliate('aff-1'))
+        .rejects.toThrow('No se pudo cancelar el débito automático en MercadoPago. El afiliado no fue dado de baja; volvé a intentar.');
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('getAffiliateCancellations (affiliate-cancellation S1)', () => {
+    it('maps every cancellation by profile id with its effective and applied dates', async () => {
+      const select = vi.fn().mockResolvedValue({
+        data: [
+          { profile_id: 'aff-1', effective_at: '2026-12-10T00:00:00Z', applied_at: null },
+          { profile_id: 'aff-2', effective_at: '2026-11-01T00:00:00Z', applied_at: '2026-11-01T01:00:00Z' },
+        ],
+        error: null,
+      });
+      vi.mocked(supabase.from).mockReturnValue({ select } as any);
+
+      const cancellations = await affiliateRepository.getAffiliateCancellations();
+
+      expect(supabase.from).toHaveBeenCalledWith('affiliate_cancellations');
+      expect(select).toHaveBeenCalledWith('profile_id, effective_at, applied_at');
+      expect(cancellations.get('aff-1')).toEqual({ effectiveAt: '2026-12-10T00:00:00Z', appliedAt: null });
+      expect(cancellations.get('aff-2')).toEqual({ effectiveAt: '2026-11-01T00:00:00Z', appliedAt: '2026-11-01T01:00:00Z' });
+    });
+
+    it('throws when the cancellations cannot be read', async () => {
+      vi.mocked(supabase.from).mockReturnValue({ select: vi.fn().mockResolvedValue({ data: null, error: new Error('boom') }) } as any);
+      await expect(affiliateRepository.getAffiliateCancellations()).rejects.toThrow('boom');
+    });
+  });
+
   describe('derived paymentStatus (affiliate_payment_status view)', () => {
     /** Builds a `profiles` select-role chain: select().eq().order() */
     const profilesChain = (rows: any[]) => ({

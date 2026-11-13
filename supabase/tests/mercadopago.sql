@@ -334,10 +334,11 @@ INSERT INTO public.invoices (id, entity_type, entity_id, period, net_amount, tax
 VALUES ('33333333-0000-0000-0000-000000000001', 'affiliate', '33333333-3333-3333-3333-333333333333', to_char(now(), 'YYYY-MM'), 50000.00, 0, 50000.00, 'issued');
 
 -- Deadlock-fix regression check (Judgment Day Round 4): profiles.plan_status
--- defaults to 'active', so this affiliate is pushed to 'suspended' first —
+-- defaults to 'active', so this affiliate is pushed to 'pending' first (not 'suspended':
+-- since affiliate-cancellation S2 a payment never reactivates a suspended affiliate) —
 -- otherwise a no-op UPDATE could pass this assertion even if the profiles
 -- UPDATE were never reached.
-UPDATE public.profiles SET plan_status = 'suspended' WHERE id = '33333333-3333-3333-3333-333333333333';
+UPDATE public.profiles SET plan_status = 'pending' WHERE id = '33333333-3333-3333-3333-333333333333';
 
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
@@ -434,10 +435,10 @@ VALUES ('5a5a5a5a-0000-0000-0000-000000000001', 'affiliate', '5a5a5a5a-5a5a-5a5a
 INSERT INTO public.affiliate_account_movements (entity_type, entity_id, type, amount, external_ref, invoice_id)
 VALUES ('affiliate', '5a5a5a5a-5a5a-5a5a-5a5a-5a5a5a5a5a5a', 'payment', 50000.00, 'payment:mercadopago:rjd5-prior', '5a5a5a5a-0000-0000-0000-000000000001');
 
--- Suspended beforehand (same pattern as I8): profiles.plan_status defaults
+-- Pending beforehand (same pattern as I8): profiles.plan_status defaults
 -- to 'active', so a no-op UPDATE could otherwise pass this assertion even
 -- if the reactivation UPDATE were never reached.
-UPDATE public.profiles SET plan_status = 'suspended' WHERE id = '5a5a5a5a-5a5a-5a5a-5a5a-5a5a5a5a5a5a';
+UPDATE public.profiles SET plan_status = 'pending' WHERE id = '5a5a5a5a-5a5a-5a5a-5a5a-5a5a5a5a5a5a';
 
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 

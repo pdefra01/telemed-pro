@@ -15,6 +15,7 @@ vi.mock('../../repositories/AffiliateRepository', () => ({
     updateStatusByAgreement: vi.fn(),
     getCoverageWindowsForBilling: vi.fn(),
     getActiveAdvisorFamilyGroupIds: vi.fn(),
+    getAffiliateCancellations: vi.fn(),
   },
 }));
 
@@ -54,6 +55,7 @@ describe('BillingService.runMonthlyBillingCycle', () => {
     vi.mocked(affiliateRepository.getDirectAffiliates).mockResolvedValue([]);
     vi.mocked(affiliateRepository.getCoverageWindowsForBilling).mockResolvedValue(new Map());
     vi.mocked(affiliateRepository.getActiveAdvisorFamilyGroupIds).mockResolvedValue(new Set());
+    vi.mocked(affiliateRepository.getAffiliateCancellations).mockResolvedValue(new Map());
     vi.mocked(invoiceRepository.getAll).mockResolvedValue([]);
     vi.mocked(invoiceRepository.createBulk).mockResolvedValue(undefined as any);
     vi.mocked(taxRepository.getAll).mockResolvedValue([]);
@@ -71,6 +73,29 @@ describe('BillingService.runMonthlyBillingCycle', () => {
       ]);
       const window = { periodStart: '2026-07-01T00:00:00.000Z', paidMonthsSnapshot: 12, bonusMonthsSnapshot: 2, monthlyCostSnapshot: 15000 };
       vi.mocked(affiliateRepository.getCoverageWindowsForBilling).mockResolvedValue(new Map([['aff-member', window], ['aff-1', window]]));
+
+      const result = await billingService.runMonthlyBillingCycle('2026-07');
+
+      expect(accountMovementRepository.postBillingCharge).toHaveBeenCalledTimes(1);
+      expect(accountMovementRepository.postBillingCharge).toHaveBeenCalledWith(expect.objectContaining({ entityId: 'aff-1' }));
+      expect(result.processedIndividuals).toBe(1);
+      expect(result.totalAmount).toBe(15000);
+      expect(result.skippedNoWindow).toEqual([]);
+    });
+  });
+
+  describe('cancelled affiliates (affiliate-cancellation S1)', () => {
+    it('never charges an affiliate whose cancellation was requested, and still charges everyone else', async () => {
+      vi.mocked(planRepository.getAll).mockResolvedValue([{ id: 'plan-1', monthlyCost: 15000 } as any]);
+      vi.mocked(affiliateRepository.getAffiliateCancellations).mockResolvedValue(new Map([
+        ['aff-cancelled', { effectiveAt: '2026-08-10T00:00:00.000Z', appliedAt: null }],
+      ]));
+      vi.mocked(affiliateRepository.getDirectAffiliates).mockResolvedValue([
+        { id: 'aff-cancelled', name: 'Dado de baja', planId: 'plan-1' } as any,
+        { id: 'aff-1', name: 'Ana', planId: 'plan-1' } as any,
+      ]);
+      const window = { periodStart: '2026-07-01T00:00:00.000Z', paidMonthsSnapshot: 12, bonusMonthsSnapshot: 2, monthlyCostSnapshot: 15000 };
+      vi.mocked(affiliateRepository.getCoverageWindowsForBilling).mockResolvedValue(new Map([['aff-cancelled', window], ['aff-1', window]]));
 
       const result = await billingService.runMonthlyBillingCycle('2026-07');
 

@@ -109,6 +109,19 @@ export class AuthRepository {
         throw new Error("Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.");
       }
 
+      // A cancellation ("Dar de baja") blocks the login once effective, even
+      // before the hourly server sweep sets is_active=false (affiliate-cancellation S1).
+      if (profileData.role === 'patient') {
+        const { data: cancellation } = await supabase
+          .from('affiliate_cancellations')
+          .select('effective_at')
+          .eq('profile_id', data.user.id)
+          .maybeSingle();
+        if (cancellation && new Date(cancellation.effective_at).getTime() <= Date.now()) {
+          throw new Error("Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.");
+        }
+      }
+
       let paymentStatus: 'current' | 'overdue' | 'pending' = 'current';
       if (profileData.role === 'patient' && !profileData.agreement_id) {
         const { data: statusRow, error: statusError } = await supabase

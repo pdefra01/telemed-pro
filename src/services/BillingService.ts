@@ -106,8 +106,11 @@ export class BillingService {
     // transcurridos.
     // Family groups of an active advisor are free of charge (advisor-affiliate-plan S2).
     const advisorFamilyGroupIds = await affiliateRepository.getActiveAdvisorFamilyGroupIds();
+    // A requested cancellation stops billing at once (affiliate-cancellation S1).
+    const cancellations = await affiliateRepository.getAffiliateCancellations();
     const directAffiliates = (await affiliateRepository.getDirectAffiliates())
-      .filter(affiliate => !(affiliate.familyGroupId && advisorFamilyGroupIds.has(affiliate.familyGroupId)));
+      .filter(affiliate => !(affiliate.familyGroupId && advisorFamilyGroupIds.has(affiliate.familyGroupId)))
+      .filter(affiliate => !cancellations.has(affiliate.id));
     const windowsByAffiliateId = await affiliateRepository.getCoverageWindowsForBilling(directAffiliates);
 
     const skippedNoWindow: { id: string; name: string }[] = [];

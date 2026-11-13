@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, Plus, Edit2, Trash2, AlertCircle, Shield, User as UserIcon,
   Building2, Filter, Key, ShieldCheck, Mail, Phone, MapPin,
-  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw, FileText, Unlock
+  Calendar, Award, XCircle, Heart, CreditCard, Users, Loader2, CheckCircle2, RefreshCw, FileText, Unlock, UserX, RotateCcw
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { affiliateRepository, DebitRejection, PlanAssignmentFailedError, ProfileFieldsUpdateFailedError } from '../../repositories/AffiliateRepository';
@@ -11,7 +11,7 @@ import { adhesionRepository, AdhesionRequest } from '../../repositories/Adhesion
 import { AffiliateLedgerModal } from './AffiliateLedgerModal';
 import { AdhesionEmailEditor } from './AdhesionEmailEditor';
 import { planRepository } from '../../repositories/PlanRepository';
-import { Patient, Plan } from '../../types';
+import { AffiliateCancellation, Patient, Plan } from '../../types';
 import ResetPasswordModal from '../../components/admin/ResetPasswordModal';
 import { FamilyGroupModal } from '../../components/admin/FamilyGroupModal';
 import { getActivationClaimState } from '../../utils/activationClaim';
@@ -42,6 +42,10 @@ export function shouldShowRenewCoverage(patient: Patient, coverageActiveMap: Rec
 export function shouldShowPaymentPending(patient: Patient, noWindowMap: Record<string, boolean>): boolean {
   return !!patient.planId && noWindowMap[patient.id] === true;
 }
+
+/** dd/mm/yyyy in Argentina's time zone. */
+const formatDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' });
 
 const Affiliates: React.FC = () => {
   const { toast } = useToast();
@@ -106,13 +110,17 @@ const Affiliates: React.FC = () => {
     return () => { isCurrent = false; };
   }, [selectedRequest]);
   const [promoterFilter, setPromoterFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended' | 'debit'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended' | 'cancelled' | 'debit'>('active');
+  // Affiliate cancellations ("Dar de baja") by profile id; empty when they cannot be read.
+  const [cancellations, setCancellations] = useState<Map<string, AffiliateCancellation>>(new Map());
+  const [cancelTarget, setCancelTarget] = useState<Patient | null>(null);
   // Mercado Pago debit rejections by profile id (S5); empty when they cannot be read.
   const [debitRejections, setDebitRejections] = useState<Record<string, DebitRejection>>({});
 
   useEffect(() => {
     loadAffiliates();
     loadDebitRejections();
+    loadCancellations();
     loadRequests();
     loadPlans();
   }, []);
@@ -139,6 +147,14 @@ const Affiliates: React.FC = () => {
       console.error("Error cargando solicitudes pendientes:", error);
     } finally {
       setIsRequestsLoading(false);
+    }
+  };
+
+  const loadCancellations = async () => {
+    try {
+      setCancellations(await affiliateRepository.getAffiliateCancellations());
+    } catch (error) {
+      console.error("Error cargando bajas:", error);
     }
   };
 
@@ -318,6 +334,39 @@ const Affiliates: React.FC = () => {
     }
   };
 
+  const handleCancel = async (target: Patient) => {
+    setIsSubmitting(true);
+    try {
+      const result = await affiliateRepository.cancelAffiliate(target.id);
+      toast(
+        result.immediate
+          ? 'Afiliado dado de baja.'
+          : `Baja programada para el ${formatDay(result.effectiveAt)}. El débito automático quedó cancelado.`,
+        'success'
+      );
+      setCancelTarget(null);
+      loadAffiliates();
+      loadCancellations();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Error al dar de baja', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReactivate = async (id: string) => {
+    setIsSubmitting(true);
+    try {
+      await affiliateRepository.activateAffiliate(id);
+      toast('Afiliado reactivado.', 'success');
+      loadAffiliates();
+    } catch (error) {
+      toast('Error al reactivar afiliado', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleActivate = async (id: string) => {
     setIsSubmitting(true);
     try {
@@ -431,11 +480,13 @@ const Affiliates: React.FC = () => {
 
   // Same status derivation as the "Estado de Cuenta" badge.
   const affiliateStatus = (p: typeof affiliates[number]) =>
-    p.isActive ? 'active' : p.planStatus === 'suspended' ? 'suspended' : 'pending';
+    p.isActive ? 'active' : p.planStatus === 'suspended' ? 'suspended' : p.planStatus === 'cancelled' ? 'cancelled' : 'pending';
   const filteredAffiliates = statusFilter === 'all'
     ? affiliates
     : statusFilter === 'debit'
       ? affiliates.filter(p => debitRejections[p.id])
+    : statusFilter === 'cancelled'
+      ? affiliates.filter(p => cancellations.has(p.id) || p.planStatus === 'cancelled')
       : affiliates.filter(p => affiliateStatus(p) === statusFilter);
   const debitRejectedTotal = affiliates.filter(p => debitRejections[p.id]).length;
   // Advisors without a plan are listed so the admin can assign one, but they are not affiliates yet.
@@ -468,6 +519,7 @@ const Affiliates: React.FC = () => {
             <option value="active">Activos</option>
             <option value="pending">Pendientes</option>
             <option value="suspended">Suspendidos</option>
+            <option value="cancelled">Bajas</option>
             <option value="debit">{DEBIT_REJECTED_LABEL}</option>
             <option value="all">Todos los estados</option>
           </select>
@@ -518,7 +570,7 @@ const Affiliates: React.FC = () => {
           <div>
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Pendientes de Aprobación</p>
             <h4 className="text-xl font-bold text-amber-400">
-              {countedAffiliates.filter(p => !p.isActive && p.planStatus !== 'suspended').length}
+              {countedAffiliates.filter(p => affiliateStatus(p) === 'pending').length}
             </h4>
           </div>
         </div>
@@ -606,23 +658,34 @@ const Affiliates: React.FC = () => {
                           ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
                           : patient.planStatus === 'suspended'
                             ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                            : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                            : patient.planStatus === 'cancelled'
+                              ? 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                              : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
                         }`}>
                         <div className={`w-1.5 h-1.5 rounded-full mr-2 
                           ${patient.isActive 
                             ? 'bg-emerald-500 animate-pulse' 
                             : patient.planStatus === 'suspended'
                               ? 'bg-rose-500'
-                              : 'bg-amber-500 animate-bounce'
+                              : patient.planStatus === 'cancelled'
+                                ? 'bg-slate-500'
+                                : 'bg-amber-500 animate-bounce'
                           }`}
                         ></div>
                         {patient.isActive 
                           ? 'Activo' 
                           : patient.planStatus === 'suspended'
                             ? 'Suspendido'
-                            : 'Pendiente'
+                            : patient.planStatus === 'cancelled'
+                              ? 'Dado de baja'
+                              : 'Pendiente'
                         }
                       </span>
+                      {cancellations.get(patient.id) && !cancellations.get(patient.id)!.appliedAt && (
+                        <div className="mt-1 text-[10px] font-bold text-slate-400">
+                          Baja programada: {formatDay(cancellations.get(patient.id)!.effectiveAt)}
+                        </div>
+                      )}
                       {debitRejections[patient.id] && (
                         <div className="mt-1">
                           <span
@@ -636,7 +699,7 @@ const Affiliates: React.FC = () => {
                     </td>
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end space-x-3">
-                        {!patient.isActive && patient.planStatus !== 'suspended' && (
+                        {affiliateStatus(patient) === 'pending' && (
                           <button 
                             onClick={() => handleActivate(patient.id)} 
                             className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5"
@@ -701,6 +764,25 @@ const Affiliates: React.FC = () => {
                             title="Renovar Cobertura"
                           >
                             <RefreshCw size={16} />
+                          </button>
+                        )}
+                        {patient.planStatus === 'suspended' && !patient.isActive && (
+                          <button
+                            onClick={() => handleReactivate(patient.id)}
+                            disabled={isSubmitting}
+                            className="p-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-colors border border-white/5 disabled:opacity-50"
+                            title="Reactivar"
+                          >
+                            <RotateCcw size={16} />
+                          </button>
+                        )}
+                        {(patient.isActive || patient.planStatus === 'suspended') && !patient.isAdvisor && !patient.agreementId && !cancellations.has(patient.id) && (
+                          <button
+                            onClick={() => setCancelTarget(patient)}
+                            className="p-2 bg-white/5 hover:bg-slate-500/20 text-slate-300 rounded-xl transition-colors border border-white/5"
+                            title="Dar de baja"
+                          >
+                            <UserX size={16} />
                           </button>
                         )}
                         {patient.isActive && !patient.isAdvisor && (
@@ -1004,6 +1086,35 @@ const Affiliates: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cancellation ("Dar de baja") Confirmation Modal */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div role="dialog" aria-modal="true" aria-labelledby="cancel-affiliate-title" className="bg-[#0f172a] border border-slate-500/20 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl text-center">
+            <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-3xl bg-slate-500/10 mb-6 border border-slate-500/20">
+              <UserX className="h-8 w-8 text-slate-300" />
+            </div>
+            <h3 id="cancel-affiliate-title" className="text-xl font-bold text-white mb-2">¿Dar de baja a {cancelTarget.name}?</h3>
+            <p className="text-sm text-slate-400 mb-3 font-medium">Se cancela su débito automático en MercadoPago y no se le cobra más.</p>
+            <p className="text-sm text-slate-400 mb-8 font-medium">Mantiene la cobertura hasta el fin del período pagado y después queda dado de baja, junto con su grupo familiar.</p>
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={() => setCancelTarget(null)}
+                className="px-6 py-3 text-slate-400 font-bold hover:text-white transition-colors"
+              >
+                Volver
+              </button>
+              <button
+                onClick={() => handleCancel(cancelTarget)}
+                disabled={isSubmitting}
+                className="px-6 py-3 bg-slate-600 text-white rounded-2xl font-bold hover:bg-slate-500 transition-all"
+              >
+                {isSubmitting ? '...' : 'Confirmar baja'}
+              </button>
+            </div>
           </div>
         </div>
       )}

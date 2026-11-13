@@ -52,6 +52,9 @@ import { postAdhesionCheckoutPayment } from './adhesionPayments.js';
 // resolution_state, rather than maintaining a second copy that could drift.
 export const TERMINAL_REJECTED_PAYMENT_STATUSES = ['rejected', 'cancelled', 'refunded', 'charged_back'];
 
+// Settlement outcomes that posted the money but need a human decision.
+const NEEDS_ADMIN_SETTLEMENT_OUTCOMES = ['window_reset', 'affiliate_cancelled'];
+
 const SIGNATURE_MAX_SKEW_SECONDS = 300;
 
 // ── verifyWebhookSignature ───────────────────────────────────────────────
@@ -706,7 +709,10 @@ export async function handlePaymentSettlement(ctx, { paymentId, preapprovalId = 
     // 'window_reset', but a window reset mid-flight means a human should
     // confirm the reset didn't already cover this period — flag it for
     // admin review here at the source, instead of 'final'.
-    resolution_state: outcome === 'window_reset' ? 'needs_admin' : 'final',
+    // affiliate-cancellation S2: money from an affiliate whose cancellation was
+    // already requested is recorded but extends nothing; an admin decides the
+    // refund.
+    resolution_state: NEEDS_ADMIN_SETTLEMENT_OUTCOMES.includes(outcome) ? 'needs_admin' : 'final',
     // Full-overwrite semantics (RPC comment): must be explicit so a stale
     // rpc_error/ref_mismatch detail from an earlier failed attempt against
     // this same mp_resource_id is actually cleared on success, not left
@@ -950,7 +956,7 @@ export function classifyPaymentSettlementOutcome(result) {
   // `handlePaymentSettlement` already writes resolution_state:'needs_admin'
   // (not 'final') directly on the row for this outcome, so a human can
   // confirm the reset didn't already cover this period.
-  if (result.outcome === 'window_reset') return 'needs_admin';
+  if (NEEDS_ADMIN_SETTLEMENT_OUTCOMES.includes(result.outcome)) return 'needs_admin';
 
   // Every remaining outcome ('posted', 'duplicate', or any other
   // deferred_reason: 'no_window', 'balance_due', 'partial_payment',
