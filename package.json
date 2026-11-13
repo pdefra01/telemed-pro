@@ -17,7 +17,8 @@
     "demo:compose": "node demo/compose.mjs",
     "demo:record:mobile": "node demo/record-mobile.mjs",
     "demo:compose:mobile": "node demo/compose-mobile.mjs",
-    "demo:test": "node --test demo/lib/local-env.guard-test.mjs demo/lib/phone-layout.guard-test.mjs"
+    "demo:test": "node --test demo/lib/local-env.guard-test.mjs demo/lib/phone-layout.guard-test.mjs",
+    "e2e:advisor-sales": "node e2e/advisor-sales-crm.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
