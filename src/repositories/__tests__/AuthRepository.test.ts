@@ -23,12 +23,14 @@ const paymentStatusChain = (data: any, error: any = null) => ({
   select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data, error }) }) }),
 });
 
-/** Routes supabase.from() by table name so both queries in login() resolve independently. */
-function mockFromByTable(profileData: any, paymentStatusRow: any = null, paymentStatusError: any = null) {
+/** Routes supabase.from() by table name so the queries in login() resolve independently. */
+function mockFromByTable(profileData: any, paymentStatusRow: any = null, paymentStatusError: any = null, cancellationRow: any = null) {
   vi.mocked(supabase.from).mockImplementation((table: string) =>
     (table === 'affiliate_payment_status'
       ? paymentStatusChain(paymentStatusRow, paymentStatusError)
-      : profileChain(profileData)) as any
+      : table === 'affiliate_cancellations'
+        ? paymentStatusChain(cancellationRow)
+        : profileChain(profileData)) as any
   );
 }
 
@@ -103,6 +105,38 @@ describe('AuthRepository', () => {
 
     expect(user.planName).toBe('Sin plan asignado');
     expect(user.planName).not.toBe('Plan Global');
+  });
+
+  describe('affiliate cancellation (affiliate-cancellation S1)', () => {
+    const activePatient = {
+      id: 'cancel-user-id',
+      full_name: 'Paciente Baja',
+      email: 'baja@medinex.com',
+      role: 'patient',
+      is_active: true,
+      plan_status: 'active',
+      agreement_id: null,
+    };
+
+    it('blocks the login once the cancellation is effective, before the sweep runs', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
+      } as any);
+      mockFromByTable(activePatient, { payment_status: 'current' }, null, { effective_at: new Date(Date.now() - 60_000).toISOString() });
+
+      await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
+        .rejects.toThrow('Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.');
+    });
+
+    it('still lets a scheduled cancellation log in until its date', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
+      } as any);
+      mockFromByTable(activePatient, { payment_status: 'current' }, null, { effective_at: new Date(Date.now() + 86_400_000).toISOString() });
+
+      const user = await authRepository.login('baja@medinex.com', 'password123', 'patient');
+      expect(user.id).toBe('cancel-user-id');
+    });
   });
 
   it('should throw an error during login if user is inactive (is_active = false)', async () => {

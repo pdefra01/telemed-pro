@@ -19,7 +19,7 @@ Branch: feat/affiliate-cancellation · Delivery: single PR with work-unit commit
 
 - [x] T1 — S1, S2 · DB: plan_status 'cancelled', affiliate_cancellations table, cancel_affiliate + apply_due_affiliate_cancellations RPCs, webhook guard; pgTAP · inline · RED (no migration: plan not found) -> GREEN 32/32; full pgTAP 960/960 after local db reset
 - [x] T2 — S1, S2 · Server: POST /api/affiliates/:id/cancel (MP cancel first, fail closed) + hourly sweep; billing skip; late payment -> needs_admin; tests · inline · RED (module missing, outcome final) -> GREEN: server 573/573, src services+repos green except known DashboardRepository
-- [ ] T3 — S1, S3, S4 · UI: Dar de baja / Reactivar / status + filter, login block on effective date; tests · inline
+- [x] T3 — S1, S3, S4 · UI: Dar de baja / Reactivar / status + filter, login block on effective date; tests · inline · RED (8 UI tests fail without the change) -> GREEN; full Vitest 1549 passed, 5 known base failures
 
 ## Log
 
@@ -30,3 +30,4 @@ Branch: feat/affiliate-cancellation · Delivery: single PR with work-unit commit
 - L5 Findings: "Suspender" only flips is_active/plan_status client-side; MP preapproval keeps debiting; getDirectAffiliates has no status filter; post_payment_movement_from_webhook (20260731000000:165,214) sets plan_status='active' unconditionally; plan_status CHECK is active|pending|suspended; login block is the client check on is_active (AuthRepository.ts:108).
 - L6 T1 evidence: affiliate_cancellation.sql RED without the migration, GREEN 32/32 with it. mercadopago.sql tests 44/57 used plan_status='suspended' only to observe that the reactivation UPDATE runs; S2 changes suspended semantics, so their fixture now uses 'pending' (same lock-order intent). crm_review_fixes/prospects failures were leftover E2E data in the local DB; after `supabase db reset` the suite is 960/960 (advisor_affiliate_plan and doctor_patient_chart_data excluded: known local postgres segfault on permission-denied calls).
 - L7 T2 evidence: server/__tests__/affiliateCancellation.test.js RED (module missing) and mercadopago.test.js new case RED (resolution final) -> GREEN; BillingService + AffiliateRepository new cases RED -> GREEN. Full server suite 573/573; src/services + src/repositories: only DashboardRepository.getMetrics fails (fails on master too).
+- L8 (2026-11-13) T3 evidence: Affiliates.cancellation.test.tsx RED 8/10 against HEAD -> GREEN 10/10; AffiliateRepository.cancelAffiliate and AuthRepository login-block tests added. Full Vitest: 1549 passed, 5 failed = VideoRoom x3, DashboardRepository.getMetrics, crypto tamper (all fail on master). Follow-up (not in scope): subscription_is_debit_rejected still shows a voluntarily cancelled subscription with an earlier failure as "débito rechazado".

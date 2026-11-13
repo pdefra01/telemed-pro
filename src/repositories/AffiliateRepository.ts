@@ -1,5 +1,5 @@
 import { supabase } from '../services/supabase';
-import { AffiliateCancellation, Patient } from '../types';
+import { AffiliateCancellation, AffiliateCancellationResult, Patient } from '../types';
 import { generateUUID } from '../utils/uuid';
 import { authRepository } from './AuthRepository';
 import type { AffiliatePaymentStatus } from './AccountMovementRepository';
@@ -434,6 +434,32 @@ export class AffiliateRepository {
       console.error(`Error actualizando masivamente afiliados del convenio ${agreementId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * "Dar de baja" (affiliate-cancellation S1): the server cancels the MercadoPago
+   * automatic debit first and records the cancellation, effective at the end of
+   * the paid coverage. Throws with the server's message on failure.
+   */
+  async cancelAffiliate(id: string): Promise<AffiliateCancellationResult> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`/api/affiliates/${id}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || 'Error al dar de baja al afiliado.');
+    }
+    return {
+      effectiveAt: body.effectiveAt,
+      immediate: Boolean(body.immediate),
+      profilesCancelled: Number(body.profilesCancelled || 0),
+      debitsCancelled: Number(body.debitsCancelled || 0),
+    };
   }
 
   /**

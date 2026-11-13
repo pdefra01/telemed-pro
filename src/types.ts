@@ -720,3 +720,11 @@ export interface AffiliateCancellation {
   effectiveAt: string;
   appliedAt: string | null;
 }
+
+/** Result of POST /api/affiliates/:id/cancel. */
+export interface AffiliateCancellationResult {
+  effectiveAt: string;
+  immediate: boolean;
+  profilesCancelled: number;
+  debitsCancelled: number;
+}
