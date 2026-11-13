@@ -19,7 +19,12 @@ import {
   ShoppingCart,
   Award,
   Clock,
-  ClipboardList
+  ClipboardList,
+  UserCog,
+  UserPlus,
+  Target,
+  Wallet,
+  Coins
 } from 'lucide-react';
 import { User } from '../../types';
 import logoMedinex from '../../logo_medinex.jpeg';
@@ -47,6 +52,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
     },
     { name: 'Afiliados', icon: <Users size={20} />, path: '/affiliates' },
     { name: 'Asesores Comerciales', icon: <Award size={20} />, path: '/admin/producers' },
+    { name: 'Supervisores', icon: <UserCog size={20} />, path: '/admin/supervisors' },
+    { name: 'Prospectos', icon: <UserPlus size={20} />, path: '/admin/prospects' },
+    { name: 'Metas y métricas', icon: <Target size={20} />, path: '/team/performance' },
+    { name: 'Cobranzas comerciales', icon: <Wallet size={20} />, path: '/team/collections' },
+    { name: 'Comisiones', icon: <Coins size={20} />, path: '/admin/commissions' },
     { name: 'Convenios', icon: <Building2 size={20} />, path: '/agreements' },
     { name: 'Ventas y Cadetería', icon: <ShoppingCart size={20} />, path: '/admin/pharmacy-sales' },
     { name: 'Inventario Farmacia', icon: <Package size={20} />, path: '/admin/pharmacy-inventory' },
