@@ -714,3 +714,9 @@ export interface CommissionGenerationResult {
   retainedCount: number;
   totalAmount: number;
 }
+
+/** An affiliate cancellation ("Dar de baja"): billing stops at once; the login is blocked once applied. */
+export interface AffiliateCancellation {
+  effectiveAt: string;
+  appliedAt: string | null;
+}

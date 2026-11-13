@@ -776,6 +776,34 @@ describe('handlePaymentSettlement', () => {
     expect(result).toMatchObject({ outcome: 'window_reset', posted: true, coverage_extended: true, auditError: null });
   });
 
+  it('audits resolution_state=needs_admin when a payment arrives after the affiliate cancellation was requested (affiliate-cancellation S2)', async () => {
+    const invoice = { id: 'inv-12', entity_id: 'profile-12', entity_type: 'affiliate', status: 'issued', total_amount: 50000 };
+    const mpFetch = vi.fn().mockResolvedValue({
+      id: 'pay-12',
+      status: 'approved',
+      transaction_amount: 50000,
+      external_reference: 'affiliate:profile-12:invoice:inv-12',
+      date_approved: '2026-03-15T10:00:00Z',
+    });
+    const supabaseAdmin = createSupabaseStub({
+      tables: { invoices: { maybeSingle: async () => ({ data: invoice, error: null }) } },
+      rpcResult: {
+        data: { posted: true, movement_id: 'mv-12', invoice_id: 'inv-12', invoice_status: 'paid', coverage_extended: false, deferred_reason: 'affiliate_cancelled' },
+        error: null,
+      },
+    });
+
+    const result = await handlePaymentSettlement({ supabaseAdmin, mpFetch }, { paymentId: 'pay-12' });
+
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_payment_audit_event', expect.objectContaining({
+      p_mp_resource_id: 'pay-12',
+      p_outcome: 'affiliate_cancelled',
+      p_resolution_state: 'needs_admin',
+    }));
+    expect(result).toMatchObject({ outcome: 'affiliate_cancelled', posted: true, coverage_extended: false });
+    expect(classifyPaymentSettlementOutcome(result)).toBe('needs_admin');
+  });
+
   it('does not let an ordinary redelivery overwrite an already-needs_admin row back to final (Judgment Day Round 2 fix) — DB-level freeze is verified separately by the pgTAP "freeze-once-needs_admin" tests in supabase/tests/mercadopago.sql', async () => {
     // This file's shared createSupabaseStub() resolves each RPC name to a
     // single canned response regardless of call count — it does not model

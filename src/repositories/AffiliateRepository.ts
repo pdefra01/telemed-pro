@@ -1,5 +1,5 @@
 import { supabase } from '../services/supabase';
-import { Patient } from '../types';
+import { AffiliateCancellation, Patient } from '../types';
 import { generateUUID } from '../utils/uuid';
 import { authRepository } from './AuthRepository';
 import type { AffiliatePaymentStatus } from './AccountMovementRepository';
@@ -104,6 +104,25 @@ export class AffiliateRepository {
 
     if (error) throw error;
     return new Set((data || []).map((row: { family_group_id: string }) => row.family_group_id));
+  }
+
+  /**
+   * Affiliate cancellations ("Dar de baja", affiliate-cancellation S1), keyed by
+   * profile id. A key means billing stopped; appliedAt set means the login is
+   * already blocked.
+   */
+  async getAffiliateCancellations(): Promise<Map<string, AffiliateCancellation>> {
+    const { data, error } = await supabase
+      .from('affiliate_cancellations')
+      .select('profile_id, effective_at, applied_at');
+
+    if (error) throw error;
+    return new Map(
+      (data || []).map((row: { profile_id: string; effective_at: string; applied_at: string | null }) => [
+        row.profile_id,
+        { effectiveAt: row.effective_at, appliedAt: row.applied_at },
+      ])
+    );
   }
 
   /**

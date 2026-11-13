@@ -18,6 +18,7 @@ import { releaseStuckActivation } from './server/adhesionActivationRecovery.js';
 import { createActivateAdhesionLimiter, createDniUploadUrlsLimiter } from './server/rateLimits.js';
 import { createDniUploadUrls, cleanupOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS } from './server/adhesionDniPhotos.js';
 import { startProspectIntakeJob } from './server/prospectIntake.js';
+import { cancelAffiliateHandler, startAffiliateCancellationJob } from './server/affiliateCancellation.js';
 import { startDebitRejectionJob, DEBIT_REJECTIONS_INTERVAL_MS } from './server/debitRejections.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
@@ -1515,6 +1516,25 @@ app.post('/api/create-supervisor', requireAuth, requireAdmin, (req, res) =>
  * design 3.3). Business logic lives in server/advisors.js — this route only
  * wires the admin-only gate.
  */
+/**
+ * POST /api/affiliates/:id/cancel
+ * "Dar de baja": cancels the MercadoPago automatic debit first (fail closed),
+ * then records the cancellation, effective at the end of the paid coverage
+ * (server/affiliateCancellation.js, odd/tasks/affiliate-cancellation.md).
+ */
+app.post('/api/affiliates/:id/cancel', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await cancelAffiliateHandler(req, res, {
+      supabaseAdmin,
+      mpFetch: mercadoPagoEnabled ? mpFetch : null,
+      handleSubscriptionEvent,
+    });
+  } catch (err) {
+    console.error('[affiliate-cancel] Error inesperado:', err);
+    res.status(500).json({ error: 'Error interno en el servidor.' });
+  }
+});
+
 app.patch('/api/advisors/:id/status', requireAuth, requireAdmin, async (req, res) => {
   try {
     await setAdvisorStatusHandler(req, res, { supabaseAdmin });
@@ -1582,6 +1602,9 @@ if (supabaseAdmin) {
 
 // Automatic prospect intake: lead surveys with consent become prospects and adhesions advance them.
 startProspectIntakeJob({ supabaseAdmin });
+
+// Affiliate cancellations: blocks the login once a scheduled "baja" is due.
+startAffiliateCancellationJob({ supabaseAdmin });
 
 // Periodic Mercado Pago query: records debit rejections (and charges) whose webhook never arrived.
 const debitRejectionsHours = Number(process.env.MP_DEBIT_SYNC_INTERVAL_HOURS);

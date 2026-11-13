@@ -258,6 +258,31 @@ describe('AffiliateRepository', () => {
     });
   });
 
+  describe('getAffiliateCancellations (affiliate-cancellation S1)', () => {
+    it('maps every cancellation by profile id with its effective and applied dates', async () => {
+      const select = vi.fn().mockResolvedValue({
+        data: [
+          { profile_id: 'aff-1', effective_at: '2026-12-10T00:00:00Z', applied_at: null },
+          { profile_id: 'aff-2', effective_at: '2026-11-01T00:00:00Z', applied_at: '2026-11-01T01:00:00Z' },
+        ],
+        error: null,
+      });
+      vi.mocked(supabase.from).mockReturnValue({ select } as any);
+
+      const cancellations = await affiliateRepository.getAffiliateCancellations();
+
+      expect(supabase.from).toHaveBeenCalledWith('affiliate_cancellations');
+      expect(select).toHaveBeenCalledWith('profile_id, effective_at, applied_at');
+      expect(cancellations.get('aff-1')).toEqual({ effectiveAt: '2026-12-10T00:00:00Z', appliedAt: null });
+      expect(cancellations.get('aff-2')).toEqual({ effectiveAt: '2026-11-01T00:00:00Z', appliedAt: '2026-11-01T01:00:00Z' });
+    });
+
+    it('throws when the cancellations cannot be read', async () => {
+      vi.mocked(supabase.from).mockReturnValue({ select: vi.fn().mockResolvedValue({ data: null, error: new Error('boom') }) } as any);
+      await expect(affiliateRepository.getAffiliateCancellations()).rejects.toThrow('boom');
+    });
+  });
+
   describe('derived paymentStatus (affiliate_payment_status view)', () => {
     /** Builds a `profiles` select-role chain: select().eq().order() */
     const profilesChain = (rows: any[]) => ({
