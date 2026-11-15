@@ -127,6 +127,22 @@ export async function issuePrescription(
   if (affiliateError) return fail(500, LOOKUP_FAILED)
   if (isAffiliate !== true) return fail(400, 'Solo se pueden emitir recetas a afiliados.')
 
+  // Suspended or cancelled affiliates get no receta: same rule as the login block
+  // (inactive profile, suspended/cancelled plan, or a cancellation already effective
+  // even before the hourly sweep). A scheduled cancellation still within the paid
+  // period keeps coverage, so it does not block.
+  const blocked = 'El afiliado está suspendido o dado de baja: no se le pueden emitir recetas.'
+  if (patient.is_active === false || patient.plan_status === 'suspended' || patient.plan_status === 'cancelled') {
+    return fail(400, blocked)
+  }
+  const { data: cancellation, error: cancellationError } = await supabase
+    .from('affiliate_cancellations')
+    .select('effective_at')
+    .eq('profile_id', patientId)
+    .maybeSingle()
+  if (cancellationError) return fail(500, LOOKUP_FAILED)
+  if (cancellation && new Date(cancellation.effective_at).getTime() <= now()) return fail(400, blocked)
+
   let attended: { full_name: string | null; dni?: string | null } = { full_name: patient.full_name, dni: patient.dni }
   if (familyMemberId) {
     const { data: member, error: memberError } = await supabase

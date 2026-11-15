@@ -302,4 +302,43 @@ describe('issuePrescription', () => {
     expect(supa.touched.filter((t) => t !== 'profiles')).toEqual([]);
     expect(supa.inserted).toEqual({});
   });
+
+  describe('suspended or cancelled affiliates (L7: "Bloquear")', () => {
+    const blocked = 'El afiliado está suspendido o dado de baja: no se le pueden emitir recetas.';
+    const withPatient = (patch: Row, extra: Record<string, Row[]> = {}) => {
+      const profiles = [
+        { id: DOCTOR_ID, role: 'doctor', full_name: 'Ana Pérez', professional_title: 'Dra.' },
+        { id: PATIENT_ID, role: 'patient', full_name: 'Juan Gómez', dni: '30111222', family_group_id: 'group-1', is_active: true, plan_status: 'active', ...patch },
+      ];
+      return fakeSupabase({ tables: { profiles, ...extra } });
+    };
+
+    it.each([
+      ['inactive', { is_active: false }],
+      ['suspended', { plan_status: 'suspended' }],
+      ['cancelled', { plan_status: 'cancelled' }],
+    ])('blocks a receta for a %s affiliate before building or storing anything', async (_label, patch) => {
+      const supa = withPatient(patch);
+      const { deps: d, buildPdf } = deps({}, supa);
+      const res = await issuePrescription(d, { token: 'doctor-token', body: medsBody });
+      expect(res).toEqual({ status: 400, body: { error: blocked } });
+      expect(buildPdf).not.toHaveBeenCalled();
+      expect(supa.inserted).toEqual({});
+    });
+
+    it('blocks a receta once the cancellation is effective, even before the sweep', async () => {
+      const supa = withPatient({}, { affiliate_cancellations: [{ profile_id: PATIENT_ID, effective_at: '2023-11-01T00:00:00.000Z' }] });
+      const { deps: d } = deps({}, supa);
+      const res = await issuePrescription(d, { token: 'doctor-token', body: medsBody });
+      expect(res).toEqual({ status: 400, body: { error: blocked } });
+      expect(supa.inserted).toEqual({});
+    });
+
+    it('still issues while a scheduled cancellation is within the paid period', async () => {
+      const supa = withPatient({}, { affiliate_cancellations: [{ profile_id: PATIENT_ID, effective_at: '2023-12-31T00:00:00.000Z' }] });
+      const { deps: d } = deps({}, supa);
+      const res = await issuePrescription(d, { token: 'doctor-token', body: medsBody });
+      expect(res.status).toBe(201);
+    });
+  });
 });

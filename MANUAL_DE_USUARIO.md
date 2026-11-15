@@ -141,7 +141,7 @@ El médico puede emitir una receta a cualquier afiliado sin una consulta previa:
 3. Cargar los medicamentos (con el mismo autocompletado del catálogo) y/o las indicaciones, o elegir **Receta de obra social** y pegar el link `https://`.
 4. Tocar **Emitir receta**. La receta queda en el historial del paciente y se envía por WhatsApp desde el número de la empresa. Si el envío falla, se muestra el motivo y el botón **Reenviar por WhatsApp**.
 
-La receta sin consulta no crea una evolución ni modifica ningún turno.
+La receta sin consulta no crea una evolución ni modifica ningún turno. No se puede emitir a un afiliado suspendido o dado de baja (una baja programada sigue habilitada hasta el fin del período pago).
 
 ---
 

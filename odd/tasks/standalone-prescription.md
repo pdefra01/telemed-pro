@@ -13,6 +13,7 @@ Branch: feat/standalone-prescription · Delivery: single PR with work-unit commi
   - Only an authenticated user whose profile role is `doctor` can call it (401 without/invalid token, 403 for any other role). The doctor on the receta is always the caller, never a body field.
   - Writes one `prescriptions` row with `appointment_id = null`, `doctor_id = caller`, the patient and optional family member; PDF built with the same layout as finalize-consultation (shared module), stored in the private `prescriptions_pdfs` bucket under `{patient_id}/standalone-{ts}.pdf`.
   - It creates no medical record (evolución) and touches no appointment (assumption: a receta is not a consultation).
+  - (L7) A suspended or cancelled affiliate gets no receta: "Bloquear". Same rule as the login block: `is_active = false`, `plan_status` suspended/cancelled, or an `affiliate_cancellations.effective_at` already reached. A scheduled cancellation within the paid period does not block.
   - Notifies the patient ("Nueva receta") and returns the new prescription id.
 - S3 — After issuing, the receta is sent by WhatsApp with the existing `/api/prescriptions/:id/send-whatsapp`; a failed send shows the reason and a "Reenviar" button. The patient sees it in their history/pharmacy like any other receta (already keyed by patient_id).
 
@@ -20,6 +21,7 @@ Branch: feat/standalone-prescription · Delivery: single PR with work-unit commi
 
 - [x] T1 — S2 · `_shared/prescriptionPdf.ts` (PDF + private upload, moved from finalize-consultation without behavior change) + `issue-prescription` (pure core with injected deps + Vitest tests, Deno entry) · inline · RED (module missing) -> GREEN 13/13 · commit 2c7658c; review fixes RED 3 -> GREEN 16/16 · commit 6563731
 - [x] T2 — S1, S3 · UI: extract MedicationCard, NewPrescriptionModal (patient/member, meds, indications, obra social, WhatsApp status), button in DoctorDashboard; tests · inline · RED (modules missing) -> GREEN 11/11 + dashboard 14/14 · commit 6120759
+- [x] T4 — S2 (L7) · block suspended/cancelled affiliates in issue-prescription · inline · RED 4 -> GREEN 23/23
 - [x] T3 — S2 · docs: COOLIFY_DEPLOYMENT.md (deploy issue-prescription + finalize-consultation) and MANUAL_DE_USUARIO.md 2.5 · inline · commit 810153e
 
 ## Log
@@ -32,3 +34,4 @@ Branch: feat/standalone-prescription · Delivery: single PR with work-unit commi
 - L5 Checks: full Vitest 1582 passed, 5 failed = known base failures (VideoRoom x3, DashboardRepository, crypto). tsc error count equal to base (1 pre-existing). Edge entry files only syntax-checked with esbuild (no Deno). Assess after 2c7658c: medium, under_budget (no review due).
 - Follow-up (out of scope): finalize-consultation does not check the caller JWT.
 - L6 Independent verifier: S1/S2/S3 PASS, no blockers. Probes added as tests (empty and malformed familyMemberId) 18/18. Open notes: WhatsApp text says "de tu consulta" (server/whatsapp.js:192,202); is_affiliate ignores suspended/cancelled status (product decision pending).
+- L7 (2026-11-15, user), asked whether a doctor can issue recetas to a suspended or cancelled affiliate: "Bloquear"
