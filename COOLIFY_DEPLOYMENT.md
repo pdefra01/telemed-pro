@@ -150,3 +150,17 @@ Aplicar con `supabase db push` las migraciones de los registros de envío y de l
 1. Hacer una consulta de prueba con receta a un paciente con teléfono válido (formato argentino: con o sin +54 / 9 / 15).
 2. Al finalizar, el paciente debe recibir el PDF desde el número de la empresa y el médico ver *"Enviado por WhatsApp"*.
 3. Confirmar que en el mensaje **no** aparece el número del médico.
+
+## Edge functions de Supabase (receta sin videoconsulta)
+
+Las edge functions no se publican con Coolify: se despliegan aparte con la CLI de Supabase.
+
+- `issue-prescription` (nueva): el médico emite una receta sin consulta. Verifica que quien llama sea médico y que el destinatario sea afiliado.
+- `finalize-consultation` (redeploy): ahora usa el PDF compartido de `supabase/functions/_shared/prescriptionPdf.ts`, sin cambios de comportamiento.
+
+```bash
+npx supabase functions deploy issue-prescription
+npx supabase functions deploy finalize-consultation
+```
+
+No requiere migraciones. Orden sugerido: desplegar las dos funciones y después la app en Coolify (el botón **Nueva receta** llama a `issue-prescription`).

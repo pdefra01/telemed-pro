@@ -134,6 +134,15 @@ Durante la atención de un turno activo:
    - *Médico recurrente*: Ingresar el PIN de 6 dígitos para autorizar y firmar la receta.
 4. **Deducción Automática de Inventario**: Al emitirse la receta firmada, la plataforma descontará atómicamente las unidades del stock de los lotes activos de farmacia según su fecha de vencimiento (método FIFO).
 
+### 2.5. Receta sin videoconsulta (`DoctorDashboard` → Historia clínica → **Nueva receta**)
+El médico puede emitir una receta a cualquier afiliado sin una consulta previa:
+1. Abrir la **Historia clínica** del afiliado (buscando por DNI o desde **Expediente** en la cola).
+2. Tocar **Nueva receta** y elegir en **Para** al titular o a un integrante de su grupo familiar.
+3. Cargar los medicamentos (con el mismo autocompletado del catálogo) y/o las indicaciones, o elegir **Receta de obra social** y pegar el link `https://`.
+4. Tocar **Emitir receta**. La receta queda en el historial del paciente y se envía por WhatsApp desde el número de la empresa. Si el envío falla, se muestra el motivo y el botón **Reenviar por WhatsApp**.
+
+La receta sin consulta no crea una evolución ni modifica ningún turno. No se puede emitir a un afiliado suspendido o dado de baja (una baja programada sigue habilitada hasta el fin del período pago).
+
 ---
 
 ## 🛠️ 3. Módulo para Administradores (Command Center)

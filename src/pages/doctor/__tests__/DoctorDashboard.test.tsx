@@ -67,6 +67,14 @@ vi.mock('../../../repositories/PatientChartRepository', () => ({
   },
 }));
 
+vi.mock('../NewPrescriptionModal', () => ({
+  default: ({ patientId, patientName, onClose }: { patientId: string; patientName: string; onClose: () => void }) => (
+    <div role="dialog" aria-label="Nueva receta">
+      {patientId} {patientName}
+      <button onClick={onClose}>Cerrar nueva receta</button>
+    </div>
+  ),
+}));
 vi.mock('../../../repositories/DoctorShiftRepository', () => ({
   doctorShiftRepository: {
     getActiveShift: vi.fn().mockResolvedValue(null),
@@ -170,6 +178,32 @@ describe('DoctorDashboard - history ordering, filters and follow-up actions', ()
     vi.clearAllMocks();
     vi.mocked(medicalRecordRepository.getRecordByAppointmentId).mockResolvedValue(null);
     vi.mocked(prescriptionRepository.getPrescriptionByAppointmentId).mockResolvedValue(null);
+  });
+
+  it('opens a new receta for the patient of the clinical history, without a consultation', async () => {
+    vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValueOnce([
+      {
+        appointment_id: 'appt-queue-rx',
+        patient_id: 'pat-rx',
+        patient_name: 'Rosa Receta',
+        patient_avatar: null,
+        patient_plan: null,
+        doctor_id: 'doc1',
+        scheduled_at: '2026-08-26T19:30:00Z',
+        status: 'confirmed',
+        consultation_metadata: {},
+      },
+    ] as any);
+    render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+    expect(screen.queryByRole('dialog', { name: 'Nueva receta' })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Nueva receta' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Nueva receta' });
+    expect(dialog).toHaveTextContent('pat-rx Rosa Receta');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar nueva receta' }));
+    expect(screen.queryByRole('dialog', { name: 'Nueva receta' })).not.toBeInTheDocument();
   });
 
   it('lists attended consultations from most recent to oldest', async () => {

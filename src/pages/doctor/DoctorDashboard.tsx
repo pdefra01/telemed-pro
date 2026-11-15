@@ -22,6 +22,7 @@ import { formatDoctorName } from '../../utils/doctorName';
 import { newestFirst, filterHistory } from './historyList';
 import { sendPrescriptionWhatsapp } from '../../utils/prescriptionWhatsapp';
 import { attendedMemberLabel } from '../../utils/attendedMember';
+import NewPrescriptionModal from './NewPrescriptionModal';
 
 interface Props {
     user: Doctor;
@@ -32,6 +33,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [doctorStatus, setDoctorStatus] = useState<'online' | 'away'>('online');
     const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
     const [selectedPatientName, setSelectedPatientName] = useState<string>('');
+    // Receta issued from the patient's history, without a video consultation.
+    const [showNewPrescription, setShowNewPrescription] = useState(false);
+    useEffect(() => { setShowNewPrescription(false); }, [selectedPatientId]);
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -871,6 +875,13 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
             </section>
 
             {/* Modals with Premium Refactor */}
+            {selectedPatientId && showNewPrescription && (
+                <NewPrescriptionModal
+                    patientId={selectedPatientId}
+                    patientName={selectedPatientName}
+                    onClose={() => setShowNewPrescription(false)}
+                />
+            )}
             {selectedPatientId && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4">
                     <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl" onClick={() => setSelectedPatientId(null)}></div>
@@ -883,7 +894,13 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 )}
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={() => setShowNewPrescription(true)}
+                                    className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-all"
+                                >
+                                    <Pill size={14} /> Nueva receta
+                                </button>
                                 <div className="flex p-1 bg-slate-950/60 rounded-xl border border-white/5 gap-1">
                                     <button
                                         onClick={() => setHistoryView('chart')}
