@@ -1,16 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { PDFDocument, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1'
-
-// Local copy of src/utils/doctorName.ts (edge functions cannot import from src):
-// a missing/unknown title reads as "Dr."; a title typed into the name is dropped.
-const LEADING_TITLE = /^(?:dr\/a|dra|dr)\.?\s+/i
-function formatDoctorName(title: unknown, fullName: string | null | undefined): string {
-  const name = String(fullName ?? '').trim().replace(LEADING_TITLE, '').trim()
-  if (!name || /^(?:dr\/a|dra|dr)\.?$/i.test(name)) return ''
-  const safeTitle = title === 'Dra.' ? 'Dra.' : 'Dr.'
-  return `${safeTitle} ${name.replace(/\s+/g, ' ')}`
-}
+import { formatDoctorName } from '../_shared/doctorName.ts'
+import { buildPrescriptionPdf, uploadPrescriptionPdf } from '../_shared/prescriptionPdf.ts'
 
 // pharmacy_products ids are UUIDs; anything else is dropped instead of stored.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -99,117 +90,20 @@ serve(async (req) => {
     const trimmedIndications = typeof indications === 'string' ? indications.trim() : '';
 
     if (medications.length > 0) {
-      // 4a. Generar PDF Premium
-      const pdfDoc = await PDFDocument.create()
-      const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
-      const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-      
-      const page = pdfDoc.addPage([595.28, 841.89]) // A4
-      const { width, height } = page.getSize()
-      
-      // Colores
-      const primaryColor = rgb(0.05, 0.45, 0.65) // Teal/Blue profesional
-      const textColor = rgb(0.1, 0.1, 0.1)
-      const lightGray = rgb(0.95, 0.95, 0.95)
-
-      // Header background decoration
-      page.drawRectangle({
-        x: 0,
-        y: height - 100,
-        width: width,
-        height: 100,
-        color: primaryColor,
+      // 4a. Generar PDF (shared with issue-prescription)
+      const pdfBytes = await buildPrescriptionPdf({
+        attended,
+        doctorDisplayName,
+        doctor,
+        medications,
+        diagnosis: diagnosis ?? '',
       })
 
-      // Logo/Brand text
-      page.drawText('MEDINEX', { x: 40, y: height - 50, size: 24, font: helveticaBold, color: rgb(1, 1, 1) })
-      page.drawText('RECETA ELECTRÓNICA OFICIAL', { x: 40, y: height - 75, size: 10, font: helveticaBold, color: rgb(1, 1, 1) })
-
-      // Info box background
-      page.drawRectangle({
-        x: 40,
-        y: height - 220,
-        width: width - 80,
-        height: 100,
-        color: lightGray,
-        borderColor: rgb(0.9, 0.9, 0.9),
-        borderWidth: 1,
-      })
-
-      // Paciente & Doctor Info
-      let currentY = height - 140
-      page.drawText('DATOS DEL PACIENTE', { x: 50, y: currentY, size: 8, font: helveticaBold, color: primaryColor })
-      currentY -= 15
-      page.drawText(`Nombre: ${attended.full_name}`, { x: 50, y: currentY, size: 11, font: helveticaFont, color: textColor })
-      page.drawText(`DNI: ${attended.dni || 'N/A'}`, { x: 300, y: currentY, size: 11, font: helveticaFont, color: textColor })
-      
-      currentY -= 30
-      page.drawText('DATOS DEL PROFESIONAL', { x: 50, y: currentY, size: 8, font: helveticaBold, color: primaryColor })
-      currentY -= 15
-      page.drawText(`Nombre: ${doctorDisplayName}`, { x: 50, y: currentY, size: 11, font: helveticaFont, color: textColor })
-      page.drawText(`Matrícula: ${doctor.license_number || 'En trámite'}`, { x: 300, y: currentY, size: 11, font: helveticaFont, color: textColor })
-      page.drawText(`Especialidad: ${doctor.specialty || 'Clínica Médica'}`, { x: 50, y: currentY - 15, size: 10, font: helveticaFont, color: rgb(0.4, 0.4, 0.4) })
-
-      // Prescription content
-      currentY = height - 260
-      page.drawText('INDICACIONES FARMACOLÓGICAS', { x: 40, y: currentY, size: 12, font: helveticaBold, color: primaryColor })
-      page.drawLine({
-        start: { x: 40, y: currentY - 8 },
-        end: { x: width - 40, y: currentY - 8 },
-        thickness: 1.5,
-        color: primaryColor,
-        opacity: 0.3
-      })
-
-      currentY -= 40
-      
-      // Loop medications
-      for (const med of medications) {
-        // Bullet point
-        page.drawCircle({ x: 50, y: currentY + 4, size: 3, color: primaryColor })
-        
-        page.drawText(med.name, { x: 65, y: currentY, size: 12, font: helveticaBold, color: textColor })
-        currentY -= 18
-        page.drawText(med.instructions, { x: 65, y: currentY, size: 10, font: helveticaFont, color: rgb(0.3, 0.3, 0.3) })
-        
-        currentY -= 35 // Spacing between meds
-        
-        if (currentY < 150) {
-          // Add new page logic if too many meds (omitted for simplicity but good to have)
-        }
-      }
-
-      // Diagnosis (subtle)
-      currentY -= 20
-      page.drawText(`Dx: ${diagnosis}`, { x: 40, y: currentY, size: 9, font: helveticaFont, color: rgb(0.5, 0.5, 0.5) })
-
-
-      const pdfBytes = await pdfDoc.save()
-
-      // 4b. Subir a Supabase Storage (con robustez para local dev si el storage está apagado)
+      // 4b/4c. Subir al bucket privado y firmar la URL (con robustez para local dev si el storage está apagado)
       try {
-        const fileName = `${appointment.patient_id}/${appointmentId}-${Date.now()}.pdf`
-        const { error: uploadError } = await supabase.storage
-          .from('prescriptions_pdfs')
-          .upload(fileName, pdfBytes, {
-            contentType: 'application/pdf',
-            cacheControl: '3600',
-            upsert: false
-          })
-
-        if (uploadError) throw uploadError
-
-        // 4c. Firmar la URL (bucket privado): expira a las 48hs. El "Reenviar"
-        // por WhatsApp vuelve a firmar en el momento del envío, así que nunca
-        // depende de esta URL sobrevivir hasta entonces.
-        const { data: signedUrlData, error: signError } = await supabase.storage
-          .from('prescriptions_pdfs')
-          .createSignedUrl(fileName, 60 * 60 * 48)
-
-        if (signError) throw signError
-
-        pdfUrl = signedUrlData.signedUrl
-        pdfPath = fileName
+        const uploaded = await uploadPrescriptionPdf(supabase, `${appointment.patient_id}/${appointmentId}-${Date.now()}.pdf`, pdfBytes)
+        pdfUrl = uploaded.pdfUrl
+        pdfPath = uploaded.pdfPath
       } catch (storageErr) {
         console.warn("⚠️ [Local Dev] El servicio de Storage no está activo o falló al subir. Usando fallback de URL mockeada:", storageErr.message);
         pdfUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
