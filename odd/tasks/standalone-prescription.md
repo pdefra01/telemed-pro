@@ -22,6 +22,7 @@ Branch: feat/standalone-prescription · Delivery: single PR with work-unit commi
 - [x] T1 — S2 · `_shared/prescriptionPdf.ts` (PDF + private upload, moved from finalize-consultation without behavior change) + `issue-prescription` (pure core with injected deps + Vitest tests, Deno entry) · inline · RED (module missing) -> GREEN 13/13 · commit 2c7658c; review fixes RED 3 -> GREEN 16/16 · commit 6563731
 - [x] T2 — S1, S3 · UI: extract MedicationCard, NewPrescriptionModal (patient/member, meds, indications, obra social, WhatsApp status), button in DoctorDashboard; tests · inline · RED (modules missing) -> GREEN 11/11 + dashboard 14/14 · commit 6120759
 - [x] T4 — S2 (L7) · block suspended/cancelled affiliates in issue-prescription · inline · RED 4 -> GREEN 23/23
+- [x] T5 — S3 (L8) · WhatsApp texts for a receta without appointment: "indicada por <doctor>" / "Indicaciones enviadas por <doctor>"; consultation wording unchanged · inline · RED 5 -> GREEN, server 580/580
 - [x] T3 — S2 · docs: COOLIFY_DEPLOYMENT.md (deploy issue-prescription + finalize-consultation) and MANUAL_DE_USUARIO.md 2.5 · inline · commit 810153e
 
 ## Log
@@ -35,3 +36,4 @@ Branch: feat/standalone-prescription · Delivery: single PR with work-unit commi
 - Follow-up (out of scope): finalize-consultation does not check the caller JWT.
 - L6 Independent verifier: S1/S2/S3 PASS, no blockers. Probes added as tests (empty and malformed familyMemberId) 18/18. Open notes: WhatsApp text says "de tu consulta" (server/whatsapp.js:192,202); is_affiliate ignores suspended/cancelled status (product decision pending).
 - L7 (2026-11-15, user), asked whether a doctor can issue recetas to a suspended or cancelled affiliate: "Bloquear"
+- L8 (2026-11-15, user), on the WhatsApp text that says "de tu consulta" for a receta without a consultation: "Ajusta el texto"

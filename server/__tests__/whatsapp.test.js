@@ -91,6 +91,40 @@ describe('prescription messages for a family member', () => {
   });
 });
 
+describe('messages for a receta issued without a consultation', () => {
+  const noConsultation = (text) => {
+    expect(text).not.toContain('tu consulta');
+    expect(text).not.toContain('consulta de ');
+    expect(text).not.toContain('consulta con');
+  };
+
+  it('describes the PDF receta as indicated by the doctor', () => {
+    const text = buildPrescriptionMessage({ patientName: 'Ana Pérez', doctorName: 'Lucía Fernández', doctorTitle: 'Dra.', withoutConsultation: true });
+    expect(text).toContain('Hola Ana Pérez, te enviamos la receta electrónica indicada por la Dra. Lucía Fernández.');
+    noConsultation(text);
+  });
+
+  it('names the family member without mentioning a consultation', () => {
+    const text = buildPrescriptionMessage({ patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur', forName: 'Lucía Pérez', withoutConsultation: true });
+    expect(text).toContain('te enviamos la receta electrónica para Lucía Pérez indicada por el Dr. Sergio Dib Ashur.');
+    noConsultation(text);
+  });
+
+  it('words the obra social link the same way', () => {
+    const own = buildExternalPrescriptionMessage({ patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur', url: 'https://os.example/r', withoutConsultation: true });
+    expect(own).toContain('te enviamos la receta de tu obra social indicada por el Dr. Sergio Dib Ashur.');
+    noConsultation(own);
+    const member = buildExternalPrescriptionMessage({ patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur', url: 'https://os.example/r', forName: 'Lucía Pérez', withoutConsultation: true });
+    expect(member).toContain('te enviamos la receta de tu obra social para Lucía Pérez indicada por el Dr. Sergio Dib Ashur.');
+    noConsultation(member);
+  });
+
+  it('introduces the indications as sent by the doctor', () => {
+    const text = buildIndicationsMessage({ doctorName: 'Lucía Fernández', doctorTitle: 'Dra.', indications: 'Reposo', withoutConsultation: true });
+    expect(text).toBe('Indicaciones enviadas por la Dra. Lucía Fernández:\n\nReposo');
+  });
+});
+
 describe('buildPrescriptionMessage', () => {
   const base = { patientName: 'Ana Pérez', doctorName: 'Sergio Dib Ashur' };
 
@@ -343,6 +377,7 @@ describe('sendPaymentLinkViaWhatsApp', () => {
 describe('sendPrescriptionViaWhatsApp', () => {
   const PRESCRIPTION = {
     id: 'rx-1',
+    appointment_id: 'appt-1',
     doctor_id: 'doc-1',
     patient_id: 'pat-1',
     doctor_name: 'Sergio Dib Ashur',
@@ -442,6 +477,19 @@ describe('sendPrescriptionViaWhatsApp', () => {
 
   const run = (ctx, requesterId = 'doc-1') =>
     sendPrescriptionViaWhatsApp(ctx, { prescriptionId: 'rx-1', requesterId });
+
+  it('words the messages without a consultation when the receta has no appointment', async () => {
+    const { ctx, waha, prescriptionSelects } = setup({
+      db: { prescription: { ...PRESCRIPTION, appointment_id: null, notes: 'Reposo 48hs' } },
+    });
+
+    const result = await run(ctx);
+
+    expect(result.status).toBe(200);
+    expect(prescriptionSelects[0]).toContain('appointment_id');
+    expect(waha.sendFile.mock.calls[0][0].caption).toContain('receta electrónica indicada por el Dr. Sergio Dib Ashur.');
+    expect(waha.sendText.mock.calls[0][0].text).toBe('Indicaciones enviadas por el Dr. Sergio Dib Ashur:\n\nReposo 48hs');
+  });
 
   it('names the family member in the message and still sends to the titular phone', async () => {
     const { ctx, waha } = setup({

@@ -73,17 +73,23 @@ function doctorWithArticle(doctorTitle, doctorName) {
   return `${formatted.startsWith('Dra.') ? 'la' : 'el'} ${formatted}`;
 }
 
+// Where the receta comes from: a consultation, or (no appointment) a receta the
+// doctor issued without one. A family member's receta goes to the titular's
+// phone, so either way it says who it is for.
+function recetaOrigin({ doctor, forName, withoutConsultation }) {
+  if (withoutConsultation) return `${forName ? `para ${forName} ` : ''}indicada por ${doctor}`;
+  return `${forName ? `de la consulta de ${forName}` : 'de tu consulta'} con ${doctor}`;
+}
+
 /**
  * Generic, link-free message that accompanies the prescription PDF. The PDF is
  * attached, so the text carries no URL, and it never includes phone numbers.
  */
-export function buildPrescriptionMessage({ patientName, doctorName, doctorTitle, forName } = {}) {
+export function buildPrescriptionMessage({ patientName, doctorName, doctorTitle, forName, withoutConsultation } = {}) {
   const greeting = patientName ? `Hola ${patientName},` : 'Hola,';
   const doctor = doctorWithArticle(doctorTitle, doctorName);
-  // A family member's receta goes to the titular's phone: say whose consultation it is.
-  const consultation = forName ? `de la consulta de ${forName}` : 'de tu consulta';
   return (
-    `${greeting} te enviamos la receta electrónica ${consultation} con ${doctor}.\n\n` +
+    `${greeting} te enviamos la receta electrónica ${recetaOrigin({ doctor, forName, withoutConsultation })}.\n\n` +
     'La encontrás adjunta en este mensaje. Si tenés alguna consulta, respondé por la plataforma.'
   );
 }
@@ -189,7 +195,12 @@ function extractUsableIndications(notes) {
 }
 
 /** Text message carrying the doctor's non-medication indications. */
-export function buildIndicationsMessage({ doctorName, doctorTitle, indications } = {}) {
+export function buildIndicationsMessage({ doctorName, doctorTitle, indications, withoutConsultation } = {}) {
+  if (withoutConsultation) {
+    return `Indicaciones enviadas por ${doctorWithArticle(doctorTitle, doctorName)}:
+
+${indications}`;
+  }
   const doctor = formatDoctorName(doctorTitle, doctorName) || 'tu médico';
   return `Indicaciones de tu consulta con ${doctor}:
 
@@ -197,12 +208,11 @@ ${indications}`;
 }
 
 /** Text message carrying the insurer (obra social) prescription download link. */
-export function buildExternalPrescriptionMessage({ patientName, doctorName, doctorTitle, url, forName } = {}) {
+export function buildExternalPrescriptionMessage({ patientName, doctorName, doctorTitle, url, forName, withoutConsultation } = {}) {
   const greeting = patientName ? `Hola ${patientName},` : 'Hola,';
   const doctor = doctorWithArticle(doctorTitle, doctorName);
-  const consultation = forName ? `de la consulta de ${forName}` : 'de tu consulta';
   return (
-    `${greeting} te enviamos la receta de tu obra social ${consultation} con ${doctor}.
+    `${greeting} te enviamos la receta de tu obra social ${recetaOrigin({ doctor, forName, withoutConsultation })}.
 
 ` +
     `Podés descargarla acá: ${url}
@@ -230,7 +240,7 @@ export async function sendPrescriptionViaWhatsApp(
   { supabaseAdmin, waha, fetchFn = fetch, now = () => new Date() },
   { prescriptionId, requesterId }
 ) {
-  const baseColumns = 'id, doctor_id, patient_id, family_member_id, doctor_name, pdf_url, pdf_path, notes, medications';
+  const baseColumns = 'id, appointment_id, doctor_id, patient_id, family_member_id, doctor_name, pdf_url, pdf_path, notes, medications';
   const selectPrescription = (columns) =>
     supabaseAdmin.from('prescriptions').select(columns).eq('id', prescriptionId).maybeSingle();
   let { data: prescription, error: selectError } = await selectPrescription(
@@ -241,6 +251,9 @@ export async function sendPrescriptionViaWhatsApp(
 
   if (!prescription) return { status: 404, body: { error: 'prescription_not_found' } };
   if (prescription.doctor_id !== requesterId) return { status: 403, body: { error: 'forbidden' } };
+
+  // A receta issued without a video consultation has no appointment.
+  const withoutConsultation = prescription.appointment_id === null;
 
   // Obra social mode: the link replaces the internal PDF entirely.
   const externalUrl =
@@ -353,6 +366,7 @@ export async function sendPrescriptionViaWhatsApp(
           doctorTitle,
           url: externalUrl,
           forName: attendedName,
+          withoutConsultation,
         }),
       });
     }
@@ -366,6 +380,7 @@ export async function sendPrescriptionViaWhatsApp(
           doctorName: prescription.doctor_name,
           doctorTitle,
           forName: attendedName,
+          withoutConsultation,
         }),
       });
       pdfSent = true;
@@ -373,7 +388,7 @@ export async function sendPrescriptionViaWhatsApp(
     if (indications) {
       await waha.sendText({
         phone,
-        text: buildIndicationsMessage({ doctorName: prescription.doctor_name, doctorTitle, indications }),
+        text: buildIndicationsMessage({ doctorName: prescription.doctor_name, doctorTitle, indications, withoutConsultation }),
       });
     }
   } catch (err) {
