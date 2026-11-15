@@ -11,7 +11,13 @@ type Row = Record<string, unknown>;
 
 // Minimal stand-in for the service-role supabase client: only the calls the
 // function makes (select/eq/maybeSingle, insert[/select/single], auth.getUser).
-function fakeSupabase(opts: { tables?: Record<string, Row[]>; tokenUser?: Record<string, Row | undefined> } = {}) {
+function fakeSupabase(opts: {
+  tables?: Record<string, Row[]>;
+  tokenUser?: Record<string, Row | undefined>;
+  affiliates?: string[];
+  failingTables?: string[];
+  failInsert?: boolean;
+} = {}) {
   const tables: Record<string, Row[]> = {
     profiles: [
       { id: DOCTOR_ID, role: 'doctor', full_name: 'Ana Pérez', professional_title: 'Dra.', license_number: 'MN 123', specialty: 'Clínica' },
@@ -24,6 +30,7 @@ function fakeSupabase(opts: { tables?: Record<string, Row[]>; tokenUser?: Record
     ...opts.tables,
   };
   const tokenUser = opts.tokenUser ?? { 'doctor-token': { id: DOCTOR_ID } };
+  const affiliates = opts.affiliates ?? [PATIENT_ID];
   const inserted: Record<string, Row[]> = {};
   const touched: string[] = [];
 
@@ -34,6 +41,8 @@ function fakeSupabase(opts: { tables?: Record<string, Row[]>; tokenUser?: Record
         return user ? { data: { user }, error: null } : { data: { user: null }, error: { message: 'invalid JWT' } };
       }),
     },
+    rpc: vi.fn(async (fn: string, args: { p_profile_id: string }) =>
+      fn === 'is_affiliate' ? { data: affiliates.includes(args.p_profile_id), error: null } : { data: null, error: { message: 'unknown rpc' } }),
     from(table: string) {
       touched.push(table);
       return {
@@ -45,6 +54,7 @@ function fakeSupabase(opts: { tables?: Record<string, Row[]>; tokenUser?: Record
               return builder;
             },
             async maybeSingle() {
+              if (opts.failingTables?.includes(table)) return { data: null, error: { message: 'connection lost' } };
               const row = (tables[table] ?? []).find((r) => filters.every(([c, v]) => r[c] === v));
               return { data: row ?? null, error: null };
             },
@@ -57,7 +67,11 @@ function fakeSupabase(opts: { tables?: Record<string, Row[]>; tokenUser?: Record
           return {
             then: (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve),
             select() {
-              return { single: async () => ({ data: { id: 'presc-1' }, error: null }) };
+              return {
+                single: async () => (opts.failInsert && table === 'prescriptions'
+                  ? { data: null, error: { message: 'insert failed' } }
+                  : { data: { id: 'presc-1' }, error: null }),
+              };
             },
           };
         },
@@ -70,11 +84,13 @@ function fakeSupabase(opts: { tables?: Record<string, Row[]>; tokenUser?: Record
 function deps(over: Partial<IssuePrescriptionDeps> = {}, supa = fakeSupabase()) {
   const buildPdf = vi.fn(async () => new Uint8Array([1, 2, 3]));
   const uploadPdf = vi.fn(async (_client: unknown, fileName: string) => ({ pdfUrl: `https://signed/${fileName}`, pdfPath: fileName }));
+  const removePdf = vi.fn(async () => {});
   return {
     supa,
     buildPdf,
     uploadPdf,
-    deps: { supabase: supa.client, buildPdf, uploadPdf, now: () => 1700000000000, ...over } as IssuePrescriptionDeps,
+    removePdf,
+    deps: { supabase: supa.client, buildPdf, uploadPdf, removePdf, now: () => 1700000000000, ...over } as IssuePrescriptionDeps,
   };
 }
 
@@ -239,5 +255,34 @@ describe('issuePrescription', () => {
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: 'No se pudo guardar el PDF de la receta. Intentá de nuevo.' });
     expect(supa.inserted.prescriptions).toBeUndefined();
+  });
+
+  it('only issues recetas to affiliates, never to staff profiles', async () => {
+    const { deps: d, supa, buildPdf } = deps();
+    const res = await issuePrescription(d, { token: 'doctor-token', body: { ...medsBody, patientId: DOCTOR_ID } });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Solo se pueden emitir recetas a afiliados.' });
+    expect(supa.client.rpc).toHaveBeenCalledWith('is_affiliate', { p_profile_id: DOCTOR_ID });
+    expect(buildPdf).not.toHaveBeenCalled();
+    expect(supa.inserted).toEqual({});
+  });
+
+  it('reports a failed lookup as a server error instead of "not found"', async () => {
+    const supa = fakeSupabase({ failingTables: ['family_members'] });
+    const { deps: d } = deps({}, supa);
+    const res = await issuePrescription(d, { token: 'doctor-token', body: { ...medsBody, familyMemberId: MEMBER_ID } });
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: 'No se pudo emitir la receta. Intentá de nuevo.' });
+    expect(supa.inserted).toEqual({});
+  });
+
+  it('removes the uploaded PDF when the receta cannot be saved', async () => {
+    const supa = fakeSupabase({ failInsert: true });
+    const { deps: d, removePdf } = deps({}, supa);
+    const res = await issuePrescription(d, { token: 'doctor-token', body: medsBody });
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: 'No se pudo guardar la receta. Intentá de nuevo.' });
+    expect(removePdf).toHaveBeenCalledWith(supa.client, `${PATIENT_ID}/standalone-1700000000000.pdf`);
+    expect(supa.inserted.notifications).toBeUndefined();
   });
 });

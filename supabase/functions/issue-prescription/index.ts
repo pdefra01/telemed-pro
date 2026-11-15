@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buildPrescriptionPdf, uploadPrescriptionPdf } from '../_shared/prescriptionPdf.ts'
+import { buildPrescriptionPdf, removePrescriptionPdf, uploadPrescriptionPdf } from '../_shared/prescriptionPdf.ts'
 import { issuePrescription } from './issuePrescription.ts'
 
 // A doctor issues a receta to any affiliate without a video consultation.
@@ -36,7 +36,7 @@ serve(async (req) => {
     }
 
     const result = await issuePrescription(
-      { supabase, buildPdf: buildPrescriptionPdf, uploadPdf: uploadPrescriptionPdf },
+      { supabase, buildPdf: buildPrescriptionPdf, uploadPdf: uploadPrescriptionPdf, removePdf: removePrescriptionPdf },
       { token, body },
     )
     return json(result.status, result.body)

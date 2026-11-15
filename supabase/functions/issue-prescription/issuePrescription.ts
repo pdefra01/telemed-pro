@@ -17,6 +17,9 @@ export interface IssuePrescriptionDeps {
   buildPdf: (input: PrescriptionPdfRequest) => Promise<Uint8Array>
   // deno-lint-ignore no-explicit-any
   uploadPdf: (supabase: any, fileName: string, bytes: Uint8Array) => Promise<{ pdfUrl: string; pdfPath: string }>
+  // Best-effort cleanup of an uploaded PDF whose receta could not be saved.
+  // deno-lint-ignore no-explicit-any
+  removePdf: (supabase: any, fileName: string) => Promise<void>
   now?: () => number
 }
 
@@ -30,6 +33,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 
 const fail = (status: number, error: string): IssuePrescriptionResult => ({ status, body: { error } })
+const LOOKUP_FAILED = 'No se pudo emitir la receta. Intentá de nuevo.'
 
 interface ParsedInput {
   patientId: string
@@ -103,7 +107,8 @@ export async function issuePrescription(
   if (authError || !callerId) return fail(401, 'Sesión inválida o vencida.')
 
   // '*' so the function keeps working on a database without professional_title.
-  const { data: doctor } = await supabase.from('profiles').select('*').eq('id', callerId).maybeSingle()
+  const { data: doctor, error: doctorError } = await supabase.from('profiles').select('*').eq('id', callerId).maybeSingle()
+  if (doctorError) return fail(500, LOOKUP_FAILED)
   if (!doctor || doctor.role !== 'doctor') return fail(403, 'Solo un médico puede emitir recetas.')
 
   // 2. Input
@@ -113,16 +118,23 @@ export async function issuePrescription(
 
   // 3. Patient and, optionally, the family member attended. Checked here (same
   // rule as the DB trigger) so a wrong member never leaves an orphan PDF.
-  const { data: patient } = await supabase.from('profiles').select('*').eq('id', patientId).maybeSingle()
+  const { data: patient, error: patientError } = await supabase.from('profiles').select('*').eq('id', patientId).maybeSingle()
+  if (patientError) return fail(500, LOOKUP_FAILED)
   if (!patient) return fail(404, 'Paciente no encontrado.')
+
+  // Same rule as the chart: a patient, or an advisor holding a plan. Never staff.
+  const { data: isAffiliate, error: affiliateError } = await supabase.rpc('is_affiliate', { p_profile_id: patientId })
+  if (affiliateError) return fail(500, LOOKUP_FAILED)
+  if (isAffiliate !== true) return fail(400, 'Solo se pueden emitir recetas a afiliados.')
 
   let attended: { full_name: string | null; dni?: string | null } = { full_name: patient.full_name, dni: patient.dni }
   if (familyMemberId) {
-    const { data: member } = await supabase
+    const { data: member, error: memberError } = await supabase
       .from('family_members')
       .select('id, full_name, dni, family_group_id')
       .eq('id', familyMemberId)
       .maybeSingle()
+    if (memberError) return fail(500, LOOKUP_FAILED)
     if (!member || !patient.family_group_id || member.family_group_id !== patient.family_group_id) {
       return fail(400, 'El integrante no pertenece al grupo familiar del paciente.')
     }
@@ -175,6 +187,10 @@ export async function issuePrescription(
 
   if (insertError || !inserted) {
     console.error('[issue-prescription] insert failed:', insertError?.message)
+    if (pdfPath) {
+      await deps.removePdf(supabase, pdfPath).catch((err) =>
+        console.error('[issue-prescription] orphan PDF left in storage:', pdfPath, err instanceof Error ? err.message : err))
+    }
     return fail(500, 'No se pudo guardar la receta. Intentá de nuevo.')
   }
 

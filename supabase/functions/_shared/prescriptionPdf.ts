@@ -122,3 +122,10 @@ export async function uploadPrescriptionPdf(supabase: any, fileName: string, pdf
 
   return { pdfUrl: signedUrlData.signedUrl, pdfPath: fileName }
 }
+
+// Deletes a PDF uploaded for a receta that was never saved. Throws on failure.
+// deno-lint-ignore no-explicit-any
+export async function removePrescriptionPdf(supabase: any, fileName: string): Promise<void> {
+  const { error } = await supabase.storage.from('prescriptions_pdfs').remove([fileName])
+  if (error) throw error
+}
