@@ -18,9 +18,9 @@ Branch: feat/standalone-prescription · Delivery: single PR with work-unit commi
 
 ## Tasks
 
-- [ ] T1 — S2 · `_shared/prescriptionPdf.ts` (PDF + private upload, moved from finalize-consultation without behavior change) + `issue-prescription` (pure core with injected deps + Vitest tests, Deno entry) · inline
-- [ ] T2 — S1, S3 · UI: extract MedicationCard, NewPrescriptionModal (patient/member, meds, indications, obra social, WhatsApp status), button in DoctorDashboard; tests · inline
-- [ ] T3 — S2 · docs: deploy notes (new function + finalize-consultation redeploy) · inline
+- [x] T1 — S2 · `_shared/prescriptionPdf.ts` (PDF + private upload, moved from finalize-consultation without behavior change) + `issue-prescription` (pure core with injected deps + Vitest tests, Deno entry) · inline · RED (module missing) -> GREEN 13/13 · commit 2c7658c; review fixes RED 3 -> GREEN 16/16 · commit 6563731
+- [x] T2 — S1, S3 · UI: extract MedicationCard, NewPrescriptionModal (patient/member, meds, indications, obra social, WhatsApp status), button in DoctorDashboard; tests · inline · RED (modules missing) -> GREEN 11/11 + dashboard 14/14 · commit 6120759
+- [x] T3 — S2 · docs: COOLIFY_DEPLOYMENT.md (deploy issue-prescription + finalize-consultation) and MANUAL_DE_USUARIO.md 2.5 · inline · commit 810153e
 
 ## Log
 
@@ -28,3 +28,7 @@ Branch: feat/standalone-prescription · Delivery: single PR with work-unit commi
 - L2 (2026-11-15, user): "Medico puede hacer receta a cualquier afiliado sin consulta previa"
 - L3 Findings (explorer): `prescriptions.appointment_id` nullable; RLS lets any doctor read profiles/family_members; prescriptions RLS is FOR ALL for any doctor; finalize-consultation is the only writer, needs an appointment, and does not check the caller JWT (pre-existing gap, out of scope, follow-up); WhatsApp send works by prescription id and requires `doctor_id = requester`; patient views filter by patient_id only. No migration needed.
 - Risk: item 2 (new auth guard in an edge function using the service role).
+- L4 Native review of 2c7658c (risk + reliability lenses, user granted): approved and acknowledged. Advisory findings fixed in 6563731: recipient must pass is_affiliate (no staff), lookup errors return 500, orphan PDF removed when the insert fails. Not changed: body parsed before auth (harmless), finalize prints "Dx: " instead of "Dx: undefined" when diagnosis is missing.
+- L5 Checks: full Vitest 1582 passed, 5 failed = known base failures (VideoRoom x3, DashboardRepository, crypto). tsc error count equal to base (1 pre-existing). Edge entry files only syntax-checked with esbuild (no Deno). Assess after 2c7658c: medium, under_budget (no review due).
+- Follow-up (out of scope): finalize-consultation does not check the caller JWT.
+- L6 Independent verifier: S1/S2/S3 PASS, no blockers. Probes added as tests (empty and malformed familyMemberId) 18/18. Open notes: WhatsApp text says "de tu consulta" (server/whatsapp.js:192,202); is_affiliate ignores suspended/cancelled status (product decision pending).

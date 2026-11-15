@@ -285,4 +285,21 @@ describe('issuePrescription', () => {
     expect(removePdf).toHaveBeenCalledWith(supa.client, `${PATIENT_ID}/standalone-1700000000000.pdf`);
     expect(supa.inserted.notifications).toBeUndefined();
   });
+
+  it('treats an empty family member as the titular', async () => {
+    const { deps: d, supa } = deps();
+    const res = await issuePrescription(d, { token: 'doctor-token', body: { ...medsBody, familyMemberId: '' } });
+    expect(res.status).toBe(201);
+    expect(supa.inserted.prescriptions[0]).toMatchObject({ family_member_id: null });
+    expect(supa.touched).not.toContain('family_members');
+  });
+
+  it('rejects a malformed family member id before reading the patient', async () => {
+    const { deps: d, supa } = deps();
+    const res = await issuePrescription(d, { token: 'doctor-token', body: { ...medsBody, familyMemberId: 'not-a-uuid' } });
+    expect(res.status).toBe(400);
+    expect(supa.client.rpc).not.toHaveBeenCalled();
+    expect(supa.touched.filter((t) => t !== 'profiles')).toEqual([]);
+    expect(supa.inserted).toEqual({});
+  });
 });
