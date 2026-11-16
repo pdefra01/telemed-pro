@@ -1064,7 +1064,8 @@ const Affiliates: React.FC = () => {
                   ) : (
                     <>
                       <option value="" className="bg-[#0f172a]">Sin plan asignado</option>
-                      {plans.map(plan => (
+                      {/* Retired plans stay listed only for the affiliate who already has one. */}
+                      {plans.filter(plan => plan.isOffered || plan.id === affiliates.find(a => a.id === editId)?.planId).map(plan => (
                         <option key={plan.id} value={plan.id} className="bg-[#0f172a]">
                           {plan.name} ({plan.isUnlimited ? '∞' : `${plan.bonifiedConsultations} consultas`})
                         </option>
