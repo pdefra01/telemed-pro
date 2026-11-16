@@ -41,6 +41,7 @@ import { TeamPerformance } from './pages/advisor/TeamPerformance';
 import { Collections } from './pages/advisor/Collections';
 import { Commissions } from './pages/advisor/Commissions';
 import { CommissionsAdmin } from './pages/admin/CommissionsAdmin';
+import { LightSurface } from './components/admin/LightSurface';
 import { getBranding } from './config/branding';
 
 // Temporarily hides the floating AI chatbot everywhere. Set to true to bring it back.
@@ -419,7 +420,9 @@ const App: React.FC = () => {
         path="/team/performance"
         element={
           <ProtectedRoute user={user} allowedRoles={['supervisor', 'admin']}>
-            <TeamPerformance title={user?.role === 'admin' ? 'Metas y métricas comerciales' : 'Metas y métricas del equipo'} />
+            {user?.role === 'admin'
+              ? <LightSurface><TeamPerformance title="Metas y métricas comerciales" /></LightSurface>
+              : <TeamPerformance title="Metas y métricas del equipo" />}
           </ProtectedRoute>
         }
       />
@@ -428,7 +431,9 @@ const App: React.FC = () => {
         path="/team/collections"
         element={
           <ProtectedRoute user={user} allowedRoles={['supervisor', 'admin']}>
-            <Collections team title={user?.role === 'admin' ? 'Cobranzas comerciales' : 'Cobranzas del equipo'} />
+            {user?.role === 'admin'
+              ? <LightSurface><Collections team title="Cobranzas comerciales" /></LightSurface>
+              : <Collections team title="Cobranzas del equipo" />}
           </ProtectedRoute>
         }
       />
@@ -447,7 +452,7 @@ const App: React.FC = () => {
         path="/admin/commissions"
         element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
-            <CommissionsAdmin />
+            <LightSurface><CommissionsAdmin /></LightSurface>
           </ProtectedRoute>
         }
       />
@@ -456,7 +461,7 @@ const App: React.FC = () => {
         path="/admin/supervisors"
         element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
-            <SupervisorsAdmin />
+            <LightSurface><SupervisorsAdmin /></LightSurface>
           </ProtectedRoute>
         }
       />
@@ -464,7 +469,7 @@ const App: React.FC = () => {
         path="/admin/prospects"
         element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
-            <Prospects user={user as User} title="Prospectos comerciales" />
+            <LightSurface><Prospects user={user as User} title="Prospectos comerciales" /></LightSurface>
           </ProtectedRoute>
         }
       />
