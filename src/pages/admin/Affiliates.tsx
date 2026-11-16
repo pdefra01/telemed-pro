@@ -111,6 +111,7 @@ const Affiliates: React.FC = () => {
   }, [selectedRequest]);
   const [promoterFilter, setPromoterFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended' | 'cancelled' | 'debit'>('active');
+  const [searchTerm, setSearchTerm] = useState('');
   // Affiliate cancellations ("Dar de baja") by profile id; empty when they cannot be read.
   const [cancellations, setCancellations] = useState<Map<string, AffiliateCancellation>>(new Map());
   const [cancelTarget, setCancelTarget] = useState<Patient | null>(null);
@@ -481,13 +482,19 @@ const Affiliates: React.FC = () => {
   // Same status derivation as the "Estado de Cuenta" badge.
   const affiliateStatus = (p: typeof affiliates[number]) =>
     p.isActive ? 'active' : p.planStatus === 'suspended' ? 'suspended' : p.planStatus === 'cancelled' ? 'cancelled' : 'pending';
-  const filteredAffiliates = statusFilter === 'all'
+  const byStatus = statusFilter === 'all'
     ? affiliates
     : statusFilter === 'debit'
       ? affiliates.filter(p => debitRejections[p.id])
     : statusFilter === 'cancelled'
       ? affiliates.filter(p => cancellations.has(p.id) || p.planStatus === 'cancelled')
       : affiliates.filter(p => affiliateStatus(p) === statusFilter);
+  // Case- and accent-insensitive match on name, DNI or email, within the selected status.
+  const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const query = normalize(searchTerm.trim());
+  const filteredAffiliates = query
+    ? byStatus.filter(p => [p.name, p.dni, p.email].some(v => v && normalize(v).includes(query)))
+    : byStatus;
   const debitRejectedTotal = affiliates.filter(p => debitRejections[p.id]).length;
   // Advisors without a plan are listed so the admin can assign one, but they are not affiliates yet.
   const countedAffiliates = affiliates.filter(p => !p.isAdvisor || p.planId);
@@ -527,6 +534,9 @@ const Affiliates: React.FC = () => {
             <input
               type="text"
               placeholder="Buscar por DNI o Nombre..."
+              aria-label="Buscar afiliado"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none text-white text-sm w-full sm:w-72 transition-all group-hover:border-white/20"
             />
             <Search className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-emerald-400 transition-colors" size={18} />
