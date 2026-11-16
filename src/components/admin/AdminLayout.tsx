@@ -77,7 +77,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, user, onLogout }) =
     (item.children?.some((c) => location.pathname === c.path) ?? false);
 
   return (
-    <div className="h-screen overflow-hidden bg-[#020617] text-slate-200 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30">
+    <div className="dark h-screen overflow-hidden bg-[#020617] text-slate-200 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30">
       {/* Dynamic Ambient Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-500/10 blur-[120px] rounded-full animate-pulse"></div>

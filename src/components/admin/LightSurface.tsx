@@ -6,7 +6,7 @@ import React from 'react';
  * the admin renders them on this light surface instead.
  */
 export const LightSurface: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div data-testid="light-surface" className="rounded-3xl bg-gray-50 p-4 text-slate-900 md:p-8">
+  <div data-testid="light-surface" className="light rounded-3xl bg-gray-50 p-4 text-slate-900 md:p-8">
     {children}
   </div>
 );

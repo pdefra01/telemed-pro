@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/*
+ * `dark:` follows the screen, not the OS theme: the dark admin layout sets
+ * `.dark`, and a `.light` surface inside it (the CRM screens) switches it off.
+ */
+@custom-variant dark (&:where(.dark, .dark *):not(:where(.light, .light *)));
+
 :root {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
