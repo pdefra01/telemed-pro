@@ -108,6 +108,7 @@ describe('mapAdvisorRow', () => {
     const mapped = mapAdvisorRow(producer, profile, 3);
 
     expect(mapped).toEqual({
+      receivesBotLeads: false,
       createdAt: '2026-07-20T15:00:00.000Z',
       id: 'adv-1',
       name: 'Pedro Gómez',

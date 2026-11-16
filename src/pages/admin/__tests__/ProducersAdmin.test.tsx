@@ -11,6 +11,7 @@ vi.mock('../../../repositories/ProducerRepository', () => ({
     getProducers: vi.fn(),
     searchAdvisors: vi.fn(),
     setAdvisorStatus: vi.fn(),
+    setReceivesBotLeads: vi.fn(),
     updateProducer: vi.fn(),
   },
 }));
@@ -315,6 +316,45 @@ describe('ProducersAdmin', () => {
 
       await waitFor(() => expect(screen.getByText('Pedro Gómez')).toBeInTheDocument());
       expect(screen.queryByRole('combobox', { name: 'Supervisor de Pedro Gómez' })).not.toBeInTheDocument();
+    });
+  });
+  describe('"Recibe leads del bot" toggle (whatsapp-bot S5)', () => {
+    it('shows the toggle off for an active advisor and turns it on through the repository', async () => {
+      vi.mocked(producerRepository.setReceivesBotLeads).mockResolvedValue(undefined);
+      vi.mocked(producerRepository.getProducers)
+        .mockResolvedValueOnce([{ ...ACTIVE_PRODUCER, receivesBotLeads: false }])
+        .mockResolvedValueOnce([{ ...ACTIVE_PRODUCER, receivesBotLeads: true }]);
+
+      render(<ProducersAdmin />);
+      const toggle = await screen.findByRole('switch', { name: /recibe leads del bot/i });
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+      fireEvent.click(toggle);
+
+      await waitFor(() => expect(producerRepository.setReceivesBotLeads).toHaveBeenCalledWith('adv-pedro', true));
+      await waitFor(() =>
+        expect(screen.getByRole('switch', { name: /recibe leads del bot/i })).toHaveAttribute('aria-checked', 'true'),
+      );
+    });
+
+    it('turns the toggle off when it is on', async () => {
+      vi.mocked(producerRepository.setReceivesBotLeads).mockResolvedValue(undefined);
+      vi.mocked(producerRepository.getProducers).mockResolvedValue([{ ...ACTIVE_PRODUCER, receivesBotLeads: true }]);
+
+      render(<ProducersAdmin />);
+      fireEvent.click(await screen.findByRole('switch', { name: /recibe leads del bot/i }));
+
+      await waitFor(() => expect(producerRepository.setReceivesBotLeads).toHaveBeenCalledWith('adv-pedro', false));
+    });
+
+    it('does not show the toggle for an inactive advisor', async () => {
+      vi.mocked(producerRepository.getProducers).mockResolvedValue([INACTIVE_PRODUCER]);
+
+      render(<ProducersAdmin />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Inactivos' }));
+      await waitFor(() => expect(screen.getByText('Ana Ruiz')).toBeInTheDocument());
+
+      expect(screen.queryByRole('switch', { name: /recibe leads del bot/i })).not.toBeInTheDocument();
     });
   });
 });

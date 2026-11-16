@@ -659,6 +659,8 @@ export interface Producer {
   status: 'active' | 'inactive';
   createdAt?: string;
   totalAffiliatesReferred?: number;
+  /** Admin toggle "Recibe leads del bot" (WhatsApp bot round-robin). */
+  receivesBotLeads?: boolean;
 }
 // ── Advisor commissions (S2/S3) ─────────────────────────────────────────────
 export type CommissionStatus = 'generated' | 'retained' | 'approved' | 'excluded' | 'paid';

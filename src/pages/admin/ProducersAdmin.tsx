@@ -23,6 +23,7 @@ export const ProducersAdmin: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Producer[] | null>(null);
   const [searchError, setSearchError] = useState<string>('');
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [botLeadsUpdatingId, setBotLeadsUpdatingId] = useState<string | null>(null);
 
   // Form states
   const [firstName, setFirstName] = useState('');
@@ -244,6 +245,23 @@ export const ProducersAdmin: React.FC = () => {
     }
   };
 
+  /** "Recibe leads del bot": the advisor enters or leaves the WhatsApp bot round-robin. */
+  const handleToggleBotLeads = async (p: Producer) => {
+    const next = !p.receivesBotLeads;
+    setBotLeadsUpdatingId(p.id);
+    try {
+      await producerRepository.setReceivesBotLeads(p.id, next);
+      setToastMsg(next ? `${p.name} recibe leads del bot.` : `${p.name} ya no recibe leads del bot.`);
+      const update = (list: Producer[]) => list.map(x => (x.id === p.id ? { ...x, receivesBotLeads: next } : x));
+      setSearchResults(prev => (prev ? update(prev) : prev));
+      await loadProducers();
+    } catch (err: any) {
+      alert(err.message || 'Error al actualizar el asesor.');
+    } finally {
+      setBotLeadsUpdatingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-500">
       {/* Header */}
@@ -396,11 +414,33 @@ export const ProducersAdmin: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-white/5 text-xs">
+              <div className="pt-3 border-t border-white/5 text-xs flex items-end justify-between gap-3">
                 <div>
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Afiliados Traídos</span>
                   <span className="font-mono font-bold text-teal-400 text-lg">{p.totalAffiliatesReferred || 0}</span>
                 </div>
+                {p.status === 'active' && p.hasAccount && (
+                  <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    <span id={`bot-leads-${p.id}`}>Recibe leads del bot</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={p.receivesBotLeads === true}
+                      aria-labelledby={`bot-leads-${p.id}`}
+                      onClick={() => handleToggleBotLeads(p)}
+                      disabled={botLeadsUpdatingId === p.id}
+                      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border border-white/10 transition-colors disabled:opacity-50 ${
+                        p.receivesBotLeads ? 'bg-teal-500' : 'bg-white/10'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                          p.receivesBotLeads ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {p.hasAccount && supervisors && supervisors.length > 0 && p.id in supervisorByAdvisor && (
