@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_bot_conversations (
   phone            TEXT PRIMARY KEY,               -- normalized, e.g. 5493871234567
   mode             TEXT NOT NULL DEFAULT 'bot' CHECK (mode IN ('bot', 'handed_off')),
   history          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  bot_reply_times  JSONB NOT NULL DEFAULT '[]'::jsonb,  -- bot replies in the last hour (cap)
   contact_name     TEXT,
   prospect_id      UUID REFERENCES public.prospects(id) ON DELETE SET NULL,
   handed_off_at    TIMESTAMPTZ,
@@ -109,11 +110,14 @@ BEGIN
     RAISE EXCEPTION 'invalid_phone' USING ERRCODE = '22023';
   END IF;
 
-  -- An open prospect for the same phone keeps its advisor: no duplicate lead.
+  -- An open prospect for the same phone keeps its advisor (no duplicate lead),
+  -- as long as that advisor is still active and in the bot rotation.
   SELECT x.id, x.advisor_id INTO v_existing
     FROM public.prospects x
+    JOIN public.producers pr ON pr.id = x.advisor_id
    WHERE public.normalize_ar_phone(x.phone) = v_phone
      AND x.status NOT IN ('affiliated', 'lost')
+     AND pr.status = 'active' AND pr.receives_bot_leads
    ORDER BY x.created_at DESC
    LIMIT 1;
 

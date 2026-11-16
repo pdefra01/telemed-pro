@@ -205,7 +205,8 @@ describe('createWhatsappBot.handleEvent', () => {
     store.conversations.set('5493874445555', {
       phone: '5493874445555',
       mode: 'bot',
-      history: Array.from({ length: 10 }, () => ({ role: 'bot', text: 'x', at: recent })),
+      history: [],
+      bot_reply_times: Array.from({ length: 10 }, () => recent),
     });
     await bot.handleEvent(inboundEvent());
     expect(waha.sendToChat).not.toHaveBeenCalled();
@@ -219,6 +220,31 @@ describe('createWhatsappBot.handleEvent', () => {
     ]);
     expect(llm.respond).toHaveBeenCalledTimes(2);
     expect(llm.respond.mock.calls[1][0].history.map((h) => h.role)).toEqual(['user', 'bot']);
+  });
+
+  it('keeps the hourly cap under a flood: 60 messages in a minute get 10 replies', async () => {
+    const store = memoryStore();
+    const waha = fakeWaha();
+    const llm = { respond: vi.fn(async () => ({ reply: 'ok', action: 'none' })) };
+    let t = NOW.getTime();
+    const bot = createWhatsappBot({ store, waha, llm, adhesionUrl: ADHESION_URL, now: () => new Date(t), sleep: async () => {} });
+    for (let i = 0; i < 60; i += 1) {
+      await bot.handleEvent(inboundEvent({ id: `flood-${i}`, body: `m${i}` }));
+      t += 1000;
+    }
+    expect(llm.respond).toHaveBeenCalledTimes(10);
+    expect(waha.sendToChat).toHaveBeenCalledTimes(10);
+  });
+
+  it('strips links from the name and summary sent to the advisor', async () => {
+    const lead = { prospect_id: 'p', advisor_id: 'a', advisor_name: 'Pedro', advisor_phone: '3876000000', reused: false };
+    const { bot, waha } = setup({
+      lead,
+      llmResult: { reply: 'Te contacta un asesor.', action: 'handoff', name: 'Ana https://evil.example/x', summary: 'Entrá a www.evil.example ya' },
+    });
+    await bot.handleEvent(inboundEvent());
+    const notice = waha.sendText.mock.calls[0][0].text;
+    expect(notice).not.toMatch(/evil\.example/);
   });
 
   it('resolves a hidden @lid sender to its phone number', async () => {

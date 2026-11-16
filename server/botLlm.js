@@ -107,6 +107,9 @@ export function createGeminiBotLlm({ client, model, adhesionUrl }) {
           responseSchema: RESPONSE_SCHEMA,
           temperature: 0.3,
           maxOutputTokens: 600,
+          // 2.5 Flash thinks by default and thinking tokens count toward the
+          // output limit, which could truncate the JSON answer.
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
       return parseResult(response.text ?? '');

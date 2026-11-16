@@ -59,6 +59,13 @@ function isDirectChat(chatId) {
   return typeof chatId === 'string' && (chatId.endsWith('@c.us') || chatId.endsWith('@lid'));
 }
 
+/** Removes links so a sender cannot relay a URL to an advisor through the lead notice. */
+const LINK_RE = /(?:https?:\/\/|www\.)\S+|[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|ar|io|me|ly|xyz|info|link|site)(?:\/\S*)?/gi;
+
+function stripLinks(text) {
+  return typeof text === 'string' ? text.replace(LINK_RE, '[link]') : text;
+}
+
 function typingDelayMs(text) {
   return Math.min(4000, 1500 + text.length * 15);
 }
@@ -82,7 +89,9 @@ export function createWhatsappBot({ store, waha, llm, adhesionUrl, now = () => n
     }
   }
 
-  async function notifyAdvisor(lead, { fullName, phone, summary }) {
+  async function notifyAdvisor(lead, { fullName: rawName, phone, summary: rawSummary }) {
+    const fullName = stripLinks(rawName);
+    const summary = stripLinks(rawSummary);
     const advisorPhone = normalizeArgentinePhone(lead.advisor_phone);
     if (!advisorPhone) {
       log.warn?.('[whatsapp-bot] advisor has no valid phone, lead not notified:', lead.advisor_id);
@@ -136,10 +145,13 @@ export function createWhatsappBot({ store, waha, llm, adhesionUrl, now = () => n
     conv.last_inbound_at = at.toISOString();
 
     const lastBot = [...conv.history].reverse().find((h) => h.role === 'bot');
-    const botRepliesLastHour = conv.history.filter(
-      (h) => h.role === 'bot' && at - new Date(h.at) < HOUR_MS,
-    ).length;
-    const pushBot = (text) => conv.history.push({ role: 'bot', text, at: at.toISOString() });
+    // Reply times live apart from the trimmed history, so the cap holds under a flood.
+    conv.bot_reply_times = (Array.isArray(conv.bot_reply_times) ? conv.bot_reply_times : [])
+      .filter((ts) => at - new Date(ts) < HOUR_MS);
+    const pushBot = (text) => {
+      conv.history.push({ role: 'bot', text, at: at.toISOString() });
+      conv.bot_reply_times.push(at.toISOString());
+    };
     const save = () => {
       conv.history = conv.history.slice(-HISTORY_LIMIT);
       return store.saveConversation(conv);
@@ -158,14 +170,14 @@ export function createWhatsappBot({ store, waha, llm, adhesionUrl, now = () => n
       conv.mode = 'bot';
     }
 
-    const text = typeof msg.body === 'string' ? msg.body.trim() : '';
-    const priorHistory = conv.history.map(({ role, text: t }) => ({ role, text: t }));
-    conv.history.push({ role: 'user', text: text || '[mensaje sin texto]', at: at.toISOString() });
-
-    if (botRepliesLastHour >= HOURLY_REPLY_CAP) {
+    if (conv.bot_reply_times.length >= HOURLY_REPLY_CAP) {
       log.warn?.('[whatsapp-bot] hourly reply cap reached for', key);
       return save();
     }
+
+    const text = typeof msg.body === 'string' ? msg.body.trim() : '';
+    const priorHistory = conv.history.map(({ role, text: t }) => ({ role, text: t }));
+    conv.history.push({ role: 'user', text: text || '[mensaje sin texto]', at: at.toISOString() });
 
     let result;
     try {
@@ -216,6 +228,8 @@ export function createWhatsappBot({ store, waha, llm, adhesionUrl, now = () => n
 
 /** Supabase-backed persistence for the bot (service_role client). */
 export function createSupabaseBotStore(supabaseAdmin) {
+  // SQL normalize_ar_phone needs the leading "+" to accept a foreign number.
+  const sqlPhone = (phone) => (phone.startsWith('549') ? phone : `+${phone}`);
   return {
     async markInbound(messageId) {
       const { error } = await supabaseAdmin.from('whatsapp_bot_inbound').insert({ message_id: messageId });
@@ -239,14 +253,14 @@ export function createSupabaseBotStore(supabaseAdmin) {
       if (error) throw new Error(error.message);
     },
     async contactKind(phone) {
-      const { data, error } = await supabaseAdmin.rpc('whatsapp_bot_contact_kind', { p_phone: phone });
+      const { data, error } = await supabaseAdmin.rpc('whatsapp_bot_contact_kind', { p_phone: sqlPhone(phone) });
       if (error) throw new Error(error.message);
       return data;
     },
     async assignLead({ fullName, phone, notes }) {
       const { data, error } = await supabaseAdmin.rpc('assign_whatsapp_bot_lead', {
         p_full_name: fullName,
-        p_phone: phone,
+        p_phone: sqlPhone(phone),
         p_notes: notes,
       });
       if (error) throw new Error(error.message);
