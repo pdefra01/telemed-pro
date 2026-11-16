@@ -180,6 +180,7 @@ El mismo número que manda las recetas atiende los mensajes entrantes (por ejemp
 - **Persona nueva**: el bot (Gemini) responde dudas solo con la información de medinexsalud.com, comparte el link de adhesión o deriva a un asesor. Al derivar crea un prospecto en el CRM (origen `whatsapp_bot`), lo asigna por turno entre los asesores activos con **"Recibe leads del bot"** prendido (Admin → Asesores) y le avisa al asesor por WhatsApp. Después el bot no responde en ese chat por 7 días.
 - **Afiliado** (su teléfono está en un perfil): un mensaje fijo que lo manda a la app y a info@medinex.com.ar, como mucho una vez cada 12 horas.
 - **Asesores, médicos y admins**: el bot no responde.
+- **Retención**: las conversaciones sin actividad hace 30 días se borran solas (un job diario), porque pueden traer datos de salud. El prospecto del CRM guarda solo el resumen que arma el bot, nunca los mensajes. Si Gemini no responde en 20 segundos, el bot contesta con el mail de contacto.
 
 > [!WARNING]
 > El canal no es oficial y es el mismo número de las recetas. El bot espera unos segundos antes de cada respuesta y contesta como mucho 10 mensajes por hora en cada chat. Activalo y mirá el comportamiento los primeros días.

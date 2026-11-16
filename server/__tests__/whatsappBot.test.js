@@ -247,6 +247,28 @@ describe('createWhatsappBot.handleEvent', () => {
     expect(notice).not.toMatch(/evil\.example/);
   });
 
+  it('keeps only the summary in the CRM notes, never the message transcript', async () => {
+    const lead = { prospect_id: 'p', advisor_id: 'a', advisor_name: 'Pedro', advisor_phone: '3876000000', reused: false };
+    const { bot, store } = setup({
+      lead,
+      llmResult: { reply: 'Te contacta un asesor.', action: 'handoff', name: 'Ana www.evil.example', summary: 'Quiere el plan familiar' },
+    });
+    await bot.handleEvent(inboundEvent({ body: 'Tengo fiebre y dolor de garganta' }));
+    const { fullName, notes } = store.assignLead.mock.calls[0][0];
+    expect(notes).toContain('Quiere el plan familiar');
+    expect(notes).not.toContain('fiebre');
+    expect(fullName).not.toMatch(/evil/);
+  });
+
+  it('answers with the fallback when the LLM does not answer in time', async () => {
+    const store = memoryStore();
+    const waha = fakeWaha();
+    const llm = { respond: vi.fn(() => new Promise(() => {})) };
+    const bot = createWhatsappBot({ store, waha, llm, adhesionUrl: ADHESION_URL, now: () => NOW, sleep: async () => {}, llmTimeoutMs: 20 });
+    await bot.handleEvent(inboundEvent());
+    expect(waha.sendToChat).toHaveBeenCalledWith({ chatId: '5493874445555@c.us', text: FALLBACK_TEXT });
+  });
+
   it('resolves a hidden @lid sender to its phone number', async () => {
     const { bot, waha, store } = setup();
     await bot.handleEvent(inboundEvent({ id: 'lid-1', from: '123456789@lid' }));

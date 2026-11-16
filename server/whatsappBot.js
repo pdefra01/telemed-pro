@@ -70,7 +70,9 @@ function typingDelayMs(text) {
   return Math.min(4000, 1500 + text.length * 15);
 }
 
-export function createWhatsappBot({ store, waha, llm, adhesionUrl, now = () => new Date(), sleep, log = console }) {
+export function createWhatsappBot({
+  store, waha, llm, adhesionUrl, now = () => new Date(), sleep, log = console, llmTimeoutMs = 20000,
+}) {
   const wait = sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
 
   async function reply(chatId, text) {
@@ -181,7 +183,14 @@ export function createWhatsappBot({ store, waha, llm, adhesionUrl, now = () => n
 
     let result;
     try {
-      result = await llm.respond({ history: priorHistory, message: text || '[mensaje sin texto]', contactName });
+      // A hung LLM call would stall this chat's queue: give up after llmTimeoutMs.
+      let timer;
+      result = await Promise.race([
+        llm.respond({ history: priorHistory, message: text || '[mensaje sin texto]', contactName }),
+        new Promise((_, rej) => {
+          timer = setTimeout(() => rej(new Error('LLM timeout')), llmTimeoutMs);
+        }),
+      ]).finally(() => clearTimeout(timer));
     } catch (err) {
       log.error?.('[whatsapp-bot] llm failed:', err.message);
       await reply(chatId, FALLBACK_TEXT);
@@ -193,14 +202,10 @@ export function createWhatsappBot({ store, waha, llm, adhesionUrl, now = () => n
     if (result.action === 'adhesion' && !out.includes(adhesionUrl)) out = `${out}\n\n${adhesionUrl}`;
 
     if (result.action === 'handoff') {
-      const fullName = result.name || contactName || null;
-      const notes = [
-        'Lead del bot de WhatsApp.',
-        `Resumen: ${result.summary || 'sin resumen'}`,
-        '',
-        'Últimos mensajes:',
-        ...conv.history.slice(-6).map((h) => `${h.role === 'user' ? 'Contacto' : 'Bot'}: ${h.text}`),
-      ].join('\n');
+      // Only the LLM summary reaches the CRM: the transcript may carry health data
+      // and is purged with the conversation (S7). Links never reach an advisor.
+      const fullName = stripLinks(result.name || contactName || null);
+      const notes = `Lead del bot de WhatsApp.\nResumen: ${stripLinks(result.summary) || 'sin resumen'}`;
       let lead = null;
       try {
         lead = phone ? await store.assignLead({ fullName, phone, notes }) : null;
