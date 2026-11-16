@@ -48,6 +48,12 @@ Configurar estas variables en la sección **Environment Variables** de Coolify p
 | `WHATSAPP_GATEWAY_URL` | URL **interna** del gateway de WhatsApp (ver sección 4) | `http://waha:3000` |
 | `WHATSAPP_GATEWAY_API_KEY` | Clave con la que `server.js` llama al gateway | `(cadena larga aleatoria)` |
 | `WHATSAPP_GATEWAY_SESSION` | Nombre de la sesión del gateway (opcional) | `default` |
+| `WHATSAPP_BOT_ENABLED` | Activa el bot de WhatsApp (sección 5). Solo `true` lo activa | `true` |
+| `WHATSAPP_WEBHOOK_HMAC_KEY` | Clave con la que WAHA firma los webhooks del bot; debe ser igual a `WHATSAPP_HOOK_HMAC_KEY` del servicio WAHA | `(cadena larga aleatoria)` |
+| `GEMINI_API_KEY` | Clave de la API de Gemini para el bot (Google AI Studio, proyecto con facturación activa) | `AIza...` |
+| `BOT_LLM_PROVIDER` | Proveedor del modelo del bot (opcional; hoy solo `gemini`) | `gemini` |
+| `BOT_LLM_MODEL` | Modelo del bot (opcional; por defecto `gemini-2.5-flash`) | `gemini-2.5-flash` |
+| `BOT_ADHESION_URL` | Link al formulario de adhesión que comparte el bot (opcional) | `https://medinex.duckdns.org/#/adhesion?promoter=LANDING` |
 | `EMAIL_VERIFICATION_REQUIRED` | Exige verificar el correo (código OTP) en la adhesión pública. Activado por defecto; solo `false` lo desactiva. Debe coincidir con `VITE_EMAIL_VERIFICATION_REQUIRED` del formulario | `true` |
 
 > **Proxy y límite de intentos (sin variables nuevas).** `server.js` confía en **un** salto de proxy (`app.set('trust proxy', 1)`, el Traefik de Coolify) para conocer la IP real del cliente. El endpoint público `POST /api/adhesion/:id/activate` admite 10 intentos cada 15 minutos por IP (`server/rateLimits.js`) y responde `429` al superarlo. El contador vive en memoria: vale para una sola instancia. Si se agrega otro proxy delante (p. ej. Cloudflare) hay que subir el número de saltos, y si se escala a varias réplicas hace falta un almacenamiento compartido.
@@ -164,3 +170,30 @@ npx supabase functions deploy finalize-consultation
 ```
 
 No requiere migraciones. Orden sugerido: desplegar las dos funciones y después la app en Coolify (el botón **Nueva receta** llama a `issue-prescription`).
+
+---
+
+## 🤖 5. Bot de WhatsApp (número de Medinex)
+
+El mismo número que manda las recetas atiende los mensajes entrantes (por ejemplo, el botón de WhatsApp de medinexsalud.com). WAHA reenvía cada mensaje a `POST /api/whatsapp/webhook` y el bot responde según quién escribe:
+
+- **Persona nueva**: el bot (Gemini) responde dudas solo con la información de medinexsalud.com, comparte el link de adhesión o deriva a un asesor. Al derivar crea un prospecto en el CRM (origen `whatsapp_bot`), lo asigna por turno entre los asesores activos con **"Recibe leads del bot"** prendido (Admin → Asesores) y le avisa al asesor por WhatsApp. Después el bot no responde en ese chat por 7 días.
+- **Afiliado** (su teléfono está en un perfil): un mensaje fijo que lo manda a la app y a info@medinex.com.ar, como mucho una vez cada 12 horas.
+- **Asesores, médicos y admins**: el bot no responde.
+
+> [!WARNING]
+> El canal no es oficial y es el mismo número de las recetas. El bot espera unos segundos antes de cada respuesta y contesta como mucho 10 mensajes por hora en cada chat. Activalo y mirá el comportamiento los primeros días.
+
+### Pasos
+
+1. **Clave de Gemini**: en Google AI Studio crear una API key en un proyecto con facturación activa (el plan gratuito puede usar los mensajes para entrenar modelos). Una suscripción de Google AI (Plus/Pro) no cubre el uso de la API.
+2. **Migración**: aplicar `supabase/migrations/20261116010000_whatsapp_bot.sql` a producción.
+3. **App** (variables de la sección 1.B): `WHATSAPP_BOT_ENABLED=true`, `WHATSAPP_WEBHOOK_HMAC_KEY`, `GEMINI_API_KEY`. Redeploy.
+4. **Servicio WAHA** (variables de entorno, después Redeploy del servicio):
+   - `WHATSAPP_HOOK_URL` = `https://medinex.duckdns.org/api/whatsapp/webhook` (o la URL interna de la app en la red de Coolify + `/api/whatsapp/webhook`).
+   - `WHATSAPP_HOOK_EVENTS` = `message`
+   - `WHATSAPP_HOOK_HMAC_KEY` = el mismo valor que `WHATSAPP_WEBHOOK_HMAC_KEY` de la app.
+5. **Asesores**: en Admin → Asesores prender **"Recibe leads del bot"** en quienes atienden. Sin ninguno prendido, el bot responde con el mail de contacto en lugar de derivar.
+6. **Prueba**: escribir al número desde un teléfono que no esté en ningún perfil.
+
+Para apagar el bot sin tocar WAHA: `WHATSAPP_BOT_ENABLED=false` y Redeploy (el webhook responde `404`). Con la app en modo mantenimiento de Coolify, los mensajes no llegan al bot.
