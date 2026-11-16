@@ -137,11 +137,12 @@ export function createWahaClient({ baseUrl, apiKey, session = 'default', fetchFn
     return (await getSessionStatus()) === 'WORKING';
   }
 
-  async function sendText({ phone, text }) {
+  /** Sends text to a raw WAHA chat id (`...@c.us` or a hidden `...@lid` contact). */
+  async function sendToChat({ chatId, text }) {
     const response = await fetchFn(`${root}/api/sendText`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ session, chatId: `${phone}@c.us`, text }),
+      body: JSON.stringify({ session, chatId, text }),
     });
 
     if (!response.ok) {
@@ -151,7 +152,22 @@ export function createWahaClient({ baseUrl, apiKey, session = 'default', fetchFn
     return response.json();
   }
 
-  return { sendFile, sendText, isSessionReady, getSessionStatus };
+  async function sendText({ phone, text }) {
+    return sendToChat({ chatId: `${phone}@c.us`, text });
+  }
+
+  /** Phone digits behind a hidden `@lid` contact, or null when WAHA does not know it. */
+  async function getPhoneByLid(lid) {
+    const response = await fetchFn(`${root}/api/${session}/lids/${encodeURIComponent(lid)}`, { headers });
+    if (!response.ok) return null;
+    const body = await response.json().catch(() => null);
+    // Newer WAHA returns { lid, pn: '549...@c.us' }; the docs show { phoneNumber }.
+    const raw = body?.pn ?? body?.phoneNumber;
+    const digits = typeof raw === 'string' ? raw.split('@')[0].replace(/\D/g, '') : '';
+    return digits || null;
+  }
+
+  return { sendFile, sendText, sendToChat, getPhoneByLid, isSessionReady, getSessionStatus };
 }
 
 // Minimum gap between two successful sends of the same prescription. Protects

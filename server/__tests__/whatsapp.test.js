@@ -152,6 +152,25 @@ describe('createWahaClient', () => {
 
   const okResponse = (body = {}) => ({ ok: true, status: 201, json: async () => body, text: async () => JSON.stringify(body) });
 
+  it('sends text to a raw chat id (e.g. a hidden @lid contact)', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(okResponse({ id: 'msg-2' }));
+    const client = createWahaClient({ ...config, fetchFn });
+    await client.sendToChat({ chatId: '123456789@lid', text: 'Hola' });
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('http://waha:3000/api/sendText');
+    expect(JSON.parse(init.body)).toEqual({ session: 'default', chatId: '123456789@lid', text: 'Hola' });
+  });
+
+  it('resolves the phone number of a @lid contact, or null when WAHA does not know it', async () => {
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(okResponse({ lid: '123@lid', pn: '5493871112222@c.us' }))
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}), text: async () => '' });
+    const client = createWahaClient({ ...config, fetchFn });
+    expect(await client.getPhoneByLid('123@lid')).toBe('5493871112222');
+    expect(fetchFn.mock.calls[0][0]).toBe('http://waha:3000/api/default/lids/123%40lid');
+    expect(await client.getPhoneByLid('999@lid')).toBeNull();
+  });
+
   it('sends a file as base64 with the api key and the chat id', async () => {
     const fetchFn = vi.fn().mockResolvedValue(okResponse({ id: 'msg-1' }));
     const client = createWahaClient({ ...config, fetchFn });
