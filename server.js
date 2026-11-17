@@ -20,6 +20,7 @@ import { createDniUploadUrls, cleanupOrphanDniPhotos, ORPHAN_CLEANUP_INTERVAL_MS
 import { startProspectIntakeJob } from './server/prospectIntake.js';
 import { cancelAffiliateHandler, startAffiliateCancellationJob } from './server/affiliateCancellation.js';
 import { startDebitRejectionJob, DEBIT_REJECTIONS_INTERVAL_MS } from './server/debitRejections.js';
+import { startDebitAdvisorAlertsJob } from './server/debitAdvisorAlerts.js';
 import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './server/emailVerification.js';
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/whatsappSessionMonitor.js';
@@ -1653,3 +1654,7 @@ startDebitRejectionJob({
   sendPaymentReceipt,
   intervalMs: debitRejectionsHours > 0 ? debitRejectionsHours * 60 * 60 * 1000 : DEBIT_REJECTIONS_INTERVAL_MS,
 });
+
+// Debit alerts: tells the affiliate's advisor (in-app + WhatsApp) when the debit was never
+// completed after a day, was rejected, or was cancelled without a baja.
+startDebitAdvisorAlertsJob({ supabaseAdmin, waha });
