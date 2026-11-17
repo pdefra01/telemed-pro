@@ -19,7 +19,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ testId, title, value, goal, format 
   <div data-testid={testId} className="space-y-1">
     <p className="text-sm text-gray-600">
       {title}: <strong className="text-slate-900">{goal !== undefined ? `${format(value)} de ${format(goal)}` : format(value)}</strong>
-      {goal === undefined && <span className="text-xs text-gray-400"> · Sin meta</span>}
+      {goal === undefined && <span className="text-xs text-gray-500"> · Sin meta</span>}
     </p>
     {goal !== undefined && <ProgressBar percent={progressPercent(value, goal)} label={`Avance de ${title.toLowerCase()}`} />}
   </div>

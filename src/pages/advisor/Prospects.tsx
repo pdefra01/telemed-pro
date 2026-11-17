@@ -252,7 +252,7 @@ export const Prospects: React.FC<ProspectsProps> = ({ user, title }) => {
   const advisorName = (p: Prospect) => p.advisorName ?? advisors.find((a) => a.id === p.advisorId)?.name ?? 'Asesor sin nombre';
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="max-w-5xl mx-auto space-y-4 text-slate-900">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="space-y-1">
           <h1 className="text-2xl font-black text-[#003366]">{title ?? (team ? 'Prospectos del equipo' : 'Mis prospectos')}</h1>
@@ -352,7 +352,7 @@ export const Prospects: React.FC<ProspectsProps> = ({ user, title }) => {
                   {p.source === 'lead_survey' && <span className="text-xs text-indigo-700">Desde encuesta</span>}
                   {team && <span className="text-sm text-gray-500">{advisorName(p)}</span>}
                   {p.phone && <span className="text-sm text-gray-500">{p.phone}</span>}
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-500">
                     {formatDate(p.lastContactAt) ? `Últ. contacto ${formatDate(p.lastContactAt)}` : 'Sin contacto'}
                   </span>
                   <select
