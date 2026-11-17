@@ -31,13 +31,13 @@ function fakeSupabase({ error = null } = {}) {
 }
 
 describe('purgeWhatsappBotData', () => {
-  it('deletes conversations idle for 30 days and processed ids older than 7 days', async () => {
+  it('deletes conversations idle for 15 days and processed ids older than 7 days', async () => {
     const sb = fakeSupabase();
     await purgeWhatsappBotData({ supabaseAdmin: sb, now: () => NOW });
-    expect(CONVERSATION_RETENTION_DAYS).toBe(30);
+    expect(CONVERSATION_RETENTION_DAYS).toBe(15);
     expect(INBOUND_RETENTION_DAYS).toBe(7);
     expect(sb.calls).toEqual([
-      { table: 'whatsapp_bot_conversations', column: 'updated_at', value: '2026-10-17T15:00:00.000Z' },
+      { table: 'whatsapp_bot_conversations', column: 'updated_at', value: '2026-11-01T15:00:00.000Z' },
       { table: 'whatsapp_bot_inbound', column: 'received_at', value: '2026-11-09T15:00:00.000Z' },
     ]);
   });

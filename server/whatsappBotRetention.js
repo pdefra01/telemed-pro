@@ -1,10 +1,10 @@
 /**
  * Retention for the WhatsApp bot (odd/tasks/whatsapp-bot.md, S7).
  * Messages from contacts that are not affiliates may carry health data, so a
- * conversation is deleted 30 days after its last activity. Processed WAHA
+ * conversation is deleted 15 days after its last activity. Processed WAHA
  * message ids only guard against webhook retries and are kept 7 days.
  */
-export const CONVERSATION_RETENTION_DAYS = 30;
+export const CONVERSATION_RETENTION_DAYS = 15;
 export const INBOUND_RETENTION_DAYS = 7;
 export const WHATSAPP_BOT_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 

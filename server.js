@@ -1637,7 +1637,7 @@ if (supabaseAdmin) {
 // Automatic prospect intake: lead surveys with consent become prospects and adhesions advance them.
 startProspectIntakeJob({ supabaseAdmin });
 
-// WhatsApp bot retention: conversations idle for 30 days are deleted (may carry health data).
+// WhatsApp bot retention: conversations idle for 15 days are deleted (may carry health data).
 if (whatsappBot) {
   startWhatsappBotRetentionJob({ supabaseAdmin });
 }
