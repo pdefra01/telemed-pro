@@ -316,7 +316,7 @@ export const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ user }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-955 flex items-center justify-center text-white">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
           <span className="text-slate-400 font-medium font-sans">Cargando consola del asesor...</span>

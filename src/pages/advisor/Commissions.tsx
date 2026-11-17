@@ -99,7 +99,7 @@ export const Commissions: React.FC<CommissionsProps> = (props) => {
   if (visible === null) return <p className="max-w-5xl mx-auto text-gray-500">Cargando comisiones…</p>;
   if (!visible) {
     return (
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="max-w-5xl mx-auto space-y-4 text-slate-900">
         <h1 className="text-2xl font-black text-[#003366]">{props.title ?? 'Comisiones'}</h1>
         <p className="text-gray-600">Las comisiones no están disponibles.</p>
       </div>
@@ -216,7 +216,7 @@ const CommissionsContent: React.FC<CommissionsProps> = ({ title = 'Comisiones', 
   const hasPending = (rows: CommissionSummary[]) => rows.some((r) => r.generatedCount > 0 || r.retainedCount > 0);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="max-w-5xl mx-auto space-y-4 text-slate-900">
       <header className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
         <h1 className="text-2xl font-black text-[#003366]">{title}</h1>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">

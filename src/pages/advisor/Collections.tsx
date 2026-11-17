@@ -169,7 +169,7 @@ export const Collections: React.FC<CollectionsProps> = ({ title = 'Cobranzas', t
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="max-w-5xl mx-auto space-y-4 text-slate-900">
       <header className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
         <h1 className="text-2xl font-black text-[#003366]">{title}</h1>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">

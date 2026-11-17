@@ -27,7 +27,7 @@ const Against: React.FC<{ testId: string; value: number; goal?: number; format: 
     ) : (
       <>
         <span className="font-semibold text-slate-900">{format(value)}</span>
-        <span className="ml-1 text-xs text-gray-400">sin meta</span>
+        <span className="ml-1 text-xs text-gray-500">sin meta</span>
       </>
     )}
   </div>
@@ -122,7 +122,7 @@ export const TeamPerformance: React.FC<TeamPerformanceProps> = ({ title = 'Metas
     : undefined;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 text-slate-900">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-black text-[#003366]">{title}</h1>
         <div className="flex items-center gap-2">
