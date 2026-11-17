@@ -26,6 +26,7 @@ import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/w
 import { whatsappStatusHandler } from './server/whatsappStatus.js';
 import { createWhatsappBot, createSupabaseBotStore, whatsappWebhookHandler } from './server/whatsappBot.js';
 import { createBotLlm } from './server/botLlm.js';
+import { startWhatsappBotRetentionJob } from './server/whatsappBotRetention.js';
 import { preapprovalTerms } from './server/pricing.js';
 import { computeAdvisorStats } from './server/advisorStats.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
@@ -190,14 +191,20 @@ const waha = whatsappEnabled
 const BOT_ADHESION_URL = process.env.BOT_ADHESION_URL || 'https://medinex.duckdns.org/#/adhesion?promoter=LANDING';
 const WHATSAPP_WEBHOOK_HMAC_KEY = process.env.WHATSAPP_WEBHOOK_HMAC_KEY;
 const whatsappBotRequested = process.env.WHATSAPP_BOT_ENABLED === 'true';
-const botLlm = whatsappBotRequested
-  ? createBotLlm({
+// The bot is optional: a bad BOT_LLM_PROVIDER disables it instead of stopping the server.
+let botLlm = null;
+if (whatsappBotRequested) {
+  try {
+    botLlm = createBotLlm({
       provider: process.env.BOT_LLM_PROVIDER || 'gemini',
       apiKey: process.env.GEMINI_API_KEY,
       model: process.env.BOT_LLM_MODEL,
       adhesionUrl: BOT_ADHESION_URL,
-    })
-  : null;
+    });
+  } catch (err) {
+    console.error('❌ WhatsApp bot LLM not created:', err.message);
+  }
+}
 const whatsappBot = whatsappBotRequested && waha && supabaseAdmin && botLlm && WHATSAPP_WEBHOOK_HMAC_KEY
   ? createWhatsappBot({ store: createSupabaseBotStore(supabaseAdmin), waha, llm: botLlm, adhesionUrl: BOT_ADHESION_URL })
   : null;
@@ -1629,6 +1636,11 @@ if (supabaseAdmin) {
 
 // Automatic prospect intake: lead surveys with consent become prospects and adhesions advance them.
 startProspectIntakeJob({ supabaseAdmin });
+
+// WhatsApp bot retention: conversations idle for 15 days are deleted (may carry health data).
+if (whatsappBot) {
+  startWhatsappBotRetentionJob({ supabaseAdmin });
+}
 
 // Affiliate cancellations: blocks the login once a scheduled "baja" is due.
 startAffiliateCancellationJob({ supabaseAdmin });
