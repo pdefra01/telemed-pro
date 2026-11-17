@@ -42,7 +42,8 @@ export class ProducerRepository {
       commissionRate: Number(row.commission_rate),
       status: row.status,
       createdAt: row.created_at,
-      totalAffiliatesReferred: referralCountMap[row.id] || 0
+      totalAffiliatesReferred: referralCountMap[row.id] || 0,
+      receivesBotLeads: row.receives_bot_leads === true
     }));
   }
 
@@ -164,6 +165,21 @@ export class ProducerRepository {
   }
 
   /**
+   * Admin toggle "Recibe leads del bot": puts the advisor in or out of the
+   * WhatsApp bot round-robin. RLS lets only admins update producers; a blocked
+   * update returns no row, which is reported as an error instead of a silent no-op.
+   */
+  async setReceivesBotLeads(id: string, value: boolean): Promise<void> {
+    const { data, error } = await supabase
+      .from('producers')
+      .update({ receives_bot_leads: value })
+      .eq('id', id)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('No se pudo actualizar el asesor.');
+  }
+
+  /**
    * Activa/desactiva un asesor comercial de forma atómica
    * (sdd/advisor-auto-provisioning, design 3.3). Mirrors
    * `AuthRepository.resetPasswordFromAdmin` — the fetch/Bearer plumbing
@@ -237,6 +253,7 @@ export class ProducerRepository {
       status: row.status,
       totalAffiliatesReferred: row.totalAffiliatesReferred || 0,
       createdAt: row.createdAt,
+      receivesBotLeads: row.receivesBotLeads === true,
     }));
   }
 

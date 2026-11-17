@@ -65,6 +65,7 @@ export function mapAdvisorRow(producer, profile, referralCount = 0) {
     commissionRate: Number(producer.commission_rate),
     totalAffiliatesReferred: referralCount,
     createdAt: producer.created_at,
+    receivesBotLeads: producer.receives_bot_leads === true,
   };
 }
 
