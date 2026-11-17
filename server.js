@@ -24,6 +24,8 @@ import { normalizeEmail, isEmailVerificationRequired, generateOtpCode } from './
 import { createWahaClient, sendPrescriptionViaWhatsApp } from './server/whatsapp.js';
 import { createWhatsappSessionMonitor, buildSessionAlertEmail } from './server/whatsappSessionMonitor.js';
 import { whatsappStatusHandler } from './server/whatsappStatus.js';
+import { createWhatsappBot, createSupabaseBotStore, whatsappWebhookHandler } from './server/whatsappBot.js';
+import { createBotLlm } from './server/botLlm.js';
 import { preapprovalTerms } from './server/pricing.js';
 import { computeAdvisorStats } from './server/advisorStats.js';
 import { createAdhesionPreapproval, createAdhesionCheckoutPreference } from './server/adhesionPayments.js';
@@ -53,6 +55,10 @@ const app = express();
 // cannot spoof it with its own X-Forwarded-For entries.
 app.set('trust proxy', 1);
 app.use(cors());
+// WAHA inbound webhook for the WhatsApp bot. Registered before express.json so
+// the HMAC is verified on the raw bytes and the 10kb JSON cap does not apply.
+// `whatsappWebhook` is defined below, once WAHA and Supabase are configured.
+app.post('/api/whatsapp/webhook', express.raw({ type: '*/*', limit: '1mb' }), (req, res) => whatsappWebhook(req, res));
 app.use(express.json({ limit: '10kb' }));
 
 // Toggle to suspend email OTP verification without removing the feature.
@@ -178,6 +184,27 @@ if (!whatsappEnabled) {
 const waha = whatsappEnabled
   ? createWahaClient({ baseUrl: WHATSAPP_GATEWAY_URL, apiKey: WHATSAPP_GATEWAY_API_KEY, session: WHATSAPP_GATEWAY_SESSION })
   : null;
+
+// WhatsApp bot (odd/tasks/whatsapp-bot.md): off unless WHATSAPP_BOT_ENABLED=true
+// and WAHA, Supabase, the LLM key and the webhook HMAC key are all configured.
+const BOT_ADHESION_URL = process.env.BOT_ADHESION_URL || 'https://medinex.duckdns.org/#/adhesion?promoter=LANDING';
+const WHATSAPP_WEBHOOK_HMAC_KEY = process.env.WHATSAPP_WEBHOOK_HMAC_KEY;
+const whatsappBotRequested = process.env.WHATSAPP_BOT_ENABLED === 'true';
+const botLlm = whatsappBotRequested
+  ? createBotLlm({
+      provider: process.env.BOT_LLM_PROVIDER || 'gemini',
+      apiKey: process.env.GEMINI_API_KEY,
+      model: process.env.BOT_LLM_MODEL,
+      adhesionUrl: BOT_ADHESION_URL,
+    })
+  : null;
+const whatsappBot = whatsappBotRequested && waha && supabaseAdmin && botLlm && WHATSAPP_WEBHOOK_HMAC_KEY
+  ? createWhatsappBot({ store: createSupabaseBotStore(supabaseAdmin), waha, llm: botLlm, adhesionUrl: BOT_ADHESION_URL })
+  : null;
+if (whatsappBotRequested && !whatsappBot) {
+  console.warn('⚠️ WARNING: WHATSAPP_BOT_ENABLED=true but WAHA, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY or WHATSAPP_WEBHOOK_HMAC_KEY is missing — the WhatsApp bot is disabled.');
+}
+const whatsappWebhook = whatsappWebhookHandler({ bot: whatsappBot, hmacKey: WHATSAPP_WEBHOOK_HMAC_KEY });
 
 /**
  * POST /api/prescriptions/:id/send-whatsapp
