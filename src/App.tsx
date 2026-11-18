@@ -421,7 +421,7 @@ const App: React.FC = () => {
         element={
           <ProtectedRoute user={user} allowedRoles={['supervisor', 'admin']}>
             {user?.role === 'admin'
-              ? <LightSurface><TeamPerformance title="Metas y métricas comerciales" /></LightSurface>
+              ? <LightSurface><TeamPerformance title="Metas y métricas comerciales" showSupervisorFilter /></LightSurface>
               : <TeamPerformance title="Metas y métricas del equipo" />}
           </ProtectedRoute>
         }
