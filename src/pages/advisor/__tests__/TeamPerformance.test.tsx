@@ -2,6 +2,7 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TeamPerformance } from '../TeamPerformance';
 import { advisorPerformanceRepository } from '../../../repositories/AdvisorPerformanceRepository';
+import { supervisorRepository } from '../../../repositories/SupervisorRepository';
 import { AdvisorMonthMetrics } from '../../../types';
 import { monthStart, shiftMonth } from '../../../utils/month';
 
@@ -10,6 +11,12 @@ vi.mock('../../../repositories/AdvisorPerformanceRepository', () => ({
     getMonthlyMetrics: vi.fn(),
     saveGoal: vi.fn(),
     deleteGoal: vi.fn(),
+  },
+}));
+
+vi.mock('../../../repositories/SupervisorRepository', () => ({
+  supervisorRepository: {
+    listSupervisors: vi.fn(),
   },
 }));
 
@@ -33,7 +40,7 @@ const build = (over: Partial<AdvisorMonthMetrics>): AdvisorMonthMetrics => ({
 });
 
 const rows = [
-  build({}),
+  build({ supervisorId: 'sup-1' }),
   build({
     advisorId: 'adv-2', advisorName: 'Luis Paz', affiliatesSold: 1, revenue: 1000, prospectsLoaded: 0,
     prospectsContacted: 0, prospectsAffiliated: 0, prospectsStale: 0, linksShared: 0, goalAffiliates: undefined, goalRevenue: undefined, affiliatesUnconfirmed: 0,
@@ -46,6 +53,10 @@ describe('TeamPerformance (supervisor / admin)', () => {
     vi.mocked(advisorPerformanceRepository.getMonthlyMetrics).mockResolvedValue(rows);
     vi.mocked(advisorPerformanceRepository.saveGoal).mockResolvedValue(undefined);
     vi.mocked(advisorPerformanceRepository.deleteGoal).mockResolvedValue(undefined);
+    vi.mocked(supervisorRepository.listSupervisors).mockResolvedValue([
+      { id: 'sup-1', name: 'Carolina Fuentes', email: 'carolina@example.com' },
+      { id: 'sup-2', name: 'Marta Ruiz', email: 'marta@example.com' },
+    ]);
   });
 
   it('asks for the current month and lists every advisor with sales and revenue against their goals', async () => {
@@ -88,6 +99,73 @@ describe('TeamPerformance (supervisor / admin)', () => {
     const total = screen.getByTestId('perf-total');
     expect(total).toHaveTextContent(/5 de 6/);
     expect(total).toHaveTextContent(/4\.500.*4\.000/);
+  });
+
+  it('summarizes the month in cards', async () => {
+    render(<TeamPerformance />);
+    await screen.findByTestId('perf-adv-1');
+
+    expect(screen.getByTestId('card-advisors')).toHaveTextContent('2');
+    expect(screen.getByTestId('card-affiliates')).toHaveTextContent(/5 de 6/);
+    expect(screen.getByTestId('card-revenue')).toHaveTextContent(/4\.500.*4\.000/);
+    expect(screen.getByTestId('card-unconfirmed')).toHaveTextContent('3');
+    expect(screen.getByTestId('card-prospects')).toHaveTextContent('4');
+    expect(screen.getByTestId('card-conversion')).toHaveTextContent('25%');
+    expect(screen.getByTestId('card-stale')).toHaveTextContent('2');
+    expect(screen.getByTestId('card-links')).toHaveTextContent('7');
+  });
+
+  it('does not offer the supervisor picker unless asked to', async () => {
+    render(<TeamPerformance />);
+    await screen.findByTestId('perf-adv-1');
+
+    expect(screen.queryByLabelText('Supervisor')).not.toBeInTheDocument();
+    expect(supervisorRepository.listSupervisors).not.toHaveBeenCalled();
+  });
+
+  it('starts with every supervisor and narrows cards and table to the chosen team', async () => {
+    render(<TeamPerformance showSupervisorFilter />);
+    await screen.findByTestId('perf-adv-1');
+    const picker = await screen.findByLabelText('Supervisor');
+    await screen.findByRole('option', { name: 'Carolina Fuentes' });
+
+    expect(picker).toHaveValue('all');
+    expect(screen.getByRole('option', { name: 'Todos los supervisores' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Sin supervisor' })).toBeInTheDocument();
+
+    fireEvent.change(picker, { target: { value: 'sup-1' } });
+    expect(screen.getByTestId('perf-adv-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('perf-adv-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('card-advisors')).toHaveTextContent('1');
+    expect(screen.getByTestId('card-affiliates')).toHaveTextContent(/4 de 6/);
+    expect(screen.getByTestId('perf-total')).toHaveTextContent(/4 de 6/);
+
+    fireEvent.change(picker, { target: { value: 'none' } });
+    expect(screen.getByTestId('perf-adv-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('perf-adv-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('card-affiliates')).toHaveTextContent(/^Afiliados1/);
+
+    fireEvent.change(picker, { target: { value: 'all' } });
+    expect(screen.getByTestId('card-advisors')).toHaveTextContent('2');
+  });
+
+  it('says so when the chosen supervisor has no advisors', async () => {
+    render(<TeamPerformance showSupervisorFilter />);
+    await screen.findByTestId('perf-adv-1');
+    await screen.findByRole('option', { name: 'Marta Ruiz' });
+
+    fireEvent.change(screen.getByLabelText('Supervisor'), { target: { value: 'sup-2' } });
+
+    expect(screen.getByText(/este supervisor no tiene asesores asignados/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('perf-total')).not.toBeInTheDocument();
+  });
+
+  it('keeps the metrics when the supervisors cannot be loaded', async () => {
+    vi.mocked(supervisorRepository.listSupervisors).mockRejectedValue(new Error('boom'));
+    render(<TeamPerformance showSupervisorFilter />);
+
+    expect(await screen.findByText(/no se pudieron cargar los supervisores/i)).toBeInTheDocument();
+    expect(screen.getByTestId('perf-adv-1')).toBeInTheDocument();
   });
 
   it('moves between months and reloads', async () => {
