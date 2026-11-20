@@ -197,11 +197,16 @@ export function deriveSubscriptionEventKey(resource, kind) {
           return { eventType: 'subscription_authorized_payment_rejected', mpResourceId: resource.id, newStatus: 'payment_failed' };
         }
         return { eventType: 'subscription_authorized_payment_processed', mpResourceId: resource.id, newStatus: 'authorized' };
+      case 'recycling':
+        // MP keeps a failed debit in 'recycling' while it retries it (seen in production:
+        // 4 attempts over 8 days before the final processed+rejected). The first failed
+        // attempt is already a rejection the advisor must hear about. It shares the key of
+        // the final processed+rejected state, so dedup keeps one failure per invoice.
       case 'rejected':
         // Kept for compatibility with the earlier sandbox observation; MP's reference does not list it.
         return { eventType: 'subscription_authorized_payment_rejected', mpResourceId: resource.id, newStatus: 'payment_failed' };
       default:
-        return null; // 'scheduled', 'recycling': non-terminal, ack/audit only
+        return null; // 'scheduled': not charged yet, ack/audit only
     }
   }
 
@@ -849,7 +854,7 @@ export async function routeWebhookNotification(ctx, { topic, dataId }) {
       return { status: 200, body: { outcome: settlement.outcome, lifecycleOutcome: lifecycle.outcome } };
     }
 
-    // 'rejected' -> payment_failed (no ledger write); 'scheduled'/'recycling'
+    // 'recycling'/'rejected' -> payment_failed (no ledger write); 'scheduled'
     // -> deriveSubscriptionEventKey returns null, handleSubscriptionEvent
     // no-ops as 'ignored'.
     const lifecycle = await handleSubscriptionEvent(ctx, { resource: authorizedPayment, kind: 'authorized_payment' });
@@ -1233,7 +1238,8 @@ async function runPassA(ctx, options, summary) {
  */
 /** Page size and page bound for `searchAuthorizedPayments`: one invoice per month, so 10 pages
  * of 50 cover decades; the bound only protects against a misbehaving `paging.total`. */
-const AUTHORIZED_PAYMENTS_PAGE_SIZE = 50;
+// MP answers 400 "Invalid value for limit" above 15 (verified in production, 2026-11-19).
+const AUTHORIZED_PAYMENTS_PAGE_SIZE = 10;
 const AUTHORIZED_PAYMENTS_MAX_PAGES = 10;
 
 /**

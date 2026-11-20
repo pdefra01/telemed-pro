@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runDebitRejectionSync, startDebitRejectionJob } from '../debitRejections.js';
 
-const SEARCH = (id) => `/authorized_payments/search?preapproval_id=${id}&offset=0&limit=50`;
+const SEARCH = (id) => `/authorized_payments/search?preapproval_id=${id}&offset=0&limit=10`;
 const RECENT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 const OLD = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -89,7 +89,7 @@ describe('runDebitRejectionSync', () => {
         return {
           results: [
             { id: 'ap-1', status: 'processed', last_modified: RECENT, payment: { id: 'pay-1', status: 'rejected' } },
-            { id: 'ap-2', status: 'recycling', last_modified: RECENT, payment: { id: 'pay-2', status: 'rejected' } },
+            { id: 'ap-2', status: 'scheduled', last_modified: RECENT },
             { id: 'ap-0', status: 'processed', last_modified: OLD, payment: { id: 'pay-0', status: 'rejected' } },
           ],
         };
@@ -101,6 +101,49 @@ describe('runDebitRejectionSync', () => {
 
     expect(result).toMatchObject({ ok: true, checked: 1, replayed: 0, alreadyRecorded: 1, errors: 0 });
     expect(mpFetch).toHaveBeenCalledTimes(1);
+    expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+  });
+
+  it('replays a debit MP is still retrying (recycling) as a rejection', async () => {
+    const supabaseAdmin = createSupabaseStub({
+      subscriptions: [{ id: 's1', mp_preapproval_id: 'pre-1', status: 'authorized' }],
+    });
+    const retrying = {
+      id: 'ap-7', status: 'recycling', preapproval_id: 'pre-1', last_modified: RECENT,
+      payment: { status: 'rejected' },
+    };
+    const mpFetch = vi.fn(async (path) => {
+      if (path === SEARCH('pre-1')) return { paging: { total: 1 }, results: [retrying] };
+      if (path === '/authorized_payments/ap-7') return retrying;
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const result = await runDebitRejectionSync({ supabaseAdmin, mpFetch, logger: quietLogger() });
+
+    expect(result).toMatchObject({ ok: true, checked: 1, replayed: 1, rejected: 1, alreadyRecorded: 0, errors: 0 });
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_subscription_event', expect.objectContaining({
+      p_mp_preapproval_id: 'pre-1',
+      p_event_type: 'subscription_authorized_payment_rejected',
+      p_mp_resource_id: 'ap-7',
+      p_new_status: 'payment_failed',
+    }));
+  });
+
+  it('skips a recycling debit whose rejection is already recorded', async () => {
+    const supabaseAdmin = createSupabaseStub({
+      subscriptions: [{ id: 's1', mp_preapproval_id: 'pre-1', status: 'payment_failed' }],
+      events: [{ id: 'e7', event_type: 'subscription_authorized_payment_rejected', mp_resource_id: 'ap-7' }],
+    });
+    const mpFetch = vi.fn(async (path) => {
+      if (path === SEARCH('pre-1')) {
+        return { results: [{ id: 'ap-7', status: 'recycling', last_modified: RECENT, payment: { status: 'rejected' } }] };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const result = await runDebitRejectionSync({ supabaseAdmin, mpFetch, logger: quietLogger() });
+
+    expect(result).toMatchObject({ ok: true, replayed: 0, alreadyRecorded: 1, errors: 0 });
     expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
   });
 
