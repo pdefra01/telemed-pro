@@ -1237,8 +1237,8 @@ async function runPassA(ctx, options, summary) {
  * @param {Record<string, number>} summary
  */
 /** Page size and page bound for `searchAuthorizedPayments`: one invoice per month, so 10 pages
- * of 50 cover decades; the bound only protects against a misbehaving `paging.total`. */
-// MP answers 400 "Invalid value for limit" above 15 (verified in production, 2026-11-19).
+ * of 10 cover about 8 years; the bound only protects against a misbehaving `paging.total`.
+ * MP answers 400 "Invalid value for limit" above 15 (verified in production, 2026-11-19). */
 const AUTHORIZED_PAYMENTS_PAGE_SIZE = 10;
 const AUTHORIZED_PAYMENTS_MAX_PAGES = 10;
 
