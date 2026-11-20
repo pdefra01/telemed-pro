@@ -232,9 +232,27 @@ describe('deriveSubscriptionEventKey', () => {
     });
   });
 
-  it('returns null for authorized_payment scheduled and recycling statuses (non-terminal)', () => {
+  it('returns null for a scheduled authorized_payment (not charged yet)', () => {
     expect(deriveSubscriptionEventKey({ id: 'ap-3', status: 'scheduled' }, 'authorized_payment')).toBeNull();
-    expect(deriveSubscriptionEventKey({ id: 'ap-4', status: 'recycling' }, 'authorized_payment')).toBeNull();
+  });
+
+  // MP keeps a failed debit in 'recycling' while it retries it (up to 4 attempts), so the
+  // first failed attempt is already a rejection. Same key as the final processed+rejected
+  // state: dedup keeps one failure, and one advisor alert, per invoice.
+  it('maps a recycling authorized_payment to subscription_authorized_payment_rejected / payment_failed', () => {
+    const resource = { id: 'ap-4', status: 'recycling', payment: { id: 'pay-4', status: 'rejected' } };
+    expect(deriveSubscriptionEventKey(resource, 'authorized_payment')).toEqual({
+      eventType: 'subscription_authorized_payment_rejected',
+      mpResourceId: 'ap-4',
+      newStatus: 'payment_failed',
+    });
+  });
+
+  it('maps a recycling authorized_payment without nested payment detail to payment_failed', () => {
+    expect(deriveSubscriptionEventKey({ id: 'ap-5', status: 'recycling' }, 'authorized_payment')).toMatchObject({
+      eventType: 'subscription_authorized_payment_rejected',
+      newStatus: 'payment_failed',
+    });
   });
 
   it('returns null for an unrecognized kind', () => {
@@ -1261,7 +1279,33 @@ describe('routeWebhookNotification', () => {
     }));
   });
 
-  it('acks a non-terminal authorized_payment status (scheduled/recycling) without any RPC call', async () => {
+  it('records a recycling authorized_payment (MP retrying a failed debit) as payment_failed', async () => {
+    const mpFetch = createMpFetchStub({
+      '/authorized_payments/ap-rc': {
+        id: 'ap-rc',
+        status: 'recycling',
+        preapproval_id: 'preap-rc',
+        last_modified: '2026-11-10T12:00:00Z',
+        payment: { status: 'rejected', status_detail: 'insufficient_amount' },
+      },
+    });
+    const supabaseAdmin = createSupabaseStub();
+
+    await routeWebhookNotification(
+      { supabaseAdmin, mpFetch },
+      { topic: 'subscription_authorized_payment', dataId: 'ap-rc' }
+    );
+
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_subscription_event', expect.objectContaining({
+      p_mp_preapproval_id: 'preap-rc',
+      p_event_type: 'subscription_authorized_payment_rejected',
+      p_mp_resource_id: 'ap-rc',
+      p_new_status: 'payment_failed',
+      p_occurred_at: '2026-11-10T12:00:00Z',
+    }));
+  });
+
+  it('acks a scheduled authorized_payment without any RPC call', async () => {
     const mpFetch = createMpFetchStub({
       '/authorized_payments/ap-3': { id: 'ap-3', status: 'scheduled', preapproval_id: 'preap-3' },
     });
@@ -1735,7 +1779,7 @@ describe('runDeferredReconciliation', () => {
         mercadopago_events: [],
       };
       const mpFetch = vi.fn(async (path) => {
-        if (path === '/authorized_payments/search?preapproval_id=preap-c1&offset=0&limit=50') {
+        if (path === '/authorized_payments/search?preapproval_id=preap-c1&offset=0&limit=10') {
           return {
             paging: { offset: 0, limit: 30, total: 2 },
             results: [
@@ -1756,7 +1800,7 @@ describe('runDeferredReconciliation', () => {
 
       const summary = await runDeferredReconciliation({ supabaseAdmin, mpFetch }, {});
 
-      expect(mpFetch).toHaveBeenCalledWith('/authorized_payments/search?preapproval_id=preap-c1&offset=0&limit=50');
+      expect(mpFetch).toHaveBeenCalledWith('/authorized_payments/search?preapproval_id=preap-c1&offset=0&limit=10');
       expect(summary.chargesRecovered).toBe(1);
       expect(supabaseAdmin.rpc).toHaveBeenCalledWith('record_mercadopago_subscription_event', expect.objectContaining({
         p_event_type: 'subscription_authorized_payment_rejected',
@@ -1778,7 +1822,7 @@ describe('runDeferredReconciliation', () => {
       };
       const full = { id: 'ap-c3', status: 'processed', preapproval_id: 'preap-c3', last_modified: '2026-10-10T12:00:00Z', payment: { id: 'pay-c3', status: 'rejected' } };
       const mpFetch = vi.fn(async (path) => {
-        if (path === '/authorized_payments/search?preapproval_id=preap-c3&offset=0&limit=50') {
+        if (path === '/authorized_payments/search?preapproval_id=preap-c3&offset=0&limit=10') {
           return { paging: { total: 1 }, results: [{ id: 'ap-c3', status: 'processed', payment: { id: 'pay-c3' } }] };
         }
         if (path === '/authorized_payments/ap-c3') return full;
@@ -1861,6 +1905,18 @@ describe('searchAuthorizedPayments', () => {
 
     expect(items.map((i) => i.id)).toEqual(['a', 'b', 'c']);
     expect(mpFetch).toHaveBeenCalledTimes(2);
+  });
+
+  // Verified against production on 2026-11-19: MP answers 400 "Invalid value for limit"
+  // for any limit above 15, so the default page must stay at or below it.
+  it('asks MP for pages of at most 15 by default', async () => {
+    const mpFetch = vi.fn(async () => ({ paging: { total: 0 }, results: [] }));
+
+    await searchAuthorizedPayments(mpFetch, 'pre-1');
+
+    const limit = Number(/limit=(\d+)/.exec(mpFetch.mock.calls[0][0])[1]);
+    expect(limit).toBeGreaterThan(0);
+    expect(limit).toBeLessThanOrEqual(15);
   });
 
   it('stops at the page bound even if MP reports more', async () => {

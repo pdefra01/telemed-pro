@@ -83,7 +83,7 @@ export async function runDebitRejectionSync({
           // existing `_processed` row would hide the rejection: complete it first.
           const resource = await completeAuthorizedPayment(mpFetch, item);
           const key = deriveSubscriptionEventKey(resource, 'authorized_payment');
-          if (!key) continue; // scheduled / recycling / canceled: nothing terminal to record
+          if (!key) continue; // scheduled / canceled: nothing to record
 
           const { data: existing } = await supabaseAdmin
             .from('mercadopago_events')
