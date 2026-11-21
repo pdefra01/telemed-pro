@@ -21,6 +21,21 @@ export interface AdvisorMonthMetrics {
   affiliatesUnconfirmed: number;
 }
 
+/** One advisor's activity on one Argentina day, from `advisor_daily_activity` (days without activity are omitted). */
+export interface AdvisorDayActivity {
+  advisorId: string;
+  /** `YYYY-MM-DD` */
+  day: string;
+  prospectsLoaded: number;
+  prospectsAffiliated: number;
+  collectionActions: number;
+  affiliatesSold: number;
+  /** Distinct adhesion requests that got a payment link that day. */
+  linksSent: number;
+  /** Of those, the ones whose affiliate has paid since. */
+  linksPaid: number;
+}
+
 export type CollectionStatus = 'current' | 'pending' | 'overdue';
 export type CollectionActionType = 'call' | 'whatsapp' | 'visit' | 'note' | 'promise';
 

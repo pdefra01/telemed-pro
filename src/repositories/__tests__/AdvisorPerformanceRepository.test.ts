@@ -88,6 +88,37 @@ describe('AdvisorPerformanceRepository', () => {
     });
   });
 
+  describe('getDailyActivity', () => {
+    it('calls the daily activity function for the month and maps numbers (bigint columns may arrive as strings)', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValueOnce({
+        data: [{
+          advisor_id: 'adv-1', day: '2026-11-03', prospects_loaded: '2', prospects_affiliated: 0,
+          collection_actions: '3', affiliates_sold: 1, links_sent: '2', links_paid: '1',
+        }],
+        error: null,
+      } as any);
+
+      const result = await repository.getDailyActivity('2026-11-01');
+
+      expect(supabase.rpc).toHaveBeenCalledWith('advisor_daily_activity', { p_month: '2026-11-01' });
+      expect(result).toEqual([{
+        advisorId: 'adv-1', day: '2026-11-03', prospectsLoaded: 2, prospectsAffiliated: 0,
+        collectionActions: 3, affiliatesSold: 1, linksSent: 2, linksPaid: 1,
+      }]);
+    });
+
+    it('returns an empty list when there is no activity', async () => {
+      vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: null, error: null } as any);
+      await expect(repository.getDailyActivity('2026-11-01')).resolves.toEqual([]);
+    });
+
+    it('throws the database error', async () => {
+      const failure = { message: 'boom' };
+      vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: null, error: failure } as any);
+      await expect(repository.getDailyActivity('2026-11-01')).rejects.toBe(failure);
+    });
+  });
+
   describe('saveGoal', () => {
     it('upserts one goal per advisor and month', async () => {
       const q = chain({});
