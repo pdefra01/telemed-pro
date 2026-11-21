@@ -1,15 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authRepository } from '../AuthRepository';
-import { supabase } from '../../services/supabase';
+import { clearStoredAuthSession, supabase } from '../../services/supabase';
 
 vi.mock('../../services/supabase', () => {
   return {
     supabase: {
       auth: {
-        signInWithPassword: vi.fn()
+        signInWithPassword: vi.fn(),
+        signOut: vi.fn().mockResolvedValue({ error: null })
       },
       from: vi.fn()
-    }
+    },
+    clearStoredAuthSession: vi.fn()
   };
 });
 
@@ -24,12 +26,12 @@ const paymentStatusChain = (data: any, error: any = null) => ({
 });
 
 /** Routes supabase.from() by table name so the queries in login() resolve independently. */
-function mockFromByTable(profileData: any, paymentStatusRow: any = null, paymentStatusError: any = null, cancellationRow: any = null) {
+function mockFromByTable(profileData: any, paymentStatusRow: any = null, paymentStatusError: any = null, cancellationRow: any = null, cancellationError: any = null) {
   vi.mocked(supabase.from).mockImplementation((table: string) =>
     (table === 'affiliate_payment_status'
       ? paymentStatusChain(paymentStatusRow, paymentStatusError)
       : table === 'affiliate_cancellations'
-        ? paymentStatusChain(cancellationRow)
+        ? paymentStatusChain(cancellationRow, cancellationError)
         : profileChain(profileData)) as any
   );
 }
@@ -126,6 +128,46 @@ describe('AuthRepository', () => {
 
       await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
         .rejects.toThrow('Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.');
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+    });
+
+    it('blocks the login and signs out when the cancellation lookup fails (fail closed)', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
+      } as any);
+      mockFromByTable(activePatient, { payment_status: 'current' }, null, null, { message: 'network error' });
+
+      await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
+        .rejects.toThrow('No pudimos verificar el estado de tu afiliación. Intentá de nuevo en unos minutos.');
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+
+      expect(clearStoredAuthSession).not.toHaveBeenCalled();
+    });
+
+    it('clears the stored session when the sign-out returns an error', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
+      } as any);
+      vi.mocked(supabase.auth.signOut).mockResolvedValueOnce({ error: { message: 'network error' } } as any);
+      mockFromByTable(activePatient, { payment_status: 'current' }, null, null, { message: 'network error' });
+
+      await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
+        .rejects.toThrow('No pudimos verificar el estado de tu afiliación. Intentá de nuevo en unos minutos.');
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+      expect(clearStoredAuthSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the stored session and keeps the block message when the sign-out throws', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
+      } as any);
+      vi.mocked(supabase.auth.signOut).mockRejectedValueOnce(new Error('boom'));
+      mockFromByTable(activePatient, { payment_status: 'current' }, null, { effective_at: '2020-01-01T00:00:00Z' });
+
+      await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
+        .rejects.toThrow('Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.');
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+      expect(clearStoredAuthSession).toHaveBeenCalledTimes(1);
     });
 
     it('still lets a scheduled cancellation log in until its date', async () => {
@@ -136,6 +178,7 @@ describe('AuthRepository', () => {
 
       const user = await authRepository.login('baja@medinex.com', 'password123', 'patient');
       expect(user.id).toBe('cancel-user-id');
+      expect(supabase.auth.signOut).not.toHaveBeenCalled();
     });
   });
 
@@ -167,6 +210,7 @@ describe('AuthRepository', () => {
     await expect(authRepository.login('pending@medinex.com', 'password123', 'patient'))
       .rejects
       .toThrow('Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.');
+    expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
   });
 
   describe('login() error code (D6 — lets Auth.tsx distinguish invalid credentials from inactive account)', () => {

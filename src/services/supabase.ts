@@ -69,6 +69,25 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+const isAuthStorageKey = (key: string) => /^sb-.*-auth-token(-code-verifier)?$/.test(key);
+
+/**
+ * Removes every stored auth session (and PKCE verifier) from both storages.
+ * auth-js signOut() keeps the stored session when its /logout request fails
+ * for any scope, including 'local'; auth-js reads the session back from
+ * storage on each use, so removing it here ends the session in this browser.
+ */
+export const clearStoredAuthSession = (): void => {
+  [localStorage, sessionStorage].forEach((store) => {
+    const keys: string[] = [];
+    for (let i = 0; i < store.length; i += 1) {
+      const key = store.key(i);
+      if (key && isAuthStorageKey(key)) keys.push(key);
+    }
+    keys.forEach((key) => store.removeItem(key));
+  });
+};
+
 /**
  * Re-applies the persistence rule to the stored auth session. The session is
  * written at sign-in, before the app knows the user's role; App calls this once
