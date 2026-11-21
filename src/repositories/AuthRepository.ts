@@ -105,20 +105,36 @@ export class AuthRepository {
         };
       }
 
+      // A blocked login must not leave the session from signInWithPassword alive
+      // (odd/tasks/login-block-fail-closed.md, S2).
+      const rejectLogin = async (message: string): Promise<never> => {
+        try {
+          await supabase.auth.signOut();
+        } catch (signOutError) {
+          console.error('Error cerrando la sesión de un login bloqueado:', signOutError);
+        }
+        throw new Error(message);
+      };
+
       if (profileData.is_active === false) {
-        throw new Error("Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.");
+        await rejectLogin("Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.");
       }
 
       // A cancellation ("Dar de baja") blocks the login once effective, even
       // before the hourly server sweep sets is_active=false (affiliate-cancellation S1).
+      // A failed lookup blocks too: the check fails closed (login-block-fail-closed S1).
       if (profileData.role === 'patient') {
-        const { data: cancellation } = await supabase
+        const { data: cancellation, error: cancellationError } = await supabase
           .from('affiliate_cancellations')
           .select('effective_at')
           .eq('profile_id', data.user.id)
           .maybeSingle();
+        if (cancellationError) {
+          console.error(`Error verificando la baja de ${data.user.id}:`, cancellationError);
+          await rejectLogin("No pudimos verificar el estado de tu afiliación. Intentá de nuevo en unos minutos.");
+        }
         if (cancellation && new Date(cancellation.effective_at).getTime() <= Date.now()) {
-          throw new Error("Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.");
+          await rejectLogin("Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.");
         }
       }
 
