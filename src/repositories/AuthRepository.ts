@@ -1,4 +1,4 @@
-import { supabase } from '../services/supabase';
+import { clearStoredAuthSession, supabase } from '../services/supabase';
 import { User, Role } from '../types';
 
 export class AuthRepository {
@@ -107,8 +107,8 @@ export class AuthRepository {
 
       // A blocked login must not leave the session from signInWithPassword alive
       // (odd/tasks/login-block-fail-closed.md, S2). signOut() reports server or
-      // network failures as { error } and keeps the stored session, so fall back
-      // to a local sign-out, which always clears it (S3).
+      // network failures as { error } and keeps the stored session, for every
+      // scope, so clear the stored session directly in that case (S3).
       const rejectLogin = async (message: string): Promise<never> => {
         try {
           const { error: signOutError } = await supabase.auth.signOut();
@@ -116,9 +116,9 @@ export class AuthRepository {
         } catch (signOutError) {
           console.error('Error cerrando la sesión de un login bloqueado:', signOutError);
           try {
-            await supabase.auth.signOut({ scope: 'local' });
-          } catch (localSignOutError) {
-            console.error('Error cerrando la sesión local de un login bloqueado:', localSignOutError);
+            clearStoredAuthSession();
+          } catch (clearError) {
+            console.error('Error borrando la sesión guardada de un login bloqueado:', clearError);
           }
         }
         throw new Error(message);

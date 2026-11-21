@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn(() => ({})) }));
 
-import { authStorage, relocateAuthSession } from '../services/supabase';
+import { authStorage, clearStoredAuthSession, relocateAuthSession } from '../services/supabase';
 
 const KEY = 'sb-test-auth-token';
 const session = (role?: string) => JSON.stringify({ access_token: 't', user: { id: 'u-1', user_metadata: role ? { role } : { full_name: 'X' }, app_metadata: {} } });
@@ -50,5 +50,19 @@ describe('auth session storage', () => {
     authStorage.setItem(KEY, session('advisor'));
     expect(sessionStorage.getItem(KEY)).not.toBeNull();
     expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('clears the stored auth session from both storages without touching other keys', () => {
+    localStorage.setItem(KEY, session('patient'));
+    sessionStorage.setItem('sb-other-auth-token', session('advisor'));
+    localStorage.setItem(`${KEY}-code-verifier`, 'verifier');
+    localStorage.setItem('medinex_session_policy', '{}');
+
+    clearStoredAuthSession();
+
+    expect(localStorage.getItem(KEY)).toBeNull();
+    expect(sessionStorage.getItem('sb-other-auth-token')).toBeNull();
+    expect(localStorage.getItem(`${KEY}-code-verifier`)).toBeNull();
+    expect(localStorage.getItem('medinex_session_policy')).toBe('{}');
   });
 });

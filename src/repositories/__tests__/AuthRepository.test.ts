@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authRepository } from '../AuthRepository';
-import { supabase } from '../../services/supabase';
+import { clearStoredAuthSession, supabase } from '../../services/supabase';
 
 vi.mock('../../services/supabase', () => {
   return {
@@ -10,7 +10,8 @@ vi.mock('../../services/supabase', () => {
         signOut: vi.fn().mockResolvedValue({ error: null })
       },
       from: vi.fn()
-    }
+    },
+    clearStoredAuthSession: vi.fn()
   };
 });
 
@@ -139,9 +140,11 @@ describe('AuthRepository', () => {
       await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
         .rejects.toThrow('No pudimos verificar el estado de tu afiliación. Intentá de nuevo en unos minutos.');
       expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+
+      expect(clearStoredAuthSession).not.toHaveBeenCalled();
     });
 
-    it('clears the local session when the global sign-out returns an error', async () => {
+    it('clears the stored session when the sign-out returns an error', async () => {
       vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
         data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
       } as any);
@@ -150,11 +153,11 @@ describe('AuthRepository', () => {
 
       await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
         .rejects.toThrow('No pudimos verificar el estado de tu afiliación. Intentá de nuevo en unos minutos.');
-      expect(supabase.auth.signOut).toHaveBeenCalledTimes(2);
-      expect(supabase.auth.signOut).toHaveBeenLastCalledWith({ scope: 'local' });
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+      expect(clearStoredAuthSession).toHaveBeenCalledTimes(1);
     });
 
-    it('clears the local session and keeps the block message when the global sign-out throws', async () => {
+    it('clears the stored session and keeps the block message when the sign-out throws', async () => {
       vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
         data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
       } as any);
@@ -163,8 +166,8 @@ describe('AuthRepository', () => {
 
       await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
         .rejects.toThrow('Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.');
-      expect(supabase.auth.signOut).toHaveBeenCalledTimes(2);
-      expect(supabase.auth.signOut).toHaveBeenLastCalledWith({ scope: 'local' });
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+      expect(clearStoredAuthSession).toHaveBeenCalledTimes(1);
     });
 
     it('still lets a scheduled cancellation log in until its date', async () => {
