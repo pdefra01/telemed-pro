@@ -141,6 +141,32 @@ describe('AuthRepository', () => {
       expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
     });
 
+    it('clears the local session when the global sign-out returns an error', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
+      } as any);
+      vi.mocked(supabase.auth.signOut).mockResolvedValueOnce({ error: { message: 'network error' } } as any);
+      mockFromByTable(activePatient, { payment_status: 'current' }, null, null, { message: 'network error' });
+
+      await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
+        .rejects.toThrow('No pudimos verificar el estado de tu afiliación. Intentá de nuevo en unos minutos.');
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(2);
+      expect(supabase.auth.signOut).toHaveBeenLastCalledWith({ scope: 'local' });
+    });
+
+    it('clears the local session and keeps the block message when the global sign-out throws', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,
+      } as any);
+      vi.mocked(supabase.auth.signOut).mockRejectedValueOnce(new Error('boom'));
+      mockFromByTable(activePatient, { payment_status: 'current' }, null, { effective_at: '2020-01-01T00:00:00Z' });
+
+      await expect(authRepository.login('baja@medinex.com', 'password123', 'patient'))
+        .rejects.toThrow('Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.');
+      expect(supabase.auth.signOut).toHaveBeenCalledTimes(2);
+      expect(supabase.auth.signOut).toHaveBeenLastCalledWith({ scope: 'local' });
+    });
+
     it('still lets a scheduled cancellation log in until its date', async () => {
       vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
         data: { user: { id: 'cancel-user-id', email: 'baja@medinex.com' } }, error: null,

@@ -106,12 +106,20 @@ export class AuthRepository {
       }
 
       // A blocked login must not leave the session from signInWithPassword alive
-      // (odd/tasks/login-block-fail-closed.md, S2).
+      // (odd/tasks/login-block-fail-closed.md, S2). signOut() reports server or
+      // network failures as { error } and keeps the stored session, so fall back
+      // to a local sign-out, which always clears it (S3).
       const rejectLogin = async (message: string): Promise<never> => {
         try {
-          await supabase.auth.signOut();
+          const { error: signOutError } = await supabase.auth.signOut();
+          if (signOutError) throw signOutError;
         } catch (signOutError) {
           console.error('Error cerrando la sesión de un login bloqueado:', signOutError);
+          try {
+            await supabase.auth.signOut({ scope: 'local' });
+          } catch (localSignOutError) {
+            console.error('Error cerrando la sesión local de un login bloqueado:', localSignOutError);
+          }
         }
         throw new Error(message);
       };
