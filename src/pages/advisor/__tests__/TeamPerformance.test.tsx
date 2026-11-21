@@ -1,3 +1,4 @@
+import React from 'react';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TeamPerformance } from '../TeamPerformance';
@@ -9,6 +10,7 @@ import { monthStart, shiftMonth } from '../../../utils/month';
 vi.mock('../../../repositories/AdvisorPerformanceRepository', () => ({
   advisorPerformanceRepository: {
     getMonthlyMetrics: vi.fn(),
+    getDailyActivity: vi.fn(),
     saveGoal: vi.fn(),
     deleteGoal: vi.fn(),
   },
@@ -19,6 +21,17 @@ vi.mock('../../../repositories/SupervisorRepository', () => ({
     listSupervisors: vi.fn(),
   },
 }));
+
+// jsdom has no layout: give the trend charts a fixed size instead of a ResizeObserver.
+vi.mock('recharts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('recharts')>();
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: React.ReactElement }) => (
+      <div style={{ width: 600, height: 240 }}>{React.cloneElement(children, { width: 600, height: 240 } as any)}</div>
+    ),
+  };
+});
 
 const thisMonth = monthStart(new Date());
 
@@ -51,6 +64,7 @@ describe('TeamPerformance (supervisor / admin)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(advisorPerformanceRepository.getMonthlyMetrics).mockResolvedValue(rows);
+    vi.mocked(advisorPerformanceRepository.getDailyActivity).mockResolvedValue([]);
     vi.mocked(advisorPerformanceRepository.saveGoal).mockResolvedValue(undefined);
     vi.mocked(advisorPerformanceRepository.deleteGoal).mockResolvedValue(undefined);
     vi.mocked(supervisorRepository.listSupervisors).mockResolvedValue([
@@ -147,6 +161,19 @@ describe('TeamPerformance (supervisor / admin)', () => {
 
     fireEvent.change(picker, { target: { value: 'all' } });
     expect(screen.getByTestId('card-advisors')).toHaveTextContent('2');
+  });
+
+  it('shows the day-by-day activity of the advisors in the chosen team', async () => {
+    render(<TeamPerformance showSupervisorFilter />);
+    await screen.findByTestId('perf-adv-1');
+
+    expect(await screen.findByRole('heading', { name: 'Actividad día a día' })).toBeInTheDocument();
+    expect(advisorPerformanceRepository.getDailyActivity).toHaveBeenCalledWith(thisMonth);
+    const advisorPicker = screen.getByLabelText('Asesor');
+    expect(within(advisorPicker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todos los asesores', 'Pedro Gómez', 'Luis Paz']);
+
+    fireEvent.change(await screen.findByLabelText('Supervisor'), { target: { value: 'sup-1' } });
+    expect(within(screen.getByLabelText('Asesor')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todos los asesores', 'Pedro Gómez']);
   });
 
   it('says so when the chosen supervisor has no advisors', async () => {
