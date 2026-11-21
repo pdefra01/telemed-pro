@@ -1,5 +1,5 @@
 import { supabase } from '../services/supabase';
-import { AdvisorMonthMetrics, GoalTargets } from '../types';
+import { AdvisorDayActivity, AdvisorMonthMetrics, GoalTargets } from '../types';
 
 const optionalNumber = (value: unknown): number | undefined =>
   value === null || value === undefined ? undefined : Number(value);
@@ -30,6 +30,23 @@ export class AdvisorPerformanceRepository {
       goalAffiliates: optionalNumber(row.goal_affiliates),
       goalRevenue: optionalNumber(row.goal_revenue),
       affiliatesUnconfirmed: Number(row.affiliates_unconfirmed ?? 0),
+    }));
+  }
+
+  /** Activity per advisor and day of a month; days without activity are not returned. */
+  async getDailyActivity(month: string): Promise<AdvisorDayActivity[]> {
+    const { data, error } = await supabase.rpc('advisor_daily_activity', { p_month: month });
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      advisorId: row.advisor_id,
+      day: row.day,
+      prospectsLoaded: Number(row.prospects_loaded),
+      prospectsAffiliated: Number(row.prospects_affiliated),
+      collectionActions: Number(row.collection_actions),
+      affiliatesSold: Number(row.affiliates_sold),
+      linksSent: Number(row.links_sent),
+      linksPaid: Number(row.links_paid),
     }));
   }
 

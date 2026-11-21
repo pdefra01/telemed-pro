@@ -6,6 +6,7 @@ import { Supervisor, supervisorRepository } from '../../repositories/SupervisorR
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ProgressBar } from '../../components/ui/ProgressBar';
+import { TeamActivityTrends } from './TeamActivityTrends';
 import { formatMonthLabel, monthStart, shiftMonth } from '../../utils/month';
 import { conversionRate, formatCurrency, progressPercent } from '../../utils/performance';
 
@@ -241,6 +242,8 @@ export const TeamPerformance: React.FC<TeamPerformanceProps> = ({ title = 'Metas
             <MetricCard testId="card-stale" label="Sin seguimiento (7+ días)" value={String(sum(rows.map((r) => r.prospectsStale)))} />
             <MetricCard testId="card-links" label="Links compartidos" value={String(sum(rows.map((r) => r.linksShared)))} />
           </div>
+
+          <TeamActivityTrends month={month} advisors={rows} />
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
             <table className="w-full text-sm">
