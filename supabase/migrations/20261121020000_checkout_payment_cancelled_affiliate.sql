@@ -116,7 +116,12 @@ BEGIN
   ELSIF v_profile.plan_status = 'suspended' THEN
     v_deferred := 'affiliate_suspended';
   ELSE
-    UPDATE public.profiles SET plan_status = 'active' WHERE id = v_profile.id;
+    -- The guard is repeated in the WHERE so a cancellation committed after the profile was read
+    -- still wins (same shape as the webhook).
+    UPDATE public.profiles SET plan_status = 'active'
+     WHERE id = v_profile.id
+       AND COALESCE(plan_status, '') NOT IN ('suspended', 'cancelled')
+       AND NOT EXISTS (SELECT 1 FROM public.affiliate_cancellations c WHERE c.profile_id = v_profile.id);
   END IF;
 
   -- Open the coverage window only when the subject has none (mirrors assign_plan);

@@ -92,6 +92,28 @@ SELECT is(pg_temp.window_count('d1d1d1d1-0000-0000-0000-000000000002'), 0::bigin
 SELECT is(pg_temp.res('d2d2d2d2-0000-0000-0000-000000000003')->>'deferred_reason', 'affiliate_suspended', 'suspended: deferred_reason affiliate_suspended');
 SELECT is(pg_temp.payment_count('d1d1d1d1-0000-0000-0000-000000000003'), 1::bigint, 'suspended: one payment movement recorded');
 SELECT is((SELECT plan_status FROM public.profiles WHERE id = 'd1d1d1d1-0000-0000-0000-000000000003'), 'suspended', 'suspended: plan_status stays suspended');
+SELECT is(pg_temp.window_count('d1d1d1d1-0000-0000-0000-000000000003'), 1::bigint, 'suspended: coverage window still opened (webhook parity)');
+
+-- ── S2: a replay for a cancelled affiliate changes nothing ──────────────────
+SELECT is(public.post_adhesion_checkout_payment('d2d2d2d2-0000-0000-0000-000000000001')->>'reason', 'already_posted', 'cancelled: replay returns already_posted');
+SELECT is(pg_temp.payment_count('d1d1d1d1-0000-0000-0000-000000000001'), 1::bigint, 'cancelled: replay adds no movement');
+SELECT is((SELECT plan_status FROM public.profiles WHERE id = 'd1d1d1d1-0000-0000-0000-000000000001'), 'cancelled', 'cancelled: replay keeps cancelled');
+
+-- ── S2: a cancelled titular with a family group gets no group coverage ──────
+INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000000', 'd1d1d1d1-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'cxl-fam@test.local', '', now(), now(), now());
+INSERT INTO public.profiles (id, role, full_name, plan_id, plan_status, is_active)
+VALUES ('d1d1d1d1-0000-0000-0000-000000000005', 'patient', 'Cxl Fam', 'd0d0d0d0-0000-0000-0000-000000000000', 'cancelled', false)
+ON CONFLICT (id) DO UPDATE SET plan_id = EXCLUDED.plan_id, plan_status = EXCLUDED.plan_status, is_active = EXCLUDED.is_active;
+INSERT INTO public.family_groups (id, primary_affiliate_id, name)
+VALUES ('d3d3d3d3-0000-0000-0000-000000000001', 'd1d1d1d1-0000-0000-0000-000000000005', 'Familia Cxl');
+UPDATE public.profiles SET family_group_id = 'd3d3d3d3-0000-0000-0000-000000000001' WHERE id = 'd1d1d1d1-0000-0000-0000-000000000005';
+INSERT INTO public.affiliate_cancellations (profile_id, titular_id, requested_at, effective_at, applied_at)
+VALUES ('d1d1d1d1-0000-0000-0000-000000000005', 'd1d1d1d1-0000-0000-0000-000000000005', now() - interval '2 days', now() - interval '1 day', now() - interval '1 day');
+SELECT pg_temp.mk_request('d2d2d2d2-0000-0000-0000-000000000005', '32000005', 'd1d1d1d1-0000-0000-0000-000000000005', 'mp-cxl-5');
+SELECT is(public.post_adhesion_checkout_payment('d2d2d2d2-0000-0000-0000-000000000005')->>'deferred_reason', 'affiliate_cancelled', 'family: deferred_reason affiliate_cancelled');
+SELECT is((SELECT count(*) FROM public.family_coverage_windows WHERE family_group_id = 'd3d3d3d3-0000-0000-0000-000000000001'), 0::bigint, 'family: no group coverage window opened');
+SELECT is((SELECT plan_status FROM public.profiles WHERE id = 'd1d1d1d1-0000-0000-0000-000000000005'), 'cancelled', 'family: titular stays cancelled');
 
 -- ── Regression: a regular affiliate is still activated with coverage ────────
 SELECT is(pg_temp.res('d2d2d2d2-0000-0000-0000-000000000004')->>'reason', 'posted', 'regular: posted');
