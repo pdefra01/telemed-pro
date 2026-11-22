@@ -52,3 +52,29 @@ describe('filterHistory', () => {
     expect(filterHistory([a, b, c], {})).toHaveLength(3);
   });
 });
+
+describe('filterHistory by DNI and attended member', () => {
+  const withDni = { ...a, patientDni: '30123456' };
+  const member = { ...b, familyMemberName: 'Sofía Gómez', familyMemberDni: '45678901' };
+
+  it('matches the titular DNI, ignoring dots and spaces in the search', () => {
+    expect(filterHistory([withDni, member], { name: '30.123.456' }).map((x) => x.id)).toEqual(['a']);
+  });
+
+  it('matches a partial DNI', () => {
+    expect(filterHistory([withDni, member], { name: '3012' }).map((x) => x.id)).toEqual(['a']);
+  });
+
+  it('matches the attended member name and DNI', () => {
+    expect(filterHistory([withDni, member], { name: 'sofia' }).map((x) => x.id)).toEqual(['b']);
+    expect(filterHistory([withDni, member], { name: '45678901' }).map((x) => x.id)).toEqual(['b']);
+  });
+
+  it('does not fall back to the DNI when the search has letters', () => {
+    expect(filterHistory([withDni, member], { name: 'Luis 30' })).toEqual([]);
+  });
+
+  it('does not match a DNI search against a consultation without DNI', () => {
+    expect(filterHistory([a, b], { name: '30123456' })).toEqual([]);
+  });
+});

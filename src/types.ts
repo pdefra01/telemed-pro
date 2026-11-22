@@ -196,6 +196,8 @@ export interface Appointment {
   id: string;
   patientId: string;
   patientName: string;
+  /** Titular's DNI, filled for the doctor's history search. */
+  patientDni?: string;
   doctorId: string;
   doctorName: string;
   /** The doctor's professional title; absent reads as "Dr.". */
@@ -208,6 +210,8 @@ export interface Appointment {
   familyMemberId?: string;
   familyMemberName?: string;
   familyMemberRelation?: string;
+  /** Attended member's DNI, filled for the doctor's history search. */
+  familyMemberDni?: string;
   status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
   type: 'video' | 'chat' | 'in-person';
   notes?: string; // Doctor's evolution notes
@@ -247,6 +251,9 @@ export interface Prescription {
   patientId: string;
   /** Person attended; absent = the titular (patientId). */
   familyMemberId?: string;
+  /** Filled when listing a patient's prescriptions, so the chart can say whose it is. */
+  familyMemberName?: string;
+  familyMemberRelation?: string;
   doctorId?: string;
   doctorName: string;
   /** The doctor's professional title; absent reads as "Dr.". */
