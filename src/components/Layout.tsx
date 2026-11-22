@@ -33,6 +33,14 @@ interface LayoutProps {
   onLogout: () => void;
 }
 
+const ROLE_LABELS: Record<Role, string> = {
+  patient: 'Afiliado',
+  doctor: 'Médico',
+  admin: 'Admin',
+  advisor: 'Asesor',
+  supervisor: 'Supervisor',
+};
+
 const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
   const branding = getBranding();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -168,7 +176,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
               <img src={user.avatarUrl || `https://ui-avatars.com/api/?name=${user.name}`} alt="Profile" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
               <div className="overflow-hidden min-w-0">
                 <p className="text-sm font-semibold text-gray-800 truncate">{user.name || 'Paciente'}</p>
-                <p className="text-xs text-teal-600 capitalize font-medium">{user.role === 'patient' ? 'Afiliado' : user.role === 'doctor' ? 'Médico' : 'Admin'}</p>
+                <p className="text-xs text-teal-600 capitalize font-medium">{ROLE_LABELS[user.role] ?? user.role}</p>
               </div>
             </div>
           </div>
