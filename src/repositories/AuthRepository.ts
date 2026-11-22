@@ -71,6 +71,11 @@ export class AuthRepository {
           invalidCredentialsError.code = 'invalid_credentials';
           throw invalidCredentialsError;
         }
+        // The cancellation sweep bans the affiliate in Supabase Auth, so GoTrue
+        // rejects the login before the profile check below can explain it.
+        if ((signInError as { code?: string }).code === 'user_banned' || /banned/i.test(signInError.message)) {
+          throw new Error("Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.");
+        }
         throw signInError;
       }
       if (!data.user) throw new Error("Error al iniciar sesión.");

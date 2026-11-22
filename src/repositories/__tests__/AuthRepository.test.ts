@@ -268,6 +268,17 @@ describe('AuthRepository', () => {
         .toMatchObject({ code: 'invalid_credentials' });
     });
 
+    it('explains a ban (a cancelled affiliate) in Spanish instead of the raw GoTrue error', async () => {
+      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
+        data: { user: null },
+        error: { message: 'User is banned', code: 'user_banned', status: 400 }
+      } as any);
+
+      await expect(authRepository.login('30123456@medinex-paciente.com', 'password123', 'patient'))
+        .rejects
+        .toThrow('Tu afiliación fue dada de baja. Si querés volver a afiliarte, contactate con administración.');
+    });
+
     it('does NOT attach code = "invalid_credentials" to the inactive-account error', async () => {
       const mockAuthUser = { user: { id: 'inactive-user-id', email: 'pending@medinex.com' } };
       vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
