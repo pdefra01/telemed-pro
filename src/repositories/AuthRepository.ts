@@ -75,36 +75,6 @@ export class AuthRepository {
       }
       if (!data.user) throw new Error("Error al iniciar sesión.");
 
-      // Traer datos extras del perfil
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError) {
-        console.warn("No se encontró el perfil, intentando crearlo (Self-healing)...", data.user.id);
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            role: role,
-            full_name: "Usuario Autogenerado",
-          });
-
-        if (insertError) {
-          console.error("Error al autogenerar perfil:", insertError);
-          throw new Error("Error en la base de datos: Usuario sin perfil asociado.");
-        }
-
-        return {
-          id: data.user.id,
-          name: "Usuario Autogenerado",
-          email: data.user.email || authEmail,
-          role: role,
-        };
-      }
-
       // A blocked login must not leave the session from signInWithPassword alive
       // (odd/tasks/login-block-fail-closed.md, S2). signOut() reports server or
       // network failures as { error } and keeps the stored session, for every
@@ -123,6 +93,44 @@ export class AuthRepository {
         }
         throw new Error(message);
       };
+
+      // Traer datos extras del perfil
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      // Only a missing profile (PGRST116, no rows) is self-healed. Any other read
+      // error blocks the login: the inactive and cancellation checks below cannot
+      // run without the profile (login-profile-read-fail-closed S1).
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error(`Error leyendo el perfil de ${data.user.id}:`, profileError);
+        await rejectLogin("No pudimos verificar tu cuenta. Intentá de nuevo en unos minutos.");
+      }
+
+      if (profileError) {
+        console.warn("No se encontró el perfil, intentando crearlo (Self-healing)...", data.user.id);
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            role: role,
+            full_name: "Usuario Autogenerado",
+          });
+
+        if (insertError) {
+          console.error("Error al autogenerar perfil:", insertError);
+          await rejectLogin("Error en la base de datos: Usuario sin perfil asociado.");
+        }
+
+        return {
+          id: data.user.id,
+          name: "Usuario Autogenerado",
+          email: data.user.email || authEmail,
+          role: role,
+        };
+      }
 
       if (profileData.is_active === false) {
         await rejectLogin("Tu cuenta está inactiva o pendiente de aprobación por administración. Por favor, contactate con soporte.");
