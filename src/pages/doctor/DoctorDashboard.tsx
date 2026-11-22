@@ -22,6 +22,8 @@ import { formatDoctorName } from '../../utils/doctorName';
 import { newestFirst, filterHistory } from './historyList';
 import ChartEvolutionForm from './ChartEvolutionForm';
 import ChartPrescriptionsPanel from './ChartPrescriptionsPanel';
+import { ChartPerson, filterByPerson } from './chartPerson';
+import { useFamilyGroupMembers } from './useFamilyGroupMembers';
 import { sendPrescriptionWhatsapp } from '../../utils/prescriptionWhatsapp';
 import { attendedMemberLabel } from '../../utils/attendedMember';
 import NewPrescriptionModal from './NewPrescriptionModal';
@@ -65,6 +67,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     const [patientDocuments, setPatientDocuments] = useState<MedicalDocument[]>([]);
     const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
     const [historyView, setHistoryView] = useState<'records' | 'documents' | 'prescriptions' | 'chart'>('chart');
+    const [chartPerson, setChartPerson] = useState<ChartPerson>('all');
     const [patientChart, setPatientChart] = useState<PatientChartData | null>(null);
     const [isFetchingPatientHistory, setIsFetchingPatientHistory] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -460,6 +463,13 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
 
         fetchPatientHistory();
     }, [selectedPatientId]);
+
+    // Person filter of the chart: a family group mixes the titular's and the members' entries.
+    const chartMembers = useFamilyGroupMembers(selectedPatientId);
+    useEffect(() => { setChartPerson('all'); }, [selectedPatientId]);
+    const visibleRecords = filterByPerson<MedicalRecord>(patientRecords, chartPerson);
+    const visibleDocuments = filterByPerson<MedicalDocument>(patientDocuments, chartPerson);
+    const visiblePrescriptions = filterByPerson(patientPrescriptions, chartPerson);
 
     const metrics = user.metrics;
 
@@ -939,21 +949,21 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                         className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'records' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                                     >
                                         <History size={14} /> Evoluciones
-                                        {patientRecords.length > 0 && <span className="opacity-70">({patientRecords.length})</span>}
+                                        {visibleRecords.length > 0 && <span className="opacity-70">({visibleRecords.length})</span>}
                                     </button>
                                     <button
                                         onClick={() => setHistoryView('documents')}
                                         className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'documents' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                                     >
                                         <FolderOpen size={14} /> Estudios
-                                        {patientDocuments.length > 0 && <span className="opacity-70">({patientDocuments.length})</span>}
+                                        {visibleDocuments.length > 0 && <span className="opacity-70">({visibleDocuments.length})</span>}
                                     </button>
                                     <button
                                         onClick={() => setHistoryView('prescriptions')}
                                         className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'prescriptions' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                                     >
                                         <Pill size={14} /> Recetas
-                                        {patientPrescriptions.length > 0 && <span className="opacity-70">({patientPrescriptions.length})</span>}
+                                        {visiblePrescriptions.length > 0 && <span className="opacity-70">({visiblePrescriptions.length})</span>}
                                     </button>
                                 </div>
 
@@ -967,6 +977,21 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             </div>
                         </div>
 
+                        {chartMembers.length > 0 && (
+                            <div className="px-4 sm:px-6 py-2 border-b border-white/5 bg-slate-950/20 flex items-center gap-3">
+                                <label htmlFor="chart-person" className="text-xs font-bold text-slate-400">Ver historia de</label>
+                                <select
+                                    id="chart-person"
+                                    value={chartPerson}
+                                    onChange={(e) => setChartPerson(e.target.value)}
+                                    className="bg-slate-950/50 border border-white/5 px-3 py-2 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50"
+                                >
+                                    <option value="all">Todo el grupo familiar</option>
+                                    <option value="titular">{selectedPatientName || 'Titular'} (titular)</option>
+                                    {chartMembers.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                                </select>
+                            </div>
+                        )}
                         <div className="overflow-y-auto p-4 sm:p-6 custom-scrollbar flex-1">
                             {isFetchingPatientHistory ? (
                                 <div className="flex flex-col items-center justify-center py-24">
@@ -976,7 +1001,7 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                             ) : historyView === 'chart' ? (
                                 <PatientChartPanel chart={patientChart} />
                             ) : historyView === 'prescriptions' ? (
-                                <ChartPrescriptionsPanel prescriptions={patientPrescriptions} currentDoctorId={user.id} />
+                                <ChartPrescriptionsPanel prescriptions={visiblePrescriptions} currentDoctorId={user.id} />
                             ) : historyView === 'records' ? (
                                 <div className="space-y-4">
                                 <ChartEvolutionForm
@@ -988,9 +1013,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                         reloadPatientRecords();
                                     }}
                                 />
-                                {patientRecords.length > 0 ? (
+                                {visibleRecords.length > 0 ? (
                                     <div className="space-y-3">
-                                        {patientRecords.map((record) => (
+                                        {visibleRecords.map((record) => (
                                             <article key={record.id} className="bg-white/[0.03] rounded-xl p-4 sm:p-5 border border-white/5">
                                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
                                                     <span className="text-xs font-bold text-slate-300">{formatHistoryDateTime(record.date)}</span>
@@ -1015,9 +1040,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 )}
                                 </div>
                             ) : (
-                                patientDocuments.length > 0 ? (
+                                visibleDocuments.length > 0 ? (
                                     <div className="space-y-2">
-                                        {patientDocuments.map((doc) => (
+                                        {visibleDocuments.map((doc) => (
                                             <div key={doc.id} className="flex items-center gap-4 bg-white/[0.03] rounded-xl px-4 py-3 border border-white/5">
                                                 <div className="p-2.5 rounded-lg bg-slate-950 border border-white/5 text-emerald-500 shrink-0">
                                                     {doc.type === 'lab_result' ? <FlaskConical size={18} /> :
@@ -1026,6 +1051,9 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                                 </div>
                                                 <div className="min-w-0 flex-1">
                                                     <h4 className="text-sm font-bold text-white truncate">{doc.title}</h4>
+                                                    {doc.familyMemberId && chartMembers.some((m) => m.id === doc.familyMemberId) && (
+                                                        <p className="text-xs font-semibold text-teal-400">Para: {chartMembers.find((m) => m.id === doc.familyMemberId)!.label}</p>
+                                                    )}
                                                     <p className="text-xs text-slate-500">
                                                         {doc.type === 'lab_result' ? 'Laboratorio' : doc.type === 'imaging' ? 'Imagen' : 'Documentación'} · {formatHistoryDate(doc.date)}
                                                     </p>
