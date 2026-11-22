@@ -35,6 +35,14 @@ vi.mock('../../../utils/prescriptionWhatsapp', () => ({
 vi.mock('../../../repositories/PrescriptionRepository', () => ({
   prescriptionRepository: {
     getPrescriptionByAppointmentId: vi.fn(),
+    getPrescriptionsByPatientId: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+vi.mock('../../../repositories/FamilyMemberRepository', () => ({
+  familyMemberRepository: {
+    findFamilyGroupId: vi.fn().mockResolvedValue(null),
+    getByFamilyGroup: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -206,6 +214,55 @@ describe('DoctorDashboard - history ordering, filters and follow-up actions', ()
     expect(screen.queryByRole('dialog', { name: 'Nueva receta' })).not.toBeInTheDocument();
   });
 
+  describe('clinical history chart (doctor works outside the video call)', () => {
+    const queueRow = {
+      appointment_id: 'appt-queue-chart',
+      patient_id: 'pat-chart',
+      patient_name: 'Carla Ficha',
+      patient_avatar: null,
+      patient_plan: null,
+      doctor_id: 'doc1',
+      scheduled_at: '2026-08-26T19:30:00Z',
+      status: 'confirmed',
+      consultation_metadata: {},
+    };
+
+    it('lists the patient prescriptions, including the ones issued without a consultation', async () => {
+      vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValueOnce([queueRow] as any);
+      vi.mocked(prescriptionRepository.getPrescriptionsByPatientId).mockResolvedValueOnce([
+        { id: 'rx-standalone', patientId: 'pat-chart', doctorId: 'doc1', doctorName: 'Doc', date: '2026-11-20T15:00:00Z', status: 'active', digitalSignature: 's', expirationDate: '2026-12-20', medications: [{ name: 'Paracetamol 1g', instructions: 'Cada 8 horas', quantity: 1 }] },
+      ] as any);
+      render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+      fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+
+      fireEvent.click(await screen.findByRole('button', { name: /Recetas/ }));
+
+      expect(await screen.findByText('Paracetamol 1g')).toBeInTheDocument();
+      expect(screen.getByText('Sin consulta')).toBeInTheDocument();
+      expect(prescriptionRepository.getPrescriptionsByPatientId).toHaveBeenCalledWith('pat-chart');
+    });
+
+    it('adds an evolution from the chart and reloads the evolutions', async () => {
+      vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValueOnce([queueRow] as any);
+      vi.mocked(medicalRecordRepository.createMedicalRecord).mockResolvedValue({ id: 'mr-new' } as any);
+      render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+      fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Evoluciones/ }));
+      const loadsBefore = vi.mocked(medicalRecordRepository.getRecordsByPatientId).mock.calls.length;
+
+      fireEvent.click(screen.getByRole('button', { name: /agregar evolución/i }));
+      fireEvent.change(screen.getByPlaceholderText('Diagnóstico'), { target: { value: 'Control anual' } });
+      fireEvent.change(screen.getByPlaceholderText('Notas de evolución'), { target: { value: 'Sin novedades clínicas.' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar evolución' }));
+
+      await waitFor(() => expect(medicalRecordRepository.createMedicalRecord).toHaveBeenCalledWith(expect.objectContaining({
+        patientId: 'pat-chart', doctorId: mockDoctor.id, diagnosis: 'Control anual',
+      })));
+      expect(vi.mocked(medicalRecordRepository.createMedicalRecord).mock.calls[0][0]).not.toHaveProperty('appointmentId');
+      await waitFor(() => expect(vi.mocked(medicalRecordRepository.getRecordsByPatientId).mock.calls.length).toBeGreaterThan(loadsBefore));
+    });
+  });
+
   it('lists attended consultations from most recent to oldest', async () => {
     await openHistory();
     const names = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
@@ -214,7 +271,7 @@ describe('DoctorDashboard - history ordering, filters and follow-up actions', ()
 
   it('filters the history by patient name', async () => {
     await openHistory();
-    fireEvent.change(screen.getByLabelText('Filtrar por nombre del afiliado'), { target: { value: 'carla' } });
+    fireEvent.change(screen.getByLabelText('Filtrar por nombre o DNI'), { target: { value: 'carla' } });
     expect(screen.getByText('Carla Media')).toBeInTheDocument();
     expect(screen.queryByText('Beto Reciente')).not.toBeInTheDocument();
   });

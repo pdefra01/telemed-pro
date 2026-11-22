@@ -33,6 +33,24 @@ describe('PrescriptionRepository (TDD)', () => {
     });
   });
 
+  describe('getPrescriptionsByPatientId', () => {
+    it('names the attended member of each prescription, newest first', async () => {
+      const supabaseMock = supabase as any;
+      const order = vi.fn().mockResolvedValue({ data: [
+        { id: 'rx-2', appointment_id: null, family_member_id: 'fm1', family_member: { full_name: 'Lucía Pérez', relation: 'hijo/a' } },
+        { id: 'rx-1', appointment_id: 'app-1', family_member_id: null, family_member: null },
+      ], error: null });
+      supabaseMock.eq.mockReturnValueOnce({ order });
+
+      const [standalone, titular] = await repository.getPrescriptionsByPatientId('p1');
+
+      expect(order).toHaveBeenCalledWith('date', { ascending: false });
+      expect(supabaseMock.select).toHaveBeenCalledWith(expect.stringContaining('family_members!family_member_id(full_name, relation)'));
+      expect(standalone).toMatchObject({ id: 'rx-2', familyMemberId: 'fm1', familyMemberName: 'Lucía Pérez', familyMemberRelation: 'hijo/a' });
+      expect(titular.familyMemberName).toBeUndefined();
+    });
+  });
+
   describe('getPrescriptionByAppointmentId', () => {
     it('should fetch a prescription by appointment ID from Supabase', async () => {
       const mockPrescription = {

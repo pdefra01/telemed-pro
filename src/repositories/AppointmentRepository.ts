@@ -83,8 +83,8 @@ export class AppointmentRepository {
       .from('appointments')
       .select(`
         *,
-        patient:profiles!patient_id(full_name),
-        family_member:family_members!family_member_id(full_name, relation)
+        patient:profiles!patient_id(full_name, dni),
+        family_member:family_members!family_member_id(full_name, relation, dni)
       `)
       .eq('doctor_id', doctorId);
 
@@ -106,6 +106,7 @@ export class AppointmentRepository {
       id: row.id,
       patientId: row.patient_id,
       patientName: row.patient?.full_name || "Paciente",
+      patientDni: row.patient?.dni ?? undefined,
       doctorId: row.doctor_id,
       doctorName: "", // Llenado en el contexto
       date: toLocalDateStr(new Date(row.scheduled_at)),
@@ -115,6 +116,7 @@ export class AppointmentRepository {
       type: 'video',
       consultationMetadata: row.consultation_metadata || {},
       ...mapAttendedMember(row),
+      ...(row.family_member?.dni ? { familyMemberDni: row.family_member.dni } : {}),
     }));
   }
 

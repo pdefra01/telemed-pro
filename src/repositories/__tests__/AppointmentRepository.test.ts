@@ -150,6 +150,24 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
       expect(appointment).toMatchObject(expected);
     });
 
+    it('maps the titular and member DNIs on a doctor appointment, for the history search', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.from.mockReturnValue(supabaseMock);
+      supabaseMock.select.mockReturnValue(supabaseMock);
+      supabaseMock.eq.mockReturnValue(supabaseMock);
+      supabaseMock.in = vi.fn().mockReturnValue(supabaseMock);
+      supabaseMock.order = vi.fn().mockResolvedValue({ data: [{
+        ...memberRow,
+        patient: { full_name: 'Ana Pérez', dni: '30123456' },
+        family_member: { ...memberRow.family_member, dni: '45678901' },
+      }], error: null });
+
+      const [appointment] = await appointmentRepository.getDoctorAppointments('doc1', { status: ['completed'] });
+
+      expect(appointment).toMatchObject({ patientName: 'Ana Pérez', patientDni: '30123456', familyMemberDni: '45678901' });
+      expect(supabaseMock.select).toHaveBeenCalledWith(expect.stringContaining('profiles!patient_id(full_name, dni)'));
+    });
+
     it('maps the attended member on a single appointment', async () => {
       const supabaseMock = supabase as any;
       supabaseMock.from.mockReturnValue(supabaseMock);

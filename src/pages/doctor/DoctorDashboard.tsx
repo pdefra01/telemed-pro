@@ -20,6 +20,8 @@ import { toLocalDateStr } from '../../utils/localDate';
 import { formatHistoryDate, formatHistoryDateTime, visitTypeLabel } from '../../utils/clinicalHistoryFormat';
 import { formatDoctorName } from '../../utils/doctorName';
 import { newestFirst, filterHistory } from './historyList';
+import ChartEvolutionForm from './ChartEvolutionForm';
+import ChartPrescriptionsPanel from './ChartPrescriptionsPanel';
 import { sendPrescriptionWhatsapp } from '../../utils/prescriptionWhatsapp';
 import { attendedMemberLabel } from '../../utils/attendedMember';
 import NewPrescriptionModal from './NewPrescriptionModal';
@@ -61,7 +63,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
     // New state for patient history modal
     const [patientRecords, setPatientRecords] = useState<MedicalRecord[]>([]);
     const [patientDocuments, setPatientDocuments] = useState<MedicalDocument[]>([]);
-    const [historyView, setHistoryView] = useState<'records' | 'documents' | 'chart'>('chart');
+    const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
+    const [historyView, setHistoryView] = useState<'records' | 'documents' | 'prescriptions' | 'chart'>('chart');
     const [patientChart, setPatientChart] = useState<PatientChartData | null>(null);
     const [isFetchingPatientHistory, setIsFetchingPatientHistory] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -410,25 +413,44 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
         fetchDetails();
     }, [selectedAppointment]);
 
+    // A failed prescriptions read only empties the Recetas tab; the rest of the chart still loads.
+    const loadPatientPrescriptions = (patientId: string) =>
+        prescriptionRepository.getPrescriptionsByPatientId(patientId).catch((error) => {
+            console.error('Error cargando recetas del paciente:', error);
+            return [] as Prescription[];
+        });
+
+    const reloadPatientRecords = async () => {
+        if (!selectedPatientId) return;
+        try {
+            setPatientRecords(await medicalRecordRepository.getRecordsByPatientId(selectedPatientId));
+        } catch (error) {
+            console.error('Error recargando evoluciones del paciente:', error);
+        }
+    };
+
     useEffect(() => {
         const fetchPatientHistory = async () => {
             if (!selectedPatientId) {
                 setPatientRecords([]);
                 setPatientDocuments([]);
+                setPatientPrescriptions([]);
                 setPatientChart(null);
                 return;
             }
 
             setIsFetchingPatientHistory(true);
             try {
-                const [records, docs, chart] = await Promise.all([
+                const [records, docs, chart, prescriptions] = await Promise.all([
                     medicalRecordRepository.getRecordsByPatientId(selectedPatientId),
                     medicalDocumentRepository.getDocumentsByPatientId(selectedPatientId),
-                    patientChartRepository.getChartData(selectedPatientId).catch(() => null)
+                    patientChartRepository.getChartData(selectedPatientId).catch(() => null),
+                    loadPatientPrescriptions(selectedPatientId),
                 ]);
                 setPatientRecords(records);
                 setPatientDocuments(docs);
                 setPatientChart(chart);
+                setPatientPrescriptions(prescriptions);
             } catch (error) {
                 console.error("Error cargando historia del paciente:", error);
             } finally {
@@ -805,8 +827,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                     type="text"
                                     value={historyNameFilter}
                                     onChange={(e) => setHistoryNameFilter(e.target.value)}
-                                    placeholder="Filtrar por nombre del afiliado"
-                                    aria-label="Filtrar por nombre del afiliado"
+                                    placeholder="Filtrar por nombre o DNI"
+                                    aria-label="Filtrar por nombre o DNI"
                                     className="bg-slate-950/50 border border-white/5 px-5 py-3 rounded-2xl text-xs font-bold text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 w-full sm:w-80"
                                 />
                                 <input
@@ -879,7 +901,11 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                 <NewPrescriptionModal
                     patientId={selectedPatientId}
                     patientName={selectedPatientName}
-                    onClose={() => setShowNewPrescription(false)}
+                    onClose={() => {
+                        setShowNewPrescription(false);
+                        // A receta issued from the modal shows up in the Recetas tab right away.
+                        if (selectedPatientId) loadPatientPrescriptions(selectedPatientId).then(setPatientPrescriptions);
+                    }}
                 />
             )}
             {selectedPatientId && (
@@ -922,6 +948,13 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                         <FolderOpen size={14} /> Estudios
                                         {patientDocuments.length > 0 && <span className="opacity-70">({patientDocuments.length})</span>}
                                     </button>
+                                    <button
+                                        onClick={() => setHistoryView('prescriptions')}
+                                        className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${historyView === 'prescriptions' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        <Pill size={14} /> Recetas
+                                        {patientPrescriptions.length > 0 && <span className="opacity-70">({patientPrescriptions.length})</span>}
+                                    </button>
                                 </div>
 
                                 <button
@@ -942,8 +975,20 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                 </div>
                             ) : historyView === 'chart' ? (
                                 <PatientChartPanel chart={patientChart} />
+                            ) : historyView === 'prescriptions' ? (
+                                <ChartPrescriptionsPanel prescriptions={patientPrescriptions} currentDoctorId={user.id} />
                             ) : historyView === 'records' ? (
-                                patientRecords.length > 0 ? (
+                                <div className="space-y-4">
+                                <ChartEvolutionForm
+                                    patientId={selectedPatientId}
+                                    patientName={selectedPatientName || 'Titular'}
+                                    doctor={{ id: user.id, name: user.name }}
+                                    onSaved={() => {
+                                        setToast({ message: 'Evolución agregada a la historia clínica.', type: 'success' });
+                                        reloadPatientRecords();
+                                    }}
+                                />
+                                {patientRecords.length > 0 ? (
                                     <div className="space-y-3">
                                         {patientRecords.map((record) => (
                                             <article key={record.id} className="bg-white/[0.03] rounded-xl p-4 sm:p-5 border border-white/5">
@@ -967,7 +1012,8 @@ const DoctorDashboard: React.FC<Props> = ({ user }) => {
                                         <Search size={28} className="text-slate-700 mx-auto mb-3" />
                                         <p className="text-slate-500 text-sm">Este paciente todavía no tiene evoluciones registradas.</p>
                                     </div>
-                                )
+                                )}
+                                </div>
                             ) : (
                                 patientDocuments.length > 0 ? (
                                     <div className="space-y-2">
