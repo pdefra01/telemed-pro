@@ -53,7 +53,10 @@ export function notifyDoctorAppointmentHandler({ supabaseAdmin, waha }) {
     if (!doctor?.notify_new_appointment_whatsapp) return res.status(200).json({ status: 'skipped' });
 
     const phone = normalizeArgentinePhone(doctor.phone);
-    if (!phone) return res.status(422).json({ status: 'failed', reason: 'invalid_phone' });
+    if (!phone) {
+      console.warn('[appointment-notice] not sent, invalid_phone:', { appointmentId: appointment.id, doctorId: appointment.doctor_id });
+      return res.status(422).json({ status: 'failed', reason: 'invalid_phone' });
+    }
 
     const { data: patient } = await supabaseAdmin
       .from('profiles')
@@ -70,7 +73,10 @@ export function notifyDoctorAppointmentHandler({ supabaseAdmin, waha }) {
         .maybeSingle());
     }
 
-    if (!(await waha.isSessionReady())) return res.status(503).json({ status: 'failed', reason: 'session_not_ready' });
+    if (!(await waha.isSessionReady())) {
+      console.warn('[appointment-notice] not sent, session_not_ready:', { appointmentId: appointment.id, doctorId: appointment.doctor_id });
+      return res.status(503).json({ status: 'failed', reason: 'session_not_ready' });
+    }
 
     try {
       await waha.sendText({
@@ -78,7 +84,7 @@ export function notifyDoctorAppointmentHandler({ supabaseAdmin, waha }) {
         text: buildAppointmentNoticeMessage({ patientName: patient?.full_name, member, scheduledAt: appointment.scheduled_at }),
       });
     } catch (err) {
-      console.error('[appointment-notice] send failed:', err?.message || err);
+      console.error('[appointment-notice] send failed:', { appointmentId: appointment.id, error: err?.message || err });
       return res.status(502).json({ status: 'failed', reason: 'send_failed' });
     }
 

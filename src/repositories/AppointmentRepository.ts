@@ -218,10 +218,14 @@ export class AppointmentRepository {
   private async notifyDoctor(appointmentId: string): Promise<void> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch(`/api/appointments/${encodeURIComponent(appointmentId)}/notify-doctor`, {
+      const res = await fetch(`/api/appointments/${encodeURIComponent(appointmentId)}/notify-doctor`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session?.access_token || ''}` },
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        console.warn(`Aviso al médico no enviado (HTTP ${res.status}):`, body?.reason ?? 'unknown');
+      }
     } catch (notifyError) {
       console.error('Error avisando al médico del turno:', notifyError);
     }
