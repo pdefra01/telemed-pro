@@ -36,6 +36,7 @@ import { normalize, checkDuplicatesHandler } from './server/adhesionChecks.js';
 import { updateAdhesionEmailHandler } from './server/adhesionEmail.js';
 import { resendActivationHandler } from './server/resendActivation.js';
 import { notifyDoctorAppointmentHandler } from './server/appointmentDoctorNotice.js';
+import { livekitTokenHandler } from './server/livekitToken.js';
 import { sendAffiliatePaymentLink } from './server/affiliatePaymentLink.js';
 import { sendPaymentReceiptEmail } from './server/paymentReceipt.js';
 import { applyProfileAccess } from './server/profileAccess.js';
@@ -681,42 +682,8 @@ app.all('/api/livekit-token', (req, res, next) => {
 });
 
 
-const APPOINTMENT_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-app.post('/api/livekit-token', async (req, res) => {
-  try {
-    const { appointmentId } = req.body;
-
-    if (!appointmentId) {
-      return res.status(400).json({ error: 'appointmentId is required' });
-    }
-
-    if (!APPOINTMENT_ID_REGEX.test(appointmentId)) {
-      return res.status(400).json({ error: 'Invalid appointmentId format' });
-    }
-
-    if (!apiKey || !apiSecret) {
-      return res.status(500).json({ error: 'LiveKit server configuration is incomplete' });
-    }
-
-    const participantName = `User-${Math.floor(Math.random() * 1000)}`;
-    const roomName = `room-${appointmentId}`;
-
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: participantName,
-      name: participantName,
-    });
-
-    at.addGrant({ roomJoin: true, room: roomName });
-
-    const token = await at.toJwt();
-
-    res.json({ token, roomName });
-  } catch (error) {
-    console.error("Token generation error:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// Video consultation room token: only the patient or the doctor of the appointment.
+app.post('/api/livekit-token', requireAuth, livekitTokenHandler({ supabaseAdmin, apiKey, apiSecret, AccessToken }));
 
 /**
  * POST /api/create-staff

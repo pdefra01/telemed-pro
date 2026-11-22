@@ -47,6 +47,9 @@ vi.mock('../../services/supabase', () => ({
       subscribe: vi.fn().mockReturnThis(),
     }),
     removeChannel: vi.fn(),
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'session-token-abc' } } }),
+    },
   },
 }));
 
@@ -207,6 +210,14 @@ describe('VideoRoom — Doctor Notes Panel (Spec Task 9)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('post-consultation-page')).toBeInTheDocument();
     });
+  });
+
+  it('asks for the room token with the user session (the endpoint requires authentication)', async () => {
+    renderVideoRoom(patientUser);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/livekit-token', expect.anything()));
+    const [, init] = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/livekit-token')!;
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer session-token-abc' });
   });
 
   it('should render Retry button on token fetch failure and refetch on click', async () => {
