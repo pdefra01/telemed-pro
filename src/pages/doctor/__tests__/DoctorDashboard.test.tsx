@@ -5,6 +5,7 @@ import DoctorDashboard from '../DoctorDashboard';
 import { appointmentRepository } from '../../../repositories/AppointmentRepository';
 import { medicalRecordRepository } from '../../../repositories/MedicalRecordRepository';
 import { prescriptionRepository } from '../../../repositories/PrescriptionRepository';
+import { familyMemberRepository } from '../../../repositories/FamilyMemberRepository';
 import { dashboardRepository } from '../../../repositories/DashboardRepository';
 import { notificationRepository } from '../../../repositories/NotificationRepository';
 import { medicalDocumentRepository } from '../../../repositories/MedicalDocumentRepository';
@@ -240,6 +241,59 @@ describe('DoctorDashboard - history ordering, filters and follow-up actions', ()
       expect(await screen.findByText('Paracetamol 1g')).toBeInTheDocument();
       expect(screen.getByText('Sin consulta')).toBeInTheDocument();
       expect(prescriptionRepository.getPrescriptionsByPatientId).toHaveBeenCalledWith('pat-chart');
+    });
+
+    it('filters the chart by person in the family group', async () => {
+      vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValueOnce([queueRow] as any);
+      vi.mocked(familyMemberRepository.findFamilyGroupId).mockResolvedValue('g1');
+      vi.mocked(familyMemberRepository.getByFamilyGroup).mockResolvedValue([{ id: 'fm-lucia', name: 'Lucía Ficha', relation: 'hijo/a' }] as any);
+      vi.mocked(medicalRecordRepository.getRecordsByPatientId).mockResolvedValueOnce([
+        { id: 'r-titular', patientId: 'pat-chart', date: '2026-11-01T10:00:00Z', diagnosis: 'Diagnóstico del titular', notes: 'Notas titular', doctorName: 'Doc', type: 'consultation' },
+        { id: 'r-lucia', patientId: 'pat-chart', familyMemberId: 'fm-lucia', familyMemberName: 'Lucía Ficha', familyMemberRelation: 'hijo/a', date: '2026-11-02T10:00:00Z', diagnosis: 'Diagnóstico de Lucía', notes: 'Notas Lucía', doctorName: 'Doc', type: 'consultation' },
+      ] as any);
+      render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+      fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Evoluciones/ }));
+      expect(await screen.findByText('Diagnóstico del titular')).toBeInTheDocument();
+      expect(screen.getByText('Diagnóstico de Lucía')).toBeInTheDocument();
+
+      const picker = await screen.findByLabelText('Ver historia de');
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Lucía Ficha (hijo/a)' })).toBeInTheDocument());
+      fireEvent.change(picker, { target: { value: 'fm-lucia' } });
+      expect(screen.queryByText('Diagnóstico del titular')).not.toBeInTheDocument();
+      expect(screen.getByText('Diagnóstico de Lucía')).toBeInTheDocument();
+
+      fireEvent.change(picker, { target: { value: 'titular' } });
+      expect(screen.getByText('Diagnóstico del titular')).toBeInTheDocument();
+      expect(screen.queryByText('Diagnóstico de Lucía')).not.toBeInTheDocument();
+    });
+
+    it('says whose each study is and filters the studies by person', async () => {
+      vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValueOnce([queueRow] as any);
+      vi.mocked(familyMemberRepository.findFamilyGroupId).mockResolvedValue('g1');
+      vi.mocked(familyMemberRepository.getByFamilyGroup).mockResolvedValue([{ id: 'fm-lucia', name: 'Lucía Ficha', relation: 'hijo/a' }] as any);
+      vi.mocked(medicalDocumentRepository.getDocumentsByPatientId).mockResolvedValueOnce([
+        { id: 'd-titular', patientId: 'pat-chart', title: 'Análisis del titular', type: 'lab_result', date: '2026-11-01', url: 'https://x/1' },
+        { id: 'd-lucia', patientId: 'pat-chart', familyMemberId: 'fm-lucia', title: 'Radiografía de Lucía', type: 'imaging', date: '2026-11-02', url: 'https://x/2' },
+      ] as any);
+      render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+      fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Estudios/ }));
+
+      expect(await screen.findByText('Para: Lucía Ficha (hijo/a)')).toBeInTheDocument();
+      fireEvent.change(await screen.findByLabelText('Ver historia de'), { target: { value: 'titular' } });
+      expect(screen.getByText('Análisis del titular')).toBeInTheDocument();
+      expect(screen.queryByText('Radiografía de Lucía')).not.toBeInTheDocument();
+    });
+
+    it('does not show the person picker when the patient has no family group', async () => {
+      vi.mocked(dashboardRepository.getDoctorQueue).mockResolvedValueOnce([queueRow] as any);
+      vi.mocked(familyMemberRepository.findFamilyGroupId).mockResolvedValue(null);
+      render(<MemoryRouter><DoctorDashboard user={mockDoctor} /></MemoryRouter>);
+      fireEvent.click(await screen.findByRole('button', { name: /Expediente/i }));
+      await screen.findByRole('button', { name: /Evoluciones/ });
+
+      expect(screen.queryByLabelText('Ver historia de')).not.toBeInTheDocument();
     });
 
     it('adds an evolution from the chart and reloads the evolutions', async () => {

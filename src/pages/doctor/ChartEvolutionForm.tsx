@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { medicalRecordRepository } from '../../repositories/MedicalRecordRepository';
-import { familyMemberRepository } from '../../repositories/FamilyMemberRepository';
+import { useFamilyGroupMembers } from './useFamilyGroupMembers';
 
 interface ChartEvolutionFormProps {
   /** Titular of the chart. */
@@ -18,28 +18,12 @@ interface ChartEvolutionFormProps {
  */
 const ChartEvolutionForm: React.FC<ChartEvolutionFormProps> = ({ patientId, patientName, doctor, onSaved }) => {
   const [open, setOpen] = useState(false);
-  const [members, setMembers] = useState<{ id: string; label: string }[]>([]);
+  const members = useFamilyGroupMembers(patientId);
   const [familyMemberId, setFamilyMemberId] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // The family group only adds options; without it the evolution goes to the titular.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const groupId = await familyMemberRepository.findFamilyGroupId(patientId);
-        if (!groupId) return;
-        const group = await familyMemberRepository.getByFamilyGroup(groupId);
-        if (!cancelled) setMembers(group.map((m) => ({ id: m.id, label: m.relation ? `${m.name} (${m.relation})` : m.name })));
-      } catch (err) {
-        console.warn('No se pudo cargar el grupo familiar:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [patientId]);
 
   const close = () => {
     setOpen(false);
