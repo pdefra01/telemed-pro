@@ -143,3 +143,16 @@ describe('Layout navigation for an advisor with a plan', () => {
     expect(hrefs()).not.toContain('/payments');
   });
 });
+
+describe('Layout role label', () => {
+  it.each([
+    ['patient', 'Afiliado'],
+    ['doctor', 'Médico'],
+    ['admin', 'Admin'],
+    ['advisor', 'Asesor'],
+    ['supervisor', 'Supervisor'],
+  ] as [Role, string][])('labels the %s role as %s', (role, label) => {
+    renderAs(role);
+    expect(screen.getByText(label, { selector: 'p' })).toBeInTheDocument();
+  });
+});

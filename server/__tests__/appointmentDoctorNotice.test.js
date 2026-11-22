@@ -132,6 +132,23 @@ describe('notifyDoctorAppointmentHandler', () => {
     expect(sendText).not.toHaveBeenCalled();
   });
 
+  it('logs the appointment when the WhatsApp session is not ready', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { handler } = setup({ ready: false });
+    await call(handler);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('session_not_ready'), expect.anything());
+    warn.mockRestore();
+  });
+
+  it('logs the appointment when the doctor phone is invalid', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { handler } = setup({ supabase: createSupabase({ doctor: { phone: 'abc', notify_new_appointment_whatsapp: true } }) });
+    const res = await call(handler);
+    expect(res.statusCode).toBe(422);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('invalid_phone'), expect.anything());
+    warn.mockRestore();
+  });
+
   it('reports a failed status when sending throws', async () => {
     const { handler } = setup({ sendText: vi.fn(async () => { throw new Error('boom'); }) });
     const res = await call(handler);

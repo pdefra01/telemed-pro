@@ -364,6 +364,22 @@ describe('AppointmentRepository (TDD - Path 2)', () => {
       }));
     });
 
+    it('logs a doctor notice the server could not deliver and still returns the appointment', async () => {
+      const supabaseMock = supabase as any;
+      supabaseMock.neq.mockResolvedValue({ data: [], error: null });
+      supabaseMock.single.mockResolvedValue({ data: { id: 'new-app-id' }, error: null });
+      vi.spyOn(window, 'fetch').mockResolvedValue({
+        ok: false, status: 503, json: async () => ({ status: 'failed', reason: 'session_not_ready' }),
+      } as unknown as Response);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await bookAppointment();
+
+      expect(result.id).toBe('new-app-id');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('503'), 'session_not_ready');
+      warn.mockRestore();
+    });
+
     it('still returns the appointment when the doctor notice fails', async () => {
       const supabaseMock = supabase as any;
       supabaseMock.neq.mockResolvedValue({ data: [], error: null });
