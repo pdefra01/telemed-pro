@@ -907,10 +907,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ user }) => {
         }
       }
 
+      // The endpoint only gives a token to the patient or the doctor of the appointment.
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/livekit-token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`,
         },
         body: JSON.stringify({ appointmentId }),
       });
