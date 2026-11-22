@@ -243,27 +243,16 @@ describe('AuthRepository', () => {
       expect(insert).not.toHaveBeenCalled();
     });
 
-    it('still creates the missing profile when the user has none (PGRST116)', async () => {
+    it('blocks the login and signs out when the user has no profile (PGRST116), without creating one', async () => {
       vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
         data: { user: { id: 'user-id', email: 'user@medinex.com' } }, error: null,
       } as any);
       const insert = mockProfileRead({ code: 'PGRST116', message: 'no rows' });
 
-      const user = await authRepository.login('user@medinex.com', 'password123', 'patient');
-      expect(user).toEqual({ id: 'user-id', name: 'Usuario Autogenerado', email: 'user@medinex.com', role: 'patient' });
-      expect(insert).toHaveBeenCalledWith({ id: 'user-id', role: 'patient', full_name: 'Usuario Autogenerado' });
-      expect(supabase.auth.signOut).not.toHaveBeenCalled();
-    });
-
-    it('blocks the login and signs out when the missing profile cannot be created', async () => {
-      vi.mocked(supabase.auth.signInWithPassword).mockResolvedValueOnce({
-        data: { user: { id: 'user-id', email: 'user@medinex.com' } }, error: null,
-      } as any);
-      mockProfileRead({ code: 'PGRST116', message: 'no rows' }, { message: 'insert denied' });
-
-      await expect(authRepository.login('user@medinex.com', 'password123', 'patient'))
+      await expect(authRepository.login('user@medinex.com', 'password123', 'admin'))
         .rejects.toThrow('Error en la base de datos: Usuario sin perfil asociado.');
       expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+      expect(insert).not.toHaveBeenCalled();
     });
   });
 

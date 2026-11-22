@@ -101,35 +101,17 @@ export class AuthRepository {
         .eq('id', data.user.id)
         .single();
 
-      // Only a missing profile (PGRST116, no rows) is self-healed. Any other read
-      // error blocks the login: the inactive and cancellation checks below cannot
-      // run without the profile (login-profile-read-fail-closed S1).
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error(`Error leyendo el perfil de ${data.user.id}:`, profileError);
-        await rejectLogin("No pudimos verificar tu cuenta. Intentá de nuevo en unos minutos.");
-      }
-
-      if (profileError) {
-        console.warn("No se encontró el perfil, intentando crearlo (Self-healing)...", data.user.id);
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            role: role,
-            full_name: "Usuario Autogenerado",
-          });
-
-        if (insertError) {
-          console.error("Error al autogenerar perfil:", insertError);
+      // Profiles are created only by handle_new_user at sign-up; the
+      // a_guard_profile_privileged_columns trigger rejects any client insert.
+      // A missing profile (PGRST116) or a failed read blocks the login: the
+      // inactive and cancellation checks below cannot run without it.
+      if (profileError || !profileData) {
+        if (profileError?.code === 'PGRST116') {
+          console.error(`Usuario sin perfil: ${data.user.id}`);
           await rejectLogin("Error en la base de datos: Usuario sin perfil asociado.");
         }
-
-        return {
-          id: data.user.id,
-          name: "Usuario Autogenerado",
-          email: data.user.email || authEmail,
-          role: role,
-        };
+        console.error(`Error leyendo el perfil de ${data.user.id}:`, profileError);
+        await rejectLogin("No pudimos verificar tu cuenta. Intentá de nuevo en unos minutos.");
       }
 
       if (profileData.is_active === false) {
