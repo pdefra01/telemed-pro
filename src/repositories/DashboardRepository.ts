@@ -1,5 +1,6 @@
 import { supabase } from '../services/supabase';
 import { appointmentRepository } from './AppointmentRepository';
+import { AnalyticsTimeframe, getAnalyticsPeriod, formatTrend } from '../utils/analyticsPeriod';
 
 export interface CriticalAlert {
   id: string;
@@ -295,12 +296,18 @@ export class DashboardRepository {
   }
 
   /**
-   * Obtiene analíticas avanzadas y series temporales evolutivas para el dashboard administrativo
+   * Analíticas del dashboard administrativo: el período elegido (día, semana Lun-Dom o mes
+   * calendario que contiene `anchor`) contra el período inmediatamente anterior.
    */
-  async getAdminAnalytics(doctorId: string = 'global', timeframe: 'daily' | 'weekly' | 'monthly' = 'weekly'): Promise<{
-    timeSeries: Array<{ name: string; consultations: number; avgDuration: number; workHours: number }>;
+  async getAdminAnalytics(
+    doctorId: string = 'global',
+    timeframe: AnalyticsTimeframe = 'weekly',
+    anchor: Date = new Date()
+  ): Promise<{
+    timeSeries: Array<{ name: string; consultations: number; previousConsultations: number; avgDuration: number; workHours: number }>;
     summary: {
       totalConsultations: number;
+      previousTotalConsultations: number;
       avgSessionTime: number;
       totalWorkHours: number;
       consultationTrend: string;
@@ -308,132 +315,108 @@ export class DashboardRepository {
     };
   }> {
     try {
-      // 1. Obtener citas
-      let appQuery = supabase.from('appointments').select('id, doctor_id, status, duration_minutes, scheduled_at, created_at');
+      const period = getAnalyticsPeriod(timeframe, anchor);
+      const fromIso = period.prevStart.toISOString();
+      const toIso = period.end.toISOString();
+
+      // 1. Citas de ambos períodos
+      let appQuery = supabase
+        .from('appointments')
+        .select('id, doctor_id, status, duration_minutes, scheduled_at, created_at')
+        .gte('scheduled_at', fromIso)
+        .lt('scheduled_at', toIso);
       if (doctorId !== 'global') {
         appQuery = appQuery.eq('doctor_id', doctorId);
       }
       const { data: appData, error: errApp } = await appQuery;
       if (errApp) console.warn("Error buscando appointments para admin analytics:", errApp);
 
-      // 2. Obtener jornadas de trabajo (shifts)
-      let shiftQuery = supabase.from('doctor_work_shifts').select('id, doctor_id, duration_minutes, clock_in');
+      // 2. Jornadas de trabajo (shifts) de ambos períodos
+      let shiftQuery = supabase
+        .from('doctor_work_shifts')
+        .select('id, doctor_id, duration_minutes, clock_in')
+        .gte('clock_in', fromIso)
+        .lt('clock_in', toIso);
       if (doctorId !== 'global') {
         shiftQuery = shiftQuery.eq('doctor_id', doctorId);
       }
       const { data: shiftData, error: errShift } = await shiftQuery;
       if (errShift) console.warn("Error buscando shifts para admin analytics:", errShift);
 
-      // 3. Formatear la serie temporal según timeframe
-      const timeSeriesMap: Record<string, { consultations: number; totalDuration: number; completedCount: number; workMinutes: number }> = {};
-      const labels: string[] = [];
-
-      const now = new Date();
+      // 3. Etiquetas y bucket por timeframe
+      let labels: string[];
+      let bucketOf: (d: Date) => number;
       if (timeframe === 'daily') {
         // Horarios de 08:00 a 20:00 en bloques de 2hs
-        for (let h = 8; h <= 20; h += 2) {
-          const label = `${h.toString().padStart(2, '0')}:00`;
-          labels.push(label);
-          timeSeriesMap[label] = { consultations: 0, totalDuration: 0, completedCount: 0, workMinutes: 0 };
-        }
+        labels = [8, 10, 12, 14, 16, 18, 20].map(h => `${h.toString().padStart(2, '0')}:00`);
+        bucketOf = d => (Math.min(20, Math.max(8, Math.floor(d.getHours() / 2) * 2)) - 8) / 2;
       } else if (timeframe === 'weekly') {
-        const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-        days.forEach(d => {
-          labels.push(d);
-          timeSeriesMap[d] = { consultations: 0, totalDuration: 0, completedCount: 0, workMinutes: 0 };
-        });
+        labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+        bucketOf = d => (d.getDay() + 6) % 7; // 0 (Lun) a 6 (Dom)
       } else {
-        // Mensual: semanas 1 a 4
-        const weeks = ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'];
-        weeks.forEach(w => {
-          labels.push(w);
-          timeSeriesMap[w] = { consultations: 0, totalDuration: 0, completedCount: 0, workMinutes: 0 };
-        });
+        labels = ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'];
+        bucketOf = d => Math.min(3, Math.floor((d.getDate() - 1) / 7));
       }
 
-      // Agrupar citas en la serie temporal
+      const slot = () => ({ consultations: 0, previous: 0, totalDuration: 0, completedCount: 0, workMinutes: 0 });
+      const series = labels.map(slot);
+      const inRange = (d: Date, from: Date, to: Date) => d >= from && d < to;
+
       (appData || []).forEach(app => {
         const d = new Date(app.scheduled_at || app.created_at);
-        let key = labels[0];
-        if (timeframe === 'daily') {
-          const hour = d.getHours();
-          const bucket = Math.min(20, Math.max(8, Math.floor(hour / 2) * 2));
-          key = `${bucket.toString().padStart(2, '0')}:00`;
-        } else if (timeframe === 'weekly') {
-          const dayIdx = (d.getDay() + 6) % 7; // 0 (Lun) a 6 (Dom)
-          key = labels[dayIdx] || labels[0];
-        } else {
-          const dayOfMonth = d.getDate();
-          const weekIdx = Math.min(3, Math.floor((dayOfMonth - 1) / 7));
-          key = labels[weekIdx];
-        }
-
-        if (timeSeriesMap[key]) {
-          timeSeriesMap[key].consultations++;
+        const item = series[bucketOf(d)];
+        if (!item) return;
+        if (inRange(d, period.start, period.end)) {
+          item.consultations++;
           if (app.status === 'completed') {
-            timeSeriesMap[key].completedCount++;
-            timeSeriesMap[key].totalDuration += (app.duration_minutes || 15);
+            item.completedCount++;
+            item.totalDuration += (app.duration_minutes || 15);
           }
+        } else if (inRange(d, period.prevStart, period.prevEnd)) {
+          item.previous++;
         }
       });
 
-      // Agrupar horas de guardia fichadas
       (shiftData || []).forEach(shift => {
         if (!shift.clock_in) return;
         const d = new Date(shift.clock_in);
-        let key = labels[0];
-        if (timeframe === 'daily') {
-          const hour = d.getHours();
-          const bucket = Math.min(20, Math.max(8, Math.floor(hour / 2) * 2));
-          key = `${bucket.toString().padStart(2, '0')}:00`;
-        } else if (timeframe === 'weekly') {
-          const dayIdx = (d.getDay() + 6) % 7;
-          key = labels[dayIdx] || labels[0];
-        } else {
-          const dayOfMonth = d.getDate();
-          const weekIdx = Math.min(3, Math.floor((dayOfMonth - 1) / 7));
-          key = labels[weekIdx];
-        }
-
-        if (timeSeriesMap[key]) {
-          timeSeriesMap[key].workMinutes += (shift.duration_minutes || 0);
+        const item = series[bucketOf(d)];
+        if (item && inRange(d, period.start, period.end)) {
+          item.workMinutes += (shift.duration_minutes || 0);
         }
       });
 
-      // Mapear resultado final
       let totalConsultations = 0;
+      let previousTotalConsultations = 0;
       let grandTotalDuration = 0;
       let grandCompletedCount = 0;
       let grandTotalWorkMinutes = 0;
 
-      const timeSeries = labels.map(label => {
-        const item = timeSeriesMap[label];
+      const timeSeries = labels.map((label, i) => {
+        const item = series[i];
         totalConsultations += item.consultations;
+        previousTotalConsultations += item.previous;
         grandTotalDuration += item.totalDuration;
         grandCompletedCount += item.completedCount;
         grandTotalWorkMinutes += item.workMinutes;
 
-        const avgDuration = item.completedCount > 0 ? Math.round(item.totalDuration / item.completedCount) : 15;
-        const workHours = parseFloat((item.workMinutes / 60).toFixed(1));
-
         return {
           name: label,
           consultations: item.consultations,
-          avgDuration,
-          workHours
+          previousConsultations: item.previous,
+          avgDuration: item.completedCount > 0 ? Math.round(item.totalDuration / item.completedCount) : 15,
+          workHours: parseFloat((item.workMinutes / 60).toFixed(1))
         };
       });
-
-      const avgSessionTime = grandCompletedCount > 0 ? Math.round(grandTotalDuration / grandCompletedCount) : 15;
-      const totalWorkHours = parseFloat((grandTotalWorkMinutes / 60).toFixed(1));
 
       return {
         timeSeries,
         summary: {
           totalConsultations,
-          avgSessionTime,
-          totalWorkHours,
-          consultationTrend: "+14%",
+          previousTotalConsultations,
+          avgSessionTime: grandCompletedCount > 0 ? Math.round(grandTotalDuration / grandCompletedCount) : 15,
+          totalWorkHours: parseFloat((grandTotalWorkMinutes / 60).toFixed(1)),
+          consultationTrend: formatTrend(totalConsultations, previousTotalConsultations),
           durationTrend: "-2 min"
         }
       };
@@ -443,6 +426,7 @@ export class DashboardRepository {
         timeSeries: [],
         summary: {
           totalConsultations: 0,
+          previousTotalConsultations: 0,
           avgSessionTime: 15,
           totalWorkHours: 0,
           consultationTrend: "+0%",
