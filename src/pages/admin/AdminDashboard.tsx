@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, Cell
 } from 'recharts';
 import { 
   TrendingUp, Users, DollarSign, AlertTriangle, 
   Building2, ArrowUpRight, Activity, ShieldCheck,
-  CreditCard, Clock, Stethoscope
+  CreditCard, Clock, Stethoscope, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { dashboardRepository, AdminMetrics, WeeklyStat } from '../../repositories/DashboardRepository';
 import { WhatsappStatusBadge } from '../../components/admin/WhatsappStatusBadge';
@@ -15,6 +15,10 @@ import { doctorRepository } from '../../repositories/DoctorRepository';
 import { Doctor } from '../../types';
 import { formatDoctorName } from '../../utils/doctorName';
 import { supabase } from '../../services/supabase';
+import { getAnalyticsPeriod, shiftAnchor } from '../../utils/analyticsPeriod';
+
+const toDateInputValue = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const OCC_COLORS = {
   emerald: '#10b981',
@@ -89,10 +93,13 @@ const AdminDashboard: React.FC = () => {
   // Filtros globales de analítica evolutiva
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('global');
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  // Día de referencia: el período mostrado es el día / semana / mes que lo contiene.
+  const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
   const [analyticsData, setAnalyticsData] = useState<{
-    timeSeries: Array<{ name: string; consultations: number; avgDuration: number; workHours: number }>;
+    timeSeries: Array<{ name: string; consultations: number; previousConsultations: number; avgDuration: number; workHours: number }>;
     summary: {
       totalConsultations: number;
+      previousTotalConsultations: number;
       avgSessionTime: number;
       totalWorkHours: number;
       consultationTrend: string;
@@ -102,6 +109,7 @@ const AdminDashboard: React.FC = () => {
     timeSeries: [],
     summary: {
       totalConsultations: 0,
+      previousTotalConsultations: 0,
       avgSessionTime: 15,
       totalWorkHours: 0,
       consultationTrend: "+0%",
@@ -144,11 +152,16 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const loadAnalytics = async () => {
-      const data = await dashboardRepository.getAdminAnalytics(selectedDoctorId, timeframe);
-      setAnalyticsData(data);
+      const data = await dashboardRepository.getAdminAnalytics(selectedDoctorId, timeframe, anchorDate);
+      if (!cancelled) setAnalyticsData(data);
     };
+    let cancelled = false;
     loadAnalytics();
-  }, [selectedDoctorId, timeframe]);
+    return () => { cancelled = true; };
+  }, [selectedDoctorId, timeframe, anchorDate]);
+
+  const period = getAnalyticsPeriod(timeframe, anchorDate);
+  const isCurrentPeriod = new Date() < period.end;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -188,7 +201,7 @@ const AdminDashboard: React.FC = () => {
           </select>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Rango Temporal:</span>
           <div className="flex p-1 bg-slate-950/80 rounded-xl border border-white/10 gap-1">
             <button
@@ -216,6 +229,48 @@ const AdminDashboard: React.FC = () => {
               Mensual
             </button>
           </div>
+          <div className="flex items-center gap-1 p-1 bg-slate-950/80 rounded-xl border border-white/10" aria-label="Navegador de período">
+            <button
+              type="button"
+              onClick={() => setAnchorDate(shiftAnchor(timeframe, anchorDate, -1))}
+              aria-label="Período anterior"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="px-2 text-xs font-bold text-white min-w-[11rem] text-center" data-testid="analytics-period-label">
+              {period.label}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAnchorDate(shiftAnchor(timeframe, anchorDate, 1))}
+              disabled={isCurrentPeriod}
+              aria-label="Período siguiente"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <input
+            type="date"
+            aria-label="Elegir fecha"
+            value={toDateInputValue(anchorDate)}
+            max={toDateInputValue(new Date())}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              const [y, m, d] = e.target.value.split('-').map(Number);
+              setAnchorDate(new Date(y, m - 1, d, 12));
+            }}
+            className="bg-slate-900/80 border border-white/10 text-white rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-500/50"
+          />
+          <button
+            type="button"
+            onClick={() => setAnchorDate(new Date())}
+            disabled={isCurrentPeriod}
+            className="px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Hoy
+          </button>
         </div>
       </GlassCard>
 
@@ -280,12 +335,19 @@ const AdminDashboard: React.FC = () => {
             <div>
               <h3 className="text-xl font-bold text-white flex items-center gap-2">
                 Flujo Evolutivo de Consultas
-                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
+                  analyticsData.summary.consultationTrend.startsWith('-')
+                    ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                    : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                }`}>
                   {analyticsData.summary.consultationTrend}
                 </span>
               </h3>
               <p className="text-sm text-slate-500">
                 {selectedDoctorId === 'global' ? 'Actividad global consolidada de la clínica' : 'Actividad evolutiva del médico seleccionado'}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                {period.label} vs {period.compareLabel.toLowerCase()} ({analyticsData.summary.previousTotalConsultations})
               </p>
             </div>
             <div className="text-right">
@@ -324,10 +386,21 @@ const AdminDashboard: React.FC = () => {
                   }}
                   itemStyle={{ color: OCC_COLORS.emerald }}
                 />
+                <Legend verticalAlign="top" align="right" iconType="line" wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                <Area
+                  type="monotone"
+                  dataKey="previousConsultations"
+                  name={period.compareLabel}
+                  stroke="#94a3b8"
+                  strokeWidth={2}
+                  strokeDasharray="5 4"
+                  fill="none"
+                  dot={false}
+                />
                 <Area 
                   type="monotone" 
                   dataKey="consultations" 
-                  name="Consultas"
+                  name="Período elegido"
                   stroke={OCC_COLORS.emerald} 
                   strokeWidth={3}
                   fillOpacity={1} 
